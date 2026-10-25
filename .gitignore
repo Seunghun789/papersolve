@@ -1,0 +1,18 @@
+.env
+
+__pycache__/
+*.pyc
+.DS_Store
+
+.claude/settings.local.json
+.claude/*.lock
+.claude/*.local.md
+.serena/cache/
+.serena/project.local.yml
+.vscode/
+
+# 앱에서 올린 사용자 사진
+data/uploads/
+
+# 따로 만든 Next.js 프로젝트(자체 git 기록, node_modules·.next)
+app/
