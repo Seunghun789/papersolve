@@ -144,7 +144,7 @@ create table public.automations (            -- 켜 둔 업무 규칙. 홈의 "�
   created_at timestamptz not null default now()
 );
 
-create table public.eval_votes (             -- 평가 모드: 같은 질문의 확정 전·후 답 중 사용자가 👍한 쪽
+create table public.eval_votes (             -- 평가 모드: 같은 질문의 확정 전·후 답 중 사용자가 맞다고 고른 쪽
   id bigint generated always as identity primary key,
   tenant_id bigint not null references public.tenants(id) on delete cascade,
   question text not null,

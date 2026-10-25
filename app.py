@@ -171,7 +171,7 @@ def card(t, K, q):
         elif kind == "지표":
             st.write(f"**'{P['title']}'을(를) 대시보드에 올릴까요?**")
             value, rows = engine.run_widget(K, P)
-            now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] == "trend" else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
+            now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] in ("trend", "view") else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
             st.caption(f"{asked_for(ev)}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} · {now_}")
             buttons(q, ("아니요", (engine.answer_widget, t, q, False)), ("올리기", (engine.answer_widget, t, q, True)))
         elif kind == "업무":
@@ -452,10 +452,11 @@ def ask(t, K):
             with st.container(border=True):
                 st.caption(f"{pick} · {note}")
                 st.write(text)
-            st.button("👍", key=f"up{pick}", on_click=vote, args=(t, last, pick), disabled=st.session_state.get("voted") == last["q"])
+            st.button("이 답이 맞아요", key=f"up{pick}", on_click=vote, args=(t, last, pick),
+                      disabled=st.session_state.get("voted") == last["q"])
             evidence(KK, ids, f"ev{pick}")
     picks = [v["pick"] for v in t.get("eval_votes", select="pick")]
-    st.caption(f"지금까지 👍 · 확정 후 {picks.count('확정 후')}번, 확정 전 {picks.count('확정 전')}번")
+    st.caption(f"지금까지 맞다고 고른 답 · 확정 후 {picks.count('확정 후')}번, 확정 전 {picks.count('확정 전')}번")
 
 
 def evidence(K, ids, key):
@@ -466,7 +467,7 @@ def evidence(K, ids, key):
 
 
 def vote(t, last, pick):
-    """평가 모드: 더 맞는 답에 👍. 쌓이면 정답률을 재는 질문 묶음이 된다."""
+    """평가 모드: 더 맞는 답을 고른다. 쌓이면 정답률을 재는 질문 묶음이 된다."""
     t.post("eval_votes", {"question": last["q"], "pick": pick, "answer_before": last["before"][0], "answer_after": last["text"]})
     st.session_state.voted = last["q"]
 
@@ -554,7 +555,9 @@ def widget(K, spec, key, remove=None):
     value, ev = engine.run_widget(K, spec)
     with st.container(border=True):
         st.caption(spec["title"])
-        if spec["kind"] == "trend":
+        if spec["kind"] == "view":
+            draw_view(K, spec, f"view{key}")
+        elif spec["kind"] == "trend":
             if len(value):
                 st.line_chart(value)
             else:
@@ -570,26 +573,55 @@ def widget(K, spec, key, remove=None):
             st.button("내리기", key=f"rm{key}", on_click=act, args=remove)
 
 
-def request_box(t, kind, example):
-    """말로 만들기: 청한 것을 AI가 확정한 지식 안에서 초안으로 만들어 제안 카드로 올린다."""
-    st.text_input("말로 만들기", key=f"req{kind}", placeholder=example)
-    if not st.button("만들어 보기", key=f"mk{kind}"):
-        return
-    req = st.session_state[f"req{kind}"].strip()
-    if not req:
-        st.error("만들고 싶은 것을 적어 주세요.")
-        return
-    with st.spinner("확정한 기록으로 만드는 중이에요..."):
-        try:
-            why = engine.build(t, llm.MODELS[0], kind, req)
-        except ERRORS as e:
-            st.error(f"만들지 못했어요: {e}")
-            return
-    if why:
-        st.warning(f"아직 만들 수 없어요: {why}")
-        return
+def draw_view(K, spec, key):
+    """말로 만든 보기: AI가 지은 Vega-Lite 설계에 서비스가 고른 기록 줄을 넣고, 서비스의 한 가지 꾸밈으로 그린다."""
+    rows = engine.view_rows(K, spec)
+    st.vega_lite_chart(rows.drop(columns=["_id", "_photo"]), engine.vega_of(spec, engine.view_cols(K, spec["type"])),
+                       width="stretch", key=key)
+
+
+def adopt(t, kind, m):
+    """대화에서 만든 초안을 [올리기]·[켜기]로 확정한다. 다른 제안과 같은 확인 기록(proposals)을 지난다."""
+    q = engine.propose(t, kind, m["spec"], {"request": m["request"]})
+    (engine.answer_widget if kind == "지표" else engine.answer_automation)(t, q, True)
+    m["done"] = True
     knowledge.clear()
-    st.rerun()
+
+
+def build_chat(t, K, kind):
+    """말로 만들기 대화. 이어서 고쳐 달라고 할 수 있고, 미리보기만 보여 주며 [올리기]·[켜기]를 눌러야 반영된다."""
+    key = f"chat{t.id}{kind}"
+    msgs = st.session_state.setdefault(key, [])
+    yes = "올리기" if kind == "지표" else "켜기"
+    with st.container(border=True):
+        st.caption("말로 만들기 · " + ("보고 싶은 것을 말하면 그려 보여 줘요. 고칠 점을 이어서 말해도 돼요." if kind == "지표"
+                                     else "챙길 일을 말하면 규칙으로 만들어 지금 걸린 기록을 보여 줘요. 고칠 점을 이어서 말해도 돼요."))
+        for i, m in enumerate(msgs):
+            st.markdown(m["text"])
+            if not m.get("spec"):
+                continue
+            if kind == "지표":
+                st.caption(m["spec"]["title"])
+                draw_view(K, m["spec"], f"{key}v{i}")
+                st.caption(f"근거 기록 {len(engine.view_rows(K, m['spec']))}줄")
+            else:
+                hits = engine.run_automation(K, m["spec"])
+                st.caption(f"{m['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in m['spec']['conditions'])} · 지금 걸린 {len(hits)}건")
+            if m.get("done"):
+                st.caption("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
+            else:
+                st.button(yes, key=f"{key}b{i}", type="primary", on_click=adopt, args=(t, kind, m))
+        example = "예: 일일 합격률 추이를 선 그래프로 / 미팅 예약 달력" if kind == "지표" else "예: 진동이 7을 넘으면 먼저 볼 것에 올려 줘"
+        if req := st.chat_input(example, key=f"{key}in"):
+            history = [{"role": m["role"], "content": m.get("raw") or m["text"]} for m in msgs]
+            msgs.append({"role": "user", "text": req})
+            with st.spinner("확정한 기록으로 만드는 중이에요..."):
+                try:
+                    out = engine.build_chat(t, llm.MODELS[0], kind, history, req)
+                except ERRORS as e:
+                    out = {"text": f"만들지 못했어요: {e}", "spec": None}
+            msgs.append({"role": "assistant", "request": req, **out})
+            st.rerun()
 
 
 def dashboard(t, K):
@@ -599,7 +631,7 @@ def dashboard(t, K):
         st.info("아직 확정된 기록이 없어요.")
         return
     engine.sync_rules(t, K)
-    request_box(t, "지표", "예: 이번 주 입고 합계를 보여 줘")
+    build_chat(t, K, "지표")
     for q in engine.pending(t, ["지표"]):
         card(t, K, q)
     ws = t.get("widgets", select="id,spec", status="eq.올림", order="id")
@@ -625,7 +657,7 @@ def automation(t, K):
         st.info("아직 확정된 기록이 없어요.")
         return
     engine.sync_rules(t, K)
-    request_box(t, "업무", "예: 진동이 7을 넘으면 먼저 볼 것에 올려 줘")
+    build_chat(t, K, "업무")
     for q in engine.pending(t, ["업무"]):
         card(t, K, q)
     autos = t.get("automations", select="id,spec,status", order="id")

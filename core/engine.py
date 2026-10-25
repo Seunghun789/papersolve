@@ -8,6 +8,7 @@
 관계는 칸·분류 사이(link_types)이고, 대상 쌍마다 관계 속성 값(entity_links)을 가질 수 있다."""
 import copy
 import io
+import json
 import re
 from datetime import date, datetime, timedelta, timezone
 from itertools import combinations
@@ -952,7 +953,7 @@ def impact(t, K, q):
         if before != after:
             out.append(f"자동화 '{a['spec']['title']}' {before}건 → {after}건")
     for w in t.get("widgets", select="spec", status="eq.올림"):
-        if w["spec"]["kind"] != "trend":
+        if w["spec"]["kind"] in ("kpi", "count_where"):
             before, after = run_widget(K, w["spec"])[0], run_widget(K2, w["spec"])[0]
             if not same_value(before, after):
                 out.append(f"지표 '{w['spec']['title']}' {before} → {after}")
@@ -1134,6 +1135,8 @@ def valid_spec(K, s):
     T = s.get("type")
     if T not in K["types"] or not all(valid_cond(K, T, c) for c in s.get("conditions") or []):
         return False
+    if s.get("kind") == "view":
+        return not view_problems(K, s)
     nums = prop_names(K, T, "number")
     if s.get("kind") == "kpi":
         return s.get("fn") == "count" or s.get("prop") in nums
@@ -1162,17 +1165,50 @@ def suggest_automations(t, model):
             propose(t, "업무", a)
 
 
-def build(t, model, kind, request):
-    """말로 청한 지표(kind='지표')·업무(kind='업무')를 초안으로 만들어 제안 카드로 올린다. 못 만들면 그 까닭을 돌려준다."""
+def build_chat(t, model, kind, history, request):
+    """말로 만들기 대화 한 턴 → {text: 보일 말, spec: 초안 또는 None, raw: 다음 턴에 넘길 AI 답}.
+    지표는 AI가 지은 Vega-Lite 보기(kind 'view'), 업무는 조건 규칙. 칸이 정말 없을 때의 안내는 서비스가 확인해서 쓴다."""
     K = load(t)
-    out = llm.build(t, model, kind, request, K["types"], schema_text(K), links_text(K), stats_text(K))
-    if out["missing"]:
-        return out["missing"]
-    s = out["spec"]
-    s["type"] = s.pop("record_type")
-    if not valid_spec(K, s):
-        return "확정한 칸으로 만들 수 없는 초안이 나왔어요. 칸 이름을 넣어 다시 말해 주세요."
-    propose(t, kind, s, {"request": request})
+    args = (K["types"], cols_text(K), links_text(K), stats_text(K))
+    out = llm.build_chat(t, model, kind, history, request, *args)
+    if (s := draft(K, kind, out)) and (bad := view_problems(K, s)):  # 없는 칸을 썼으면 알려 주고 한 번 다시 짓게 한다
+        retry = [*history, {"role": "user", "content": request}, {"role": "assistant", "content": json.dumps(out, ensure_ascii=False)}]
+        out = llm.build_chat(t, model, kind, retry, f"방금 그림에 칸 목록에 없는 이름이 있어요: {sorted(bad)}. 칸 목록의 이름만 써서 다시 만들어 주세요.", *args)
+    raw = json.dumps(out, ensure_ascii=False)
+    s, text = draft(K, kind, out), out["reply"]
+    if s and not valid_spec(K, s):
+        s, text = None, "만든 그림에 기록에 없는 칸이 들어가서 그리지 못했어요. 쓰고 싶은 칸 이름을 넣어 다시 말해 주세요."
+    names = {n for T in K["types"] for n in view_cols(K, T)}
+    absent = [m for m in out["missing"] if m not in names]
+    if absent and not s:
+        text = f"{', '.join(absent)} 칸은 아직 기록에 없어요. 그 값이 적힌 사진이나 CSV를 올리면 만들 수 있어요."
+    return {"text": text, "spec": s, "raw": raw}
+
+
+def draft(K, kind, out):
+    """AI 답의 초안을 서비스 형식으로: 지표는 보기(kind 'view'), 업무는 조건 규칙."""
+    if not out["spec"]:
+        return None
+    s = {k: v for k, v in out["spec"].items() if k != "record_type"}
+    return {**s, "type": out["spec"]["record_type"], **({"kind": "view"} if kind == "지표" else {})}
+
+
+def view_problems(K, s):
+    """보기 명세가 쓰는 이름 중 칸 목록에도, 변환으로 만든 이름에도 없는 것. 명세를 읽을 수 없으면 그렇다고."""
+    if s.get("kind") != "view" or s.get("type") not in K["types"]:
+        return set()
+    try:
+        v = vega_of(s, view_cols(K, s["type"]))
+    except (ValueError, TypeError):
+        return {"(Vega-Lite 명세를 읽을 수 없음)"}
+    used, made = set(), set()
+    _scan(v, used, made)
+    return {u.replace("\\.", ".") for u in used} - set(view_cols(K, s["type"])) - made
+
+
+def cols_text(K):
+    return "\n".join(f"- {T}: " + ", ".join(f"{n}({DTYPE_KO[d]})" for n, d in [("날짜", "date")] + col_defs(K, T))
+                     for T in K["types"])
 
 
 # ---- A 수집: 직접 입력 ----
@@ -1245,6 +1281,8 @@ def run_widget(K, spec, today=None):
     if not valid_spec(K, spec):
         return (pd.DataFrame() if spec.get("kind") == "trend" else None), pd.DataFrame()
     df = match(frame(K, spec["type"]), spec.get("conditions"), today)
+    if spec["kind"] == "view":
+        return df, df
     if spec["kind"] == "count_where":
         return len(df), df
     if spec["kind"] == "kpi":
@@ -1255,6 +1293,87 @@ def run_widget(K, spec, today=None):
                                       "latest": lambda: s.iloc[0]}[spec["fn"]]()
         return value, df[df[spec["prop"]].notna()]
     return trend(K, spec["type"], df, spec["props"]), df
+
+
+FIELD_KEYS = ("field", "groupby", "fields")
+# 말로 만든 보기의 꾸밈은 서비스가 하나로 정한다. AI가 쓴 크기·색 묶음·제목은 지우고,
+# 색과 글꼴은 대시보드의 다른 차트와 같은 Streamlit 테마를 따르며, 날짜·요일은 한국어로 쓴다.
+STYLE_KEYS = ("$schema", "config", "width", "height", "autosize", "padding", "background", "title")
+MONTHS = [f"{m}월" for m in range(1, 13)]
+VIEW_STYLE = {
+    "locale": {"time": {"dateTime": "%Y. %m. %d. %A %X", "date": "%Y. %m. %d.", "time": "%H:%M", "periods": ["오전", "오후"],
+                        "days": ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
+                        "shortDays": ["일", "월", "화", "수", "목", "금", "토"], "months": MONTHS, "shortMonths": MONTHS}},
+    "legend": {"orient": "bottom"},
+    "axis": {"labelFontSize": 12, "titleFontSize": 12},
+}
+VIEW_HEIGHT = 300
+
+
+def to_iso(v):
+    """날짜 칸 값 → ISO. '오후 2시', '14:30' 처럼 시각이 적혀 있으면 함께 쓴다."""
+    d = to_date(v)
+    if not d:
+        return None
+    s, h, mi = str(v), None, 0
+    if m := re.search(r"(오전|오후)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?", s):
+        h, mi = int(m.group(2)) % 12 + (12 if m.group(1) == "오후" else 0), int(m.group(3) or 0)
+    elif m := re.search(r"(\d{1,2}):(\d{2})", s):
+        h, mi = int(m.group(1)), int(m.group(2))
+    try:
+        return datetime(d.year, d.month, d.day, h, mi).isoformat(timespec="minutes") if h is not None else d.isoformat()
+    except ValueError:
+        return d.isoformat()
+
+
+def view_cols(K, T):
+    """말로 만든 보기에 들어가는 칸: 기록 날짜, 표의 칸, 날짜 칸의 적힌 그대로의 글."""
+    return ["날짜"] + prop_names(K, T) + [f"{n}(원문)" for n in prop_names(K, T, "date")]
+
+
+def view_rows(K, spec):
+    """말로 만든 보기에 넣을 줄(조건에 맞는 기록). 날짜 칸은 ISO 로 바꾸고, 적힌 글은 '칸(원문)'에 둔다."""
+    df = match(frame(K, spec["type"]), spec.get("conditions"))
+    for n in prop_names(K, spec["type"], "date"):
+        df[f"{n}(원문)"] = df[n]
+        df[n] = df[n].map(to_iso)
+    return df
+
+
+def vega_of(spec, columns):
+    """AI가 지은 Vega-Lite 명세를 그릴 수 있게 다듬는다. data·url 은 지워 기록은 서비스만 넣게 하고,
+    점이 든 칸 이름은 Vega-Lite 가 중첩 이름으로 읽지 않게 '\\.' 로 바꾼다. 꾸밈은 서비스의 것(VIEW_STYLE)으로 맞춘다."""
+    v = spec["vega"]
+    v = json.loads(v) if isinstance(v, str) else v
+    if not isinstance(v, dict):
+        raise ValueError("Vega-Lite 명세가 아니에요.")
+
+    def walk(o, key=None):
+        if isinstance(o, dict):
+            drop = ("data", "datasets", "url") + (("scheme", "range") if key == "scale" else ())
+            return {k: walk(x, k) for k, x in o.items() if k not in drop}
+        if isinstance(o, list):
+            return [walk(x, key) for x in o]
+        if key in FIELD_KEYS and isinstance(o, str) and (raw := o.replace("\\.", ".")) in columns:
+            return raw.replace(".", "\\.")
+        return o
+    v = {k: x for k, x in walk(v).items() if k not in STYLE_KEYS}
+    return {**v, **({"height": VIEW_HEIGHT} if "mark" in v or "layer" in v else {}), "config": VIEW_STYLE}
+
+
+def _scan(o, used, made):
+    """명세가 쓰는 칸 이름(used)과 변환으로 새로 만든 이름(made)을 모은다."""
+    if isinstance(o, dict):
+        for k, x in o.items():
+            names = [x] if isinstance(x, str) else [y for y in x if isinstance(y, str)] if isinstance(x, list) else []
+            if k in FIELD_KEYS:
+                used.update(names)
+            elif k == "as":
+                made.update(names)
+            _scan(x, used, made)
+    elif isinstance(o, list):
+        for x in o:
+            _scan(x, used, made)
 
 
 def trend(K, T, df, props):
@@ -1299,7 +1418,7 @@ def week_facts(t, K):
         add(f"켜 둔 자동화 '{a['spec']['title']}' 걸린 건수", len(hits), len(was), hits["_id"] if len(hits) else [],
             대상=list(hits[ent].astype(str).head(6)) if ent and len(hits) else [])
     for w in t.get("widgets", select="spec", status="eq.올림", order="id"):
-        if w["spec"].get("kind") != "trend":
+        if w["spec"].get("kind") in ("kpi", "count_where"):
             (v, ev), (pv, _) = run_widget(K, w["spec"]), run_widget(past, w["spec"], ago)
             add(f"올린 지표 '{w['spec']['title']}'", v, pv, ev["_id"] if len(ev) else [])
     add("아직 답하지 않은 확인할 것", len(pending(t, CHECK)), None, [])

@@ -35,11 +35,11 @@ def log(t, model, prompt, answer, usage_in, usage_out):
         pass
 
 
-def ask_json(t, model, content, schema, log_prompt):
-    """스키마대로 JSON 을 받는다. 화면에 글로 보여 주지 않고 서비스가 쓴다."""
+def ask_json(t, model, content, schema, log_prompt, system=None, history=()):
+    """스키마대로 JSON 을 받는다. 화면에 글로 보여 주지 않고 서비스가 쓴다. history 는 앞선 대화."""
     reply = client().messages.create(
-        model=model, max_tokens=16000, messages=[{"role": "user", "content": content}],
-        output_config={"format": {"type": "json_schema", "schema": schema}},
+        model=model, max_tokens=16000, messages=[*history, {"role": "user", "content": content}],
+        output_config={"format": {"type": "json_schema", "schema": schema}}, **({"system": system} if system else {}),
     )
     if reply.stop_reason != "end_turn":
         raise RuntimeError(f"답을 마치지 못했어요({reply.stop_reason}).")
@@ -214,20 +214,44 @@ def propose_automations(t, model, types, schema_text, links_text, stats, taken):
     return ask_json(t, model, prompt, obj(automations=array(auto_schema(types))), prompt)["automations"]
 
 
-# ---- 빌드: 말로 만들기 ----
+# ---- 빌드: 말로 만들기(대화) ----
 
-def build(t, model, kind, request, types, schema_text, links_text, stats):
-    """사용자가 말로 청한 지표(kind='지표') 또는 업무 규칙(kind='업무')의 초안 하나.
-    지식에 없는 칸·종류가 필요하면 missing 에 무엇을 먼저 확정해야 하는지 쓴다."""
-    spec, rules, what = (widget_schema(types), WIDGET_RULES, "대시보드 지표") if kind == "지표" else \
-        (auto_schema(types), AUTO_RULES, "'먼저 볼 것' 규칙")
-    prompt = (
-        f"사용자가 {what}를 말로 청했습니다: \"{request}\"\n" + knowledge_text(schema_text, links_text, stats) +
-        f"위 종류·칸·관계만 써서 요청에 맞는 {what} 하나를 spec 으로 만드세요.\n" + rules + "\n"
-        "- 요청에 필요한 종류·칸이 위에 없으면 missing 에 무엇이 없고 무엇을 먼저 올리거나 확정해야 하는지 한 문장. "
-        "만들 수 있으면 missing 은 null."
+def view_schema(types):
+    return obj(title=S, record_type=kinds_of(types), conditions=array(COND), vega=S, reason=S)
+
+
+VIEW_RULES = (
+    "- record_type 의 기록 중 conditions 에 맞는 줄을 서비스가 넣는다. 한 줄 = 기록 하나. conditions 가 없으면 전부.\n" + COND_RULES +
+    "- vega 에는 그 줄들을 그리는 Vega-Lite v5 명세를 JSON 글로 쓴다. data 와 url 은 쓰지 않는다.\n"
+    "- field 에는 칸 이름을 위 목록 그대로 쓴다('품목.최소 재고'처럼 점이 있어도 그대로). 기록 날짜는 '날짜' 칸.\n"
+    "- 날짜 칸 값은 ISO 날짜(시각이 적혀 있으면 날짜와 시각)로 들어가고, 적힌 그대로의 글은 '칸 이름(원문)' 칸에 있다.\n"
+    "- 비율·합계·평균·건수는 Vega-Lite 의 transform(calculate·aggregate·joinaggregate)이나 encoding 의 aggregate 로 센다. "
+    "숫자를 직접 적지 마세요. 예: 날짜별 합격률 = calculate \"datum['판정'] == '합격' ? 1 : 0\" as 합격, "
+    "날짜별로 그 평균(format '%')을 선으로. 달력 = 사용자가 말한 일정 칸(예: 미팅)의 주(yearweek)를 x, 요일(day)을 y 로 두고, "
+    "rect 의 color 와 text 에 모두 건수(count)를 넣어 겹친다. 일정 달력에는 기록 날짜('날짜')가 아니라 일정이 적힌 칸을 쓴다.\n"
+    "- 모양은 사용자가 말한 것(선, 막대, 달력, 표 등)을 따른다.\n"
+    "- 색·색 묶음·크기·글꼴·제목·config 같은 꾸밈은 쓰지 않는다. 서비스가 모든 보기에 같은 꾸밈을 입힌다. 축과 범례의 이름(title)은 한국어로 쓴다."
+)
+
+
+def build_chat(t, model, kind, history, request, types, cols, links_text, stats):
+    """말로 만들기 대화의 한 턴. 지표는 Vega-Lite 보기, 업무는 '먼저 볼 것' 규칙. 앞선 대화를 이어서 고친다.
+    필요한 칸이 정말 없을 때만 missing 에 그 칸 이름을 쓴다(서비스가 다시 확인한다)."""
+    spec, rules, what = (view_schema(types), VIEW_RULES, "대시보드에 올릴 보기(그래프·달력·표)") if kind == "지표" else \
+        (auto_schema(types), AUTO_RULES, "홈의 '먼저 볼 것' 규칙")
+    system = (
+        f"당신은 papersolve 에서 사용자가 말로 청한 {what}를 만드는 도우미입니다. 손으로 적은 기록이 표로 쌓여 있습니다.\n"
+        f"기록 종류와 칸(값의 종류):\n{cols}\n사용자가 확정한 관계:\n{links_text or '(없음)'}\n기록 요약(서비스가 센 값):\n{stats}\n"
+        "규칙:\n" + rules + "\n"
+        "- 만들 수 있으면 spec 을 채운다. 앞서 만든 것을 고쳐 달라면 고친 spec 전체를 다시 쓴다.\n"
+        "- 어느 칸을 쓸지 정말 애매할 때만 spec 은 null 로 두고 reply 로 짧게 되묻는다.\n"
+        "- 있는 칸으로 계산하거나 다시 그려서 만들 수 있으면 만든다. 필요한 칸이 위 목록에 정말 없을 때만 missing 에 그 칸 이름을 쓴다.\n"
+        "- reply 는 사용자에게 보일 한두 문장. 무엇을 만들었는지 쉬운 말로 쓴다. 아직 반영된 것이 아니니(사용자가 버튼을 눌러야 반영된다) "
+        "'올렸어요'·'켰어요'라고 쓰지 않는다. spec·vega·props·trend 같은 내부 이름을 쓰지 말고, "
+        "사용자가 할 수 없는 일(칸의 값 종류 바꾸기, 기능 추가하기)을 안내하지 않는다."
     )
-    return ask_json(t, model, prompt, obj(spec=spec, missing=nullable(S)), prompt)
+    log = system + "\n" + "\n".join(f"{m['role']}: {m['content']}" for m in history) + f"\nuser: {request}"
+    return ask_json(t, model, request, obj(reply=S, spec=nullable(spec), missing=array(S)), log, system, history)
 
 
 # ---- 이번 주 요약 ----
