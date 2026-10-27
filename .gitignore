@@ -16,3 +16,6 @@ data/uploads/
 
 # 따로 만든 Next.js 프로젝트(자체 git 기록, node_modules·.next)
 app/
+
+# 가상환경
+.venv/
