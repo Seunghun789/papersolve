@@ -157,13 +157,17 @@ def save_fix(t, q):
 
 
 def buttons(q, no, yes, extra=None):
+    user = bool((q.get("evidence") or {}).get("user"))
+    undo = q["kind"] in engine.UNDOABLE and q["payload"].get("op") != "칸 더하기"
+    yes_done = "반영했어요. 확인 화면의 '최근 반영한 것'에서 되돌릴 수 있어요." if undo else "반영했어요."
     cols = st.columns(3 if extra else 2)
-    cols[0].button(no[0], key=f"n{q['id']}", on_click=act, args=no[1], kwargs={"done": "넘겼어요."}, width="stretch")
+    cols[0].button(no[0], key=f"n{q['id']}", on_click=act, args=no[1],
+                   kwargs={"done": "올린 것을 거두었어요." if user else "넘겼어요."}, width="stretch")
     if extra:
         cols[1].button(extra[0], key=f"x{q['id']}", on_click=act, args=extra[1], kwargs={"done": "하나씩 물을게요."},
                        width="stretch")
     cols[-1].button(yes[0], key=f"y{q['id']}", type="primary", on_click=act, args=yes[1],
-                    kwargs={"done": "반영했어요."}, width="stretch")
+                    kwargs={"done": yes_done}, width="stretch")
 
 
 def show_impact(t, K, q):
@@ -304,7 +308,7 @@ def card(t, K, q):
             show_impact(t, K, q)
             buttons(q, ("아니요", (engine.answer_link_attr, t, q, False)), (ok("맞아요"), (engine.answer_link_attr, t, q, True)))
         elif kind == "되돌리기":
-            st.write(f"**{undo_text(P['kind'], P['was'])}을(를) 반영 전으로 되돌릴까요?**")
+            st.write(f"**{undo_text(P['kind'], P['was'])}, 반영 전으로 되돌릴까요?**")
             show_impact(t, K, q)
             buttons(q, ("아니요", (engine.answer_undo, t, q, False)), (ok("맞아요"), (engine.answer_undo, t, q, True)))
         elif kind == "칸 설정":
@@ -496,8 +500,8 @@ def check(t, K):
     st.header(f"확인할 것 {len(qs)}개")
     if not qs:
         st.success("홈에서 기록을 보세요.", title="확인할 것이 없어요")
-        st.button("홈으로", on_click=go, args=("홈",))
         recent(t, K)
+        st.button("홈으로", on_click=go, args=("홈",))
         return
     st.warning("원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.", title="AI가 읽고 제안한 것만 물어요")
     entry = [q for q in qs if q["kind"] in engine.ENTRY]
@@ -529,8 +533,8 @@ def check(t, K):
         st.subheader("관계 제안")
         for q in links:
             card(t, K, q)
-    st.button("홈으로", on_click=go, args=("홈",))
     recent(t, K)
+    st.button("홈으로", on_click=go, args=("홈",))
 
 
 def ask(t, K):
@@ -606,7 +610,7 @@ const OPTIONS = {
   edges: { width: 1, smooth: false, color: { color: "#A1A1AA" }, arrows: { to: { enabled: false, scaleFactor: 0.5 } },
            font: { size: 10, color: "#71717A", strokeWidth: 3, strokeColor: "#FFFFFF" } },
   physics: { solver: "forceAtlas2Based", stabilization: { iterations: 300 } },
-  interaction: { hover: true },
+  interaction: { hover: true, zoomView: false },  // 휠·터치패드는 화면 스크롤에 두고, 줌은 버튼으로
 }
 
 // 누른 점은 제 색으로 빛나고, 바로 이어진 점·선만 진하게 남긴다. id 가 없으면 모두 되돌린다.
@@ -640,8 +644,14 @@ export default function (component) {
       s.nodes = new DataSet(data.nodes)
       s.edges = new DataSet(data.edges.map((e, i) => ({ ...e, id: i, base: e.color || "#A1A1AA", color: { color: e.color || "#A1A1AA" } })))
       s.net.setData({ nodes: s.nodes, edges: s.edges })
-      s.net.once("stabilizationIterationsDone", () => s.net.setOptions({ physics: false }))
+      s.net.once("stabilizationIterationsDone", () => {
+        s.net.setOptions({ physics: false })
+        s.net.fit()
+      })
     }
+    const zoom = (k) => s.net.moveTo({ scale: s.net.getScale() * k, animation: { duration: 150 } })
+    parentElement.querySelector("#zin").onclick = () => zoom(1.25)
+    parentElement.querySelector("#zout").onclick = () => zoom(0.8)
     s.net.off("click")
     s.net.on("click", (e) => {
       focus(s, e.nodes[0])  // 서버를 기다리지 않고 바로 보이게
@@ -656,8 +666,28 @@ export default function (component) {
   }
 }
 """
-KG = st.components.v2.component("papersolve_kg", html='<div id="kg"></div>', css="""
+KG = st.components.v2.component("papersolve_kg", html="""
+<div class="wrap">
+  <div id="kg"></div>
+  <div class="zoom">
+    <button id="zin" type="button" aria-label="크게">+</button>
+    <button id="zout" type="button" aria-label="작게">−</button>
+  </div>
+</div>
+""", css="""
+.wrap { position: relative; }
 #kg { height: 540px; }
+.zoom {
+  position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--st-background-color, #FFFFFF); border: 1px solid var(--st-border-color, #E4E4E7); border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.zoom button {
+  width: 40px; height: 40px; border: 0; background: transparent; cursor: pointer;
+  font: 22px/1 var(--st-font, sans-serif); color: var(--st-text-color, #1F1F1F);
+}
+.zoom button + button { border-top: 1px solid var(--st-border-color, #E4E4E7); }
+.zoom button:hover { background: var(--st-secondary-background-color, #F4F4F5); }
 """, js=KG_JS)
 
 
@@ -719,8 +749,15 @@ def graph_data(K, pend, with_entities=False):
     return nodes, [e for e in edges if e["from"] in ids and e["to"] in ids]
 
 
+NODE_KO = {"T": "기록 종류", "P": "칸", "C": "대상 분류", "A": "대상 정보", "E": "대상"}
+
+
 def pick_node():
     st.session_state.kg_pick = st.session_state.kg.clicked
+
+
+def select_node():
+    st.session_state.kg_pick = st.session_state.kg_select
 
 
 # ---- 지식그래프: 점을 누르면 그 점의 설정 칸 (고친 것은 카드로 올라가 [적용]을 눌러야 반영된다) ----
@@ -778,6 +815,7 @@ def node_panel(t, K, nid):
             if len(info.columns):
                 st.data_editor(info, key=key, hide_index=True, alt=f"{e['name']}의 정보")
                 st.button("바꾼 것 올리기", key=f"kgs{e['id']}", on_click=submit_edits, args=(t, C, one, key))
+                unsent_note(key)
             else:
                 st.caption(f"아직 정보가 없어요. '{C}' 점에서 [정보 더하기]로 더할 수 있어요.")
             st.caption("별칭: " + (", ".join(engine.aliases_of(K, e["id"])) or "없음"))
@@ -843,9 +881,12 @@ def graph(t, K):
         nodes, edges = graph_data(K, pend, view == "대상까지")
         KG(data={"nodes": nodes, "edges": edges, "selected": st.session_state.get("kg_pick")}, key="kg",
            on_clicked_change=pick_node)
-        st.caption("남색 원 기록 종류 · 작은 남색 점 칸 · 황토 원 대상 분류 · 연한 황토 점 대상 정보 · 회색 점 대상 · "
-                   "실선 확정 · 점선 확인할 관계")
-        st.caption("점을 누르면 오른쪽에서 설정을 고치고, 빈 곳을 누르면 닫혀요. 끌어서 옮기고 휠로 크게 볼 수 있어요.")
+        st.caption("남색 원 기록 종류 · 황토 원 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
+        st.caption("점을 누르면 오른쪽에서 설정을 고치고, 빈 곳을 누르면 닫혀요. 끌어서 옮기고, 오른쪽 아래 [+]·[−]로 크기를 바꿔요.")
+        with st.expander("점 고르기"):  # 마우스 없이도 점을 고를 수 있게
+            names = {n["id"]: f"{n['label'].replace(chr(10), ' ')} · {NODE_KO[n['id'][0]]}" for n in nodes}
+            st.selectbox("점", list(names), format_func=names.get, index=None, key="kg_select",
+                         placeholder="고르면 오른쪽에 설정 칸이 열려요", on_change=select_node)
     with right:
         if st.session_state.get("kg_pick"):
             node_panel(t, K, st.session_state.kg_pick)
@@ -1016,6 +1057,17 @@ def automation(t, K):
 UP = "카드로 올렸어요. 카드에서 [적용]을 눌러야 반영돼요."
 
 
+def unsent(key):
+    """표에서 고쳤지만 아직 [바꾼 것 올리기]를 누르지 않은 것 수."""
+    ch = st.session_state.get(key) or {}
+    return len(ch.get("edited_rows") or {}) + sum(1 for r in ch.get("added_rows") or [] if any(engine.filled(v) for v in r.values()))
+
+
+def unsent_note(key):
+    if n := unsent(key):
+        st.caption(f":orange[올리지 않은 고침 {n}개가 있어요. [바꾼 것 올리기]를 누르지 않고 다른 화면으로 가면 사라져요.]")
+
+
 def submit_edits(t, C, df, key):
     n = engine.user_entity_edits(t, knowledge(t.id), C, df, st.session_state.get(key) or {})
     st.session_state.ent_msg = f"바꾼 것 {n}개를 {UP}" if n else "바뀐 것이 없어요."
@@ -1132,6 +1184,7 @@ def entities_page(t, K):
                     a, b = st.columns([1, 3], vertical_alignment="center")
                     a.button("바꾼 것 올리기", key=f"sub{C}", on_click=submit_edits, args=(t, C, df, key))
                     b.caption("값을 고치거나 맨 아래에 새 대상을 적고 누르면 카드로 올라가요.")
+                    unsent_note(key)
                     with st.expander("정보 더하기 · 별칭 · 묶기"):
                         class_tools(t, C, df["이름"].tolist())
         class_links = [l for l in K["links"] if "." not in l["from_ref"] and "." not in l["to_ref"]]
