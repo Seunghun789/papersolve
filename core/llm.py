@@ -13,7 +13,7 @@ KEY = db.env.get("ANTHROPIC_API_KEY", "").strip()
 MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"]
 # 모델 → (입력, 출력) 100만 토큰당 달러. 공식 가격표 기준, 바뀌면 여기만 고친다.
 PRICE = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00), "claude-haiku-5-5": (0.10, 0.50)}
-LINK_KINDS = ["연결", "함께 움직임", "최소 기준", "최대 기준"]
+LINK_KINDS = ["연결", "함께 움직임", "최소 기준", "최대 기준", "의존", "영향", "대체"]
 OPS = [">", "<", ">=", "<=", "=", "!=", "contains", "within_days", "is_today", "last_days", "older_than_days"]
 FNS = ["count", "sum", "avg", "min", "max", "latest"]
 SCOPES = ["latest", "recent7", "all"]
@@ -158,6 +158,8 @@ def propose_links(t, model, schema_text, evidence, taken):
         f"서비스가 기록으로 센 근거:\n{evidence or '(아직 없음)'}\n"
         f"이미 있는 관계: {taken or '(없음)'}\n"
         "- from/to 는 '종류.칸' 형식. kind: '최소 기준'(from 이 to 의 최소 기준), '최대 기준', '연결'(같은 대상), '함께 움직임'.\n"
+        "- 대상 분류 사이(from/to 가 분류 이름)에는 이름과 기록으로 분명할 때만 '의존'(from 이 to 에 의존), "
+        "'영향'(from 이 to 에 영향을 줌), '대체'(from 이 to 를 대신할 수 있음)를 쓰세요.\n"
         "- reason 은 위 근거에서 한 문장. 상관은 원인이 아니니 '함께 움직여요'처럼 쓰세요."
     )
     return ask_json(t, model, prompt, obj(links=array(LINK)), prompt)["links"]

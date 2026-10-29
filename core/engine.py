@@ -1276,6 +1276,30 @@ def run_automation(K, spec, today=None):
     return match(scoped(K, spec["type"], df, spec.get("scope", "all"), today), spec["conditions"], today)
 
 
+FOLLOW = {"의존": "에 의존", "영향": "의 영향", "대체": " 대신"}
+
+
+def follow(K, spec, hits):
+    """걸린 대상에서 분류 사이 관계(의존·영향·대체)를 한 번 따라가 함께 볼 대상: [(이름, 까닭)].
+    의존(A→B)은 B가 걸리면 A, 영향(P→Q)은 P가 걸리면 Q, 대체(Z→W)는 W가 걸리면 Z."""
+    ent = entity(K, spec["type"])
+    C = next((p.get("ref_class") for p in K["props"].get(spec["type"], []) if p["name"] == ent), None)
+    if not C or hits.empty:
+        return []
+    names, up, out = set(hits[ent].dropna().astype(str)), ancestors(K, C), {}
+    for l in K["links"]:
+        a, b = l["from_ref"], l["to_ref"]
+        if l["kind"] not in FOLLOW or "." in a or "." in b:
+            continue
+        src, dst = (a, b) if l["kind"] == "영향" else (b, a)
+        if src not in up:
+            continue
+        for x, y in link_pairs(K, l)[[src, dst]].itertuples(index=False):
+            if str(x) in names and str(y) not in names:
+                out.setdefault(str(y), f"{x}{FOLLOW[l['kind']]}")
+    return list(out.items())
+
+
 def run_widget(K, spec, today=None):
     """(값 또는 차트용 표, 근거 기록)."""
     if not valid_spec(K, spec):

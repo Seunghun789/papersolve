@@ -84,9 +84,13 @@ def fmtv(v):
 def link_sentence(P):
     a, b = ref_text(P["from"]), ref_text(P["to"])
     if "." not in P["from"] and "." not in P["to"]:
-        return f"'{a}'와 '{b}'는 이어져 있나요?{' (관계 이름: ' + P['name'] + ')' if P.get('name') else ''}"
+        return {"의존": f"'{a}'은(는) '{b}'에 의존하나요?", "영향": f"'{a}'이(가) '{b}'에 영향을 주나요?",
+                "대체": f"'{a}'이(가) '{b}'을(를) 대신할 수 있나요?"}.get(
+            P["kind"], f"'{a}'와 '{b}'는 이어져 있나요?{' (관계 이름: ' + P['name'] + ')' if P.get('name') else ''}")
     return {"최소 기준": f"'{a}'이(가) '{b}'의 최소 기준인가요?", "최대 기준": f"'{a}'이(가) '{b}'의 최대 기준인가요?",
-            "연결": f"'{a}'와 '{b}'는 같은 대상을 가리키나요?", "함께 움직임": f"'{a}'와 '{b}'는 함께 움직이나요?"}[P["kind"]]
+            "연결": f"'{a}'와 '{b}'는 같은 대상을 가리키나요?", "함께 움직임": f"'{a}'와 '{b}'는 함께 움직이나요?",
+            "의존": f"'{a}'은(는) '{b}'에 의존하나요?", "영향": f"'{a}'이(가) '{b}'에 영향을 주나요?",
+            "대체": f"'{a}'이(가) '{b}'을(를) 대신할 수 있나요?"}[P["kind"]]
 
 
 def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올린 기록)."):
@@ -252,6 +256,9 @@ def suggest(fn, t):
 
 # ---- 화면 ----
 
+CARD_H = 150  # 오늘 먼저 볼 것 카드는 모두 같은 높이
+
+
 def home(t, K, name):
     st.caption(name)
     st.header("오늘 먼저 볼 것")
@@ -259,22 +266,27 @@ def home(t, K, name):
     cols = st.columns(3)
     for i, a in enumerate(autos):
         if a is None:
-            cols[0].info("자동화에서 업무를 켜 두면 여기에 알아서 보여요.")
+            with cols[0], st.container(border=True, height=CARD_H):
+                st.caption("자동화")
+                st.write("**없음**")
+                st.caption("자동화에서 업무를 켜 두면 여기에 알아서 보여요.")
             continue
         hits = engine.run_automation(K, a["spec"])
         ent = engine.entity(K, a["spec"]["type"])
         late = any(c["op"] == "older_than_days" for c in a["spec"]["conditions"])
-        with cols[i % 3], st.container(border=True):
+        with cols[i % 3], st.container(border=True, height=CARD_H):
             st.caption(a["spec"]["title"])
             st.write(f"**{len(hits)}건**")
             names = ", ".join(f"{r[ent]}{' (마지막 ' + r['날짜'][5:].replace('-', '/') + ')' if late else ''}"
                               for _, r in hits.head(4).iterrows()) if ent and len(hits) else ""
             st.caption(names or " 그리고 ".join(cond_text(c) for c in a["spec"]["conditions"]))
-    with cols[len(autos) % 3], st.container(border=True):
+            if more := engine.follow(K, a["spec"], hits):
+                st.caption("이어서 볼 것: " + ", ".join(f"{n} ({why})" for n, why in more[:4]))
+    with cols[len(autos) % 3], st.container(border=True, height=CARD_H):
         st.caption("확인")
         n = len(engine.pending(t, engine.CHECK))
+        st.write(f"**{n}개**")
         st.button(f"확인할 것 {n}개" if n else "확인할 것 없음", on_click=go, args=("확인",), disabled=not n, width="stretch")
-        st.caption("예/아니오로 답해 주세요")
 
     if not K["types"]:
         st.info("아직 확정된 기록이 없어요. 올리기에서 사진이나 CSV를 넣어 주세요.")
@@ -489,7 +501,7 @@ def vote(t, last, pick):
 def build_dot(K, pend, with_entities=False):
     """기록 종류(남색 원)·칸(작은 회색 점)·대상 분류(황토 원)·분류 정보·상위 분류·관계. 확정은 실선, 제안은 점선."""
     q = lambda s: str(s).replace('"', "'")
-    lines = ['digraph { layout=neato; overlap=false; sep="+14"; splines=curved; forcelabels=true; outputorder=edgesfirst; bgcolor=transparent; node [fontname="Apple SD Gothic Neo", fontsize=10, fontcolor="#FFFFFF", shape=circle, style=filled, fixedsize=shape, penwidth=0]; edge [fontname="Apple SD Gothic Neo", fontsize=9, fontcolor="#71717A", color="#A1A1AA", arrowsize=0.5, penwidth=0.8];']
+    lines = ['digraph { layout=neato; overlap=false; sep="+14"; splines=false; forcelabels=true; outputorder=edgesfirst; bgcolor=transparent; node [fontname="Apple SD Gothic Neo", fontsize=10, fontcolor="#FFFFFF", shape=circle, style=filled, fixedsize=shape, penwidth=0]; edge [fontname="Apple SD Gothic Neo", fontsize=9, fontcolor="#71717A", color="#A1A1AA", arrowsize=0.5, penwidth=0.8];']
     for T in K["types"]:
         lines.append(f'"{q(T)}" [fillcolor="#6366F1", width=0.9];')
         for p in K["props"][T]:

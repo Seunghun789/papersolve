@@ -50,7 +50,7 @@ create table public.link_types (             -- 관계. ref 는 '대상 분류',
   tenant_id bigint not null references public.tenants(id) on delete cascade,
   from_ref text not null,
   to_ref text not null,
-  kind text not null check (kind in ('연결', '함께 움직임', '최소 기준', '최대 기준')),
+  kind text not null check (kind in ('연결', '함께 움직임', '최소 기준', '최대 기준', '의존', '영향', '대체')),
   reason text,
   name text,                                 -- 관계 이름 (예: 거래처)
   attr_defs jsonb not null default '[]',     -- 관계 정보 칸 (예: [{"name": "단가", "dtype": "number"}])
