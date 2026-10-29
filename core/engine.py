@@ -102,7 +102,7 @@ def load(t):
         "ealias": {},
         "elinks": t.get("entity_links", select="id,link_id,from_entity,to_entity,attrs"),
     }
-    for p in t.get("property_defs", select="type_name,name,dtype,unit,is_entity,ref_class,position", order="position,id"):
+    for p in t.get("property_defs", select="type_name,name,dtype,unit,description,is_entity,ref_class,position", order="position,id"):
         K["props"].setdefault(p["type_name"], []).append(p)
     for T in K["types"] + list(K["classes"]):
         K["props"].setdefault(T, [])
@@ -905,6 +905,63 @@ def user_link_attr(t, L, attr, dtype, values):
                           "dtype": dtype, "values": {k: plain(v) for k, v in values.items() if filled(v)}}, {"user": True})
 
 
+def user_prop(t, T, op, **payload):
+    """지식그래프의 기록 종류·칸 점에서 고친 것을 제안으로 올린다. op: 단위·설명 / 다른 이름 / 칸 더하기.
+    칸 이름과 값의 종류는 바꾸지 않는다(지난 기록·관계·지표·자동화가 칸 이름으로 이어져 있다)."""
+    propose(t, "칸 설정", {"type": T, "op": op, **payload}, {"user": True})
+
+
+def answer_prop_setting(t, q, ok):
+    P = q["payload"]
+    if ok and P["op"] == "단위·설명":
+        t.patch("property_defs", {"unit": P["unit"] or None, "description": P["description"] or None},
+                type_name=f"eq.{P['type']}", name=f"eq.{P['prop']}")
+    elif ok and P["op"] == "다른 이름":
+        set_alias(t, P["type"], P["alias"], P["prop"])
+    elif ok:
+        add_prop(t, P["type"], {"name": P["name"], "label": P["name"], "dtype": P["dtype"], "unit": P.get("unit")},
+                 len(t.get("property_defs", select="id", type_name=f"eq.{P['type']}")))
+    done(t, q, "승인" if ok else "거절")
+
+
+# ---- 되돌리기: 반영 전으로 정확히 돌아가는 확정만 (기록 종류·칸·대상·분류는 되돌리지 않는다) ----
+
+UNDOABLE = ["속성 값", "같은 대상", "칸 설정"]
+
+
+def undoable(t, n=10):
+    """되돌릴 수 있는 최근 확정. 이미 되돌린 것과 칸 더하기는 뺀다."""
+    quoted = ",".join(f'"{k}"' for k in UNDOABLE)
+    rows = t.get("proposals", select="id,kind,payload,decided_at", status="eq.승인", kind=f"in.({quoted})",
+                 order="decided_at.desc", limit=40)
+    return [q for q in rows if not q["payload"].get("undone") and q["payload"].get("op") != "칸 더하기"][:n]
+
+
+def propose_undo(t, q):
+    propose(t, "되돌리기", {"of": q["id"], "kind": q["kind"], "was": q["payload"]}, {"user": True})
+
+
+def answer_undo(t, q, ok):
+    P = q["payload"]
+    W = P["was"]
+    if ok and P["kind"] == "속성 값":
+        K = load(t)
+        if W["entity_id"] in K["entities"]:
+            set_attr(t, K, W["entity_id"], W["attr"], W["old"])
+    elif ok and P["kind"] == "같은 대상":
+        eid = find_entity(load(t), W["class"], W["same_as"])
+        if eid:
+            t.delete("entity_aliases", entity_id=f"eq.{eid}", alias=f"eq.{W['value']}")
+    elif ok and W.get("op") == "단위·설명":
+        t.patch("property_defs", {"unit": W.get("old_unit"), "description": W.get("old_description")},
+                type_name=f"eq.{W['type']}", name=f"eq.{W['prop']}")
+    elif ok and W.get("op") == "다른 이름":
+        t.delete("alias_dict", type_name=f"eq.{W['type']}", alias=f"eq.{W['alias']}")
+    if ok:
+        t.patch("proposals", {"payload": {**W, "undone": q["id"]}}, id=f"eq.{P['of']}")
+    done(t, q, "승인" if ok else "거절")
+
+
 def link_pairs(K, L):
     """관계로 이어진 대상 쌍(기록에 같이 나온 쌍 + 값이 있는 쌍)과 관계 정보 값."""
     rows = {}
@@ -930,6 +987,8 @@ def impact(t, K, q):
     K2 = copy.deepcopy(K)
     if q["kind"] == "속성 값" and P["entity_id"] in K2["entities"]:
         K2["entities"][P["entity_id"]]["attrs"][P["attr"]] = P["new"]
+    elif q["kind"] == "되돌리기" and P["kind"] == "속성 값" and P["was"]["entity_id"] in K2["entities"]:
+        K2["entities"][P["was"]["entity_id"]]["attrs"][P["was"]["attr"]] = P["was"]["old"]
     elif q["kind"] == "관계 속성":
         L = next((l for l in K2["links"] if l["id"] == P["link_id"]), None)
         if not L:
@@ -1040,7 +1099,7 @@ def propose_link(t, K, a, b, kind, reason, user=False, name=None):
     propose(t, "연결", {"from": a, "to": b, "kind": kind, "name": name,
                         "reason": ("직접 고른 관계예요. " if user else "") + (reason or "")},
             {"counted": pair_evidence(K, a, b), "user": user})
-    return "관계 제안 카드로 올렸어요. [맞아요]를 눌러야 그래프에 이어져요."
+    return "관계 제안 카드로 올렸어요. [맞아요]를 눌러야 지식그래프에 이어져요."
 
 
 def suggest_links(t, model):

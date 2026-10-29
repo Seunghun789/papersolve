@@ -149,7 +149,7 @@ def propose_entities(t, model, types, classes, schema_text, entity_names):
     return ask_json(t, model, prompt, schema, prompt)
 
 
-# ---- 그래프·대시보드·자동화 제안 ----
+# ---- 지식그래프·대시보드·자동화 제안 ----
 
 def propose_links(t, model, schema_text, evidence, taken):
     prompt = (

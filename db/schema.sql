@@ -28,6 +28,7 @@ create table public.property_defs (          -- 기록 종류의 칸, 또는 대
   name text not null,
   dtype text not null check (dtype in ('number', 'text', 'date', 'choice')),
   unit text,
+  description text,                          -- 칸 설명. 사용자가 지식그래프에서 적는다
   is_entity boolean not null default false,  -- 행이 가리키는 주 대상(품목·설비·고객 등)
   ref_class text,                            -- 이 칸의 값이 가리키는 대상 분류
   position integer not null default 0,
@@ -118,7 +119,7 @@ create table public.proposals (
   id bigint generated always as identity primary key,
   tenant_id bigint not null references public.tenants(id) on delete cascade,
   kind text not null check (kind in ('종류', '칸', '같은 칸', '애매한 값', '연결', '지표', '업무',
-                                     '대상 분류', '대상', '같은 대상', '대상 속성', '속성 값', '상위 분류', '관계 속성')),
+                                     '대상 분류', '대상', '같은 대상', '대상 속성', '속성 값', '상위 분류', '관계 속성', '칸 설정', '되돌리기')),
   payload jsonb not null,
   evidence jsonb,
   status text not null default '대기' check (status in ('대기', '승인', '고침', '거절')),
