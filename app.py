@@ -452,10 +452,14 @@ def ask(t, K):
     if not K["types"]:
         st.info("아직 확정된 기록이 없어요.")
         return
-    question = st.text_input("질문", placeholder="예: 최근에 기준을 넘은 기록은? / 이번 주 미팅은 누구야?")
-    model = st.selectbox("답하는 모델", llm.MODELS)
-    compare = st.toggle("나란히 보기", help="같은 질문을 구조를 확정하기 전(종이에서 읽은 그대로)과 지금 지식으로 함께 답해요.")
-    if st.button("묻기", type="primary") and question.strip():
+    with st.form("ask", border=False):  # 질문을 적고 Enter만 눌러도 묻는다
+        left, right = st.columns([5, 1], vertical_alignment="bottom")
+        question = left.text_input("질문", placeholder="예: 최근에 기준을 넘은 기록은? / 이번 주 미팅은 누구야?")
+        sent = right.form_submit_button("묻기", type="primary", width="stretch")
+        left, right = st.columns([2, 3], vertical_alignment="bottom")
+        model = left.selectbox("답하는 모델", llm.MODELS)
+        compare = right.toggle("나란히 보기", help="같은 질문을 구조를 확정하기 전(종이에서 읽은 그대로)과 지금 지식으로 함께 답해요.")
+    if sent and question.strip():
         q = question.strip()
         with st.spinner("기록을 찾는 중이에요..."):
             try:
@@ -556,10 +560,14 @@ def graph(t, K):
         st.info("아직 확정된 기록이 없어요.")
         return
     pend = engine.pending(t, ["연결"])
-    view = st.segmented_control("보기", ["구조만", "대상까지"], default="구조만", required=True, key="graph_view")
-    st.graphviz_chart(build_dot(K, pend, view == "대상까지"), alt="기록 종류·칸·대상 분류와 관계 그림")
-    for q in pend:
-        card(t, K, q)
+    left, right = st.columns([3, 2])
+    with left:
+        view = st.segmented_control("보기", ["구조만", "대상까지"], default="구조만", required=True, key="graph_view")
+        st.graphviz_chart(build_dot(K, pend, view == "대상까지"), alt="기록 종류·칸·대상 분류와 관계 그림")
+    with right:
+        st.caption(f"관계 제안 {len(pend)}개" if pend else "확인할 관계 제안이 없어요. 오른쪽 위 [새로 추천받기]로 받을 수 있어요.")
+        for q in pend:
+            card(t, K, q)
     if K["links"]:
         st.subheader("확정한 관계")
         for l in K["links"]:
