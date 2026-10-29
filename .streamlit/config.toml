@@ -1,0 +1,16 @@
+[theme]
+base = "light"
+primaryColor = "#1F1F1F"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F4F5"
+textColor = "#1F1F1F"
+borderColor = "#E4E4E7"
+showWidgetBorder = true
+font = "-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', sans-serif"
+baseFontSize = 14
+baseRadius = "8px"
+showSidebarBorder = true
+
+[theme.sidebar]
+backgroundColor = "#F7F7F8"
+secondaryBackgroundColor = "#ECECEE"

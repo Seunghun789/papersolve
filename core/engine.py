@@ -1304,8 +1304,18 @@ VIEW_STYLE = {
     "locale": {"time": {"dateTime": "%Y. %m. %d. %A %X", "date": "%Y. %m. %d.", "time": "%H:%M", "periods": ["오전", "오후"],
                         "days": ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
                         "shortDays": ["일", "월", "화", "수", "목", "금", "토"], "months": MONTHS, "shortMonths": MONTHS}},
-    "legend": {"orient": "bottom"},
-    "axis": {"labelFontSize": 12, "titleFontSize": 12},
+    "font": "-apple-system, BlinkMacSystemFont, Apple SD Gothic Neo, sans-serif",
+    "background": "transparent",
+    "view": {"stroke": None},
+    "range": {"category": ["#1F1F1F", "#6366F1", "#D4A72C", "#10B981", "#A1A1AA", "#EF4444"]},
+    "mark": {"color": "#1F1F1F"},
+    "bar": {"color": "#1F1F1F", "cornerRadiusEnd": 3},
+    "line": {"color": "#1F1F1F", "strokeWidth": 2},
+    "point": {"color": "#1F1F1F", "filled": True},
+    "legend": {"orient": "bottom", "labelFontSize": 12, "labelColor": "#52525B", "titleFontSize": 12, "titleColor": "#71717A", "titleFontWeight": 500},
+    "axis": {"labelFontSize": 12, "labelColor": "#71717A", "titleFontSize": 12, "titleColor": "#71717A", "titleFontWeight": 500,
+             "domainColor": "#E4E4E7", "tickColor": "#E4E4E7", "gridColor": "#F4F4F5"},
+    "title": {"fontSize": 14, "fontWeight": 600, "color": "#1F1F1F", "anchor": "start"},
 }
 VIEW_HEIGHT = 300
 

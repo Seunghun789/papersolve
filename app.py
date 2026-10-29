@@ -8,7 +8,21 @@ import streamlit as st
 
 from core import db, engine, llm
 
-st.set_page_config(page_title="papersolve", layout="wide")
+st.set_page_config(page_title="papersolve", layout="wide", initial_sidebar_state="expanded")
+st.markdown("""<style>
+[data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapsedControl"] {display: none !important;}
+section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px !important; transform: none !important;}
+.block-container {padding-top: 2.5rem; max-width: 1080px;}
+h1 {font-size: 1.6rem !important; font-weight: 600 !important; letter-spacing: -0.01em;}
+h2 {font-size: 1.25rem !important; font-weight: 600 !important;}
+h3 {font-size: 1.05rem !important; font-weight: 600 !important;}
+[data-testid="stCaptionContainer"] {color: #71717A;}
+section[data-testid="stSidebar"] [role="radiogroup"] label {padding: 6px 10px; border-radius: 6px; width: 100%; margin: 0;}
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover {background: #ECECEE;}
+section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {background: #E4E4E7; font-weight: 600;}
+section[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child {display: none;}
+</style>""", unsafe_allow_html=True)
 ERRORS = (anthropic.APIError, requests.RequestException, RuntimeError, KeyError, ValueError, pd.errors.ParserError)
 PAGES = ["홈", "올리기", "확인", "묻기", "그래프", "대상", "대시보드", "자동화"]
 CAPTION = {"종류": "새 기록 종류", "칸": "새 칸", "같은 칸": "같은 칸", "애매한 값": "읽기 애매한 칸",
@@ -473,43 +487,43 @@ def vote(t, last, pick):
 
 
 def build_dot(K, pend, with_entities=False):
-    """기록 종류(파란 상자)·칸·대상 분류(노란 상자)·분류 정보·상위 분류·관계. 확정은 실선, 제안은 점선."""
+    """기록 종류(남색 원)·칸(작은 회색 점)·대상 분류(황토 원)·분류 정보·상위 분류·관계. 확정은 실선, 제안은 점선."""
     q = lambda s: str(s).replace('"', "'")
-    lines = ['digraph { rankdir=LR; node [fontname="Helvetica", fontsize=11]; edge [fontname="Helvetica", fontsize=10];']
+    lines = ['digraph { layout=neato; overlap=false; sep="+14"; splines=curved; forcelabels=true; outputorder=edgesfirst; bgcolor=transparent; node [fontname="Apple SD Gothic Neo", fontsize=10, fontcolor="#FFFFFF", shape=circle, style=filled, fixedsize=shape, penwidth=0]; edge [fontname="Apple SD Gothic Neo", fontsize=9, fontcolor="#71717A", color="#A1A1AA", arrowsize=0.5, penwidth=0.8];']
     for T in K["types"]:
-        lines.append(f'"{q(T)}" [shape=box, style="rounded,filled", fillcolor="#e8f0fe"];')
+        lines.append(f'"{q(T)}" [fillcolor="#6366F1", width=0.9];')
         for p in K["props"][T]:
             ref = q(f"{T}.{p['name']}")
-            lines.append(f'"{ref}" [label="{q(p["name"])}", shape=ellipse];')
-            lines.append(f'"{q(T)}" -> "{ref}" [dir=none, color=gray80];')
+            lines.append(f'"{ref}" [label="", xlabel="{q(p["name"])}", fontcolor="#52525B", fillcolor="#A5B4FC", width=0.16];')
+            lines.append(f'"{q(T)}" -> "{ref}" [dir=none, color="#E4E4E7"];')
             if p.get("ref_class") in K["classes"]:
-                lines.append(f'"{ref}" -> "{q(p["ref_class"])}" [label="가리킴", color=gray50, style=dotted];')
+                lines.append(f'"{ref}" -> "{q(p["ref_class"])}" [label="가리킴", style=dotted];')
     for C, parent in K["classes"].items():
         n = sum(1 for e in K["entities"].values() if e["class_name"] == C)
-        lines.append(f'"{q(C)}" [label="{q(C)}\\n대상 {n}개", shape=box, style="bold,filled", fillcolor="#fff4d6"];')
+        lines.append(f'"{q(C)}" [label="{q(C)}\\n대상 {n}개", fillcolor="#D4A72C", width=0.9];')
         if parent:
-            lines.append(f'"{q(C)}" -> "{q(parent)}" [label="종류의 하나", color=gray40];')
+            lines.append(f'"{q(C)}" -> "{q(parent)}" [label="종류의 하나", color="#71717A"];')
         for a in K["props"].get(C, []):
             ref = q(f"{C}.{a['name']}")
-            lines.append(f'"{ref}" [label="{q(a["name"])}", shape=ellipse, style=filled, fillcolor="#fffbea"];')
-            lines.append(f'"{q(C)}" -> "{ref}" [dir=none, color=gray80];')
+            lines.append(f'"{ref}" [label="", xlabel="{q(a["name"])}", fontcolor="#52525B", fillcolor="#F1DDA6", width=0.16];')
+            lines.append(f'"{q(C)}" -> "{ref}" [dir=none, color="#E4E4E7"];')
     for l in K["links"]:
         label = (l.get("name") or l["kind"]) + (" (" + ", ".join(d["name"] for d in l["attr_defs"]) + ")" if l.get("attr_defs") else "")
-        lines.append(f'"{q(l["from_ref"])}" -> "{q(l["to_ref"])}" [label="{q(label)}", penwidth=2];')
+        lines.append(f'"{q(l["from_ref"])}" -> "{q(l["to_ref"])}" [label="{q(label)}", penwidth=1.4, color="#52525B", fontcolor="#1F1F1F", len=2.2];')
     for p in pend:
         P = p["payload"]
-        lines.append(f'"{q(P["from"])}" -> "{q(P["to"])}" [label="{q(P.get("name") or P["kind"])}?", style=dashed];')
+        lines.append(f'"{q(P["from"])}" -> "{q(P["to"])}" [label="{q(P.get("name") or P["kind"])}?", style=dashed, color="#A1A1AA"];')
     if with_entities:
         for e in list(K["entities"].values())[:60]:
-            lines.append(f'"e{e["id"]}" [label="{q(e["name"])}", shape=circle, fontsize=9, width=0.3];')
-            lines.append(f'"e{e["id"]}" -> "{q(e["class_name"])}" [color=gray85, arrowsize=0.5];')
+            lines.append(f'"e{e["id"]}" [label="", xlabel="{q(e["name"])}", fontcolor="#71717A", fontsize=8, fillcolor="#D4D4D8", width=0.12];')
+            lines.append(f'"e{e["id"]}" -> "{q(e["class_name"])}" [color="#E4E4E7", arrowsize=0.5];')
         for l in K["links"]:
             if "." in l["from_ref"] or "." in l["to_ref"]:
                 continue
             for a, b in engine.link_pairs(K, l)[[l["from_ref"], l["to_ref"]]].itertuples(index=False):
                 x, y = engine.find_entity(K, l["from_ref"], a), engine.find_entity(K, l["to_ref"], b)
                 if x and y:
-                    lines.append(f'"e{x}" -> "e{y}" [color="#c9a227", arrowsize=0.5];')
+                    lines.append(f'"e{x}" -> "e{y}" [color="#D4A72C", arrowsize=0.5];')
     return "\n".join(lines) + "}"
 
 
