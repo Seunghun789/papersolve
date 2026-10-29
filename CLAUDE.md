@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 papersolve(손으로 적은 종이 → 구조 제안 → 예/아니오 확정 → 묻기·대시보드·자동화)의 기획 문서와 웹 프로토타입이 있다.
 
-- 실행: `python3 -m streamlit run app.py` (`.env`에 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`)
+- 실행: `.venv/bin/python -m streamlit run app.py` (`.env`에 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`)
 - `core/` 파일을 바꾸면 켜 둔 Streamlit 서버를 껐다 다시 켠다. 새로고침은 `app.py`만 다시 읽고 `core/`는 예전 코드를 그대로 쓴다.
 - 코드: `app.py`(화면), `core/db.py`(Supabase, 계정별), `core/llm.py`(모든 Claude 호출), `core/engine.py`(규칙·계산·제안 적용)
 - DB 스키마: `db/schema.sql`. 새 DB에서는 이 파일을 한 번 실행한다. 이전 표는 `legacy` 스키마에 있다.
