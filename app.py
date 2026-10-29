@@ -95,7 +95,7 @@ def link_sentence(P):
 
 def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올린 기록)."):
     if path and (engine.DATA / path).exists():
-        st.image(str(engine.DATA / path))
+        st.image(str(engine.DATA / path), alt="원본 사진")
     else:
         st.caption(note)
 
@@ -103,7 +103,7 @@ def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올
 def pick_table(df, key):
     """기록 표. 줄을 누르면 그 줄의 원본 사진이 보인다."""
     view = df.drop(columns=[c for c in ("_id", "_photo") if c in df])
-    sel = st.dataframe(view, hide_index=True, on_select="rerun", selection_mode="single-row", key=key,
+    sel = st.dataframe(view, hide_index=True, on_select="rerun", selection_mode="single-row", key=key, alt="기록 표",
                        height=min(38 + 35 * len(df), 360))
     rows = sel.selection.rows
     if rows:
@@ -248,15 +248,23 @@ def suggest(fn, t):
         try:
             fn(t, llm.MODELS[0])
         except ERRORS as e:
-            st.error(f"제안을 받지 못했어요: {e}")
+            st.error(str(e), title="제안을 받지 못했어요")
             return
     knowledge.clear()
     st.rerun()
 
 
+def title(text, t=None, fn=None):
+    """화면 제목. [새로 추천받기]가 있는 화면은 제목 오른쪽에 둔다."""
+    left, right = st.columns([4, 1], vertical_alignment="bottom")
+    left.header(text)
+    if fn and right.button("새로 추천받기", width="stretch"):
+        suggest(fn, t)  # 줄 밖에서 불러 안내·오류가 화면 폭으로 보이게 한다
+
+
 # ---- 화면 ----
 
-CARD_H = 150  # 오늘 먼저 볼 것 카드는 모두 같은 높이
+CARD_H = 180  # 오늘 먼저 볼 것 카드는 모두 같은 높이
 
 
 def home(t, K, name):
@@ -267,29 +275,26 @@ def home(t, K, name):
     for i, a in enumerate(autos):
         if a is None:
             with cols[0], st.container(border=True, height=CARD_H):
-                st.caption("자동화")
-                st.write("**없음**")
+                st.metric("자동화", "없음")
                 st.caption("자동화에서 업무를 켜 두면 여기에 알아서 보여요.")
             continue
         hits = engine.run_automation(K, a["spec"])
         ent = engine.entity(K, a["spec"]["type"])
         late = any(c["op"] == "older_than_days" for c in a["spec"]["conditions"])
         with cols[i % 3], st.container(border=True, height=CARD_H):
-            st.caption(a["spec"]["title"])
-            st.write(f"**{len(hits)}건**")
+            st.metric(a["spec"]["title"], f"{len(hits)}건")
             names = ", ".join(f"{r[ent]}{' (마지막 ' + r['날짜'][5:].replace('-', '/') + ')' if late else ''}"
                               for _, r in hits.head(4).iterrows()) if ent and len(hits) else ""
             st.caption(names or " 그리고 ".join(cond_text(c) for c in a["spec"]["conditions"]))
             if more := engine.follow(K, a["spec"], hits):
                 st.caption("이어서 볼 것: " + ", ".join(f"{n} ({why})" for n, why in more[:4]))
     with cols[len(autos) % 3], st.container(border=True, height=CARD_H):
-        st.caption("확인")
         n = len(engine.pending(t, engine.CHECK))
-        st.write(f"**{n}개**")
+        st.metric("확인", f"{n}개")
         st.button(f"확인할 것 {n}개" if n else "확인할 것 없음", on_click=go, args=("확인",), disabled=not n, width="stretch")
 
     if not K["types"]:
-        st.info("아직 확정된 기록이 없어요. 올리기에서 사진이나 CSV를 넣어 주세요.")
+        st.info("올리기에서 사진이나 CSV를 넣어 주세요.", title="아직 확정된 기록이 없어요")
         return
     week(t, K)
     st.subheader("쌓인 기록")
@@ -301,7 +306,7 @@ def home(t, K, name):
             nums = engine.prop_names(K, T, "number")
             if nums and len(df):
                 st.caption(f"추이 · {nums[0]}")
-                st.line_chart(engine.trend(K, T, df, [nums[0]]))
+                st.line_chart(engine.trend(K, T, df, [nums[0]]), alt=f"{T} {nums[0]} 추이")
 
 
 def week(t, K):
@@ -312,7 +317,7 @@ def week(t, K):
             try:
                 st.session_state[key] = engine.week_summary(t, llm.MODELS[0], K)
             except ERRORS as e:
-                st.error(f"요약하지 못했어요: {e}")
+                st.error(str(e), title="요약하지 못했어요")
     if key not in st.session_state:
         return
     lines, facts = st.session_state[key]
@@ -325,7 +330,7 @@ def week(t, K):
                 with st.expander(f"근거 기록 {len(rows)}줄"):
                     pick_table(pd.DataFrame(rows), f"wk{i}")
         with st.expander("센 숫자"):
-            st.dataframe(pd.DataFrame(facts).drop(columns=["n", "ids"]), hide_index=True)
+            st.dataframe(pd.DataFrame(facts).drop(columns=["n", "ids"]), hide_index=True, alt="이번 주 센 숫자")
 
 
 def upload(t, K):
@@ -371,18 +376,18 @@ def write_form(t, K):
         try:
             engine.write_record(t, llm.MODELS[0], T, day.isoformat(), values)
         except ERRORS as e:
-            st.error(f"저장하지 못했어요: {e}")
+            st.error(str(e), title="저장하지 못했어요")
             return
         knowledge.clear()
         new = engine.pending(t, engine.ENTITY)
-        st.success("저장했어요. 홈 표에 한 줄 늘었어요." + (f" 확인할 것 {len(new)}개가 있어요." if new else ""))
+        st.success("홈 표에 한 줄 늘었어요." + (f" 확인할 것 {len(new)}개가 있어요." if new else ""), title="저장했어요")
 
 
 def read_file(t):
     st.caption("손글씨 사진이든 엑셀에서 내보낸 CSV든 괜찮아요. 무슨 기록인지 고르지 않아도 돼요.")
     f = st.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"])
     if f and not f.name.lower().endswith(".csv"):
-        st.image(f, caption=f.name)
+        st.image(f, caption=f.name, alt="올린 사진")
     model = st.selectbox("읽는 모델", llm.MODELS)
     if st.button("읽기 시작", type="primary"):
         if not f:
@@ -393,7 +398,7 @@ def read_file(t):
             try:
                 ingest(t, model, f.name, f.getvalue())
             except ERRORS as e:
-                st.error(f"읽지 못했어요: {e}")
+                st.error(str(e), title="읽지 못했어요")
                 return
         knowledge.clear()
         st.session_state._goto = "확인"
@@ -405,10 +410,10 @@ def check(t, K):
     qs = engine.pending(t, engine.CHECK)
     st.header(f"확인할 것 {len(qs)}개")
     if not qs:
-        st.success("확인할 것이 없어요. 홈에서 기록을 보세요.")
+        st.success("홈에서 기록을 보세요.", title="확인할 것이 없어요")
         st.button("홈으로", on_click=go, args=("홈",))
         return
-    st.warning("AI가 읽고 제안한 것만 물어요. 원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.")
+    st.warning("원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.", title="AI가 읽고 제안한 것만 물어요")
     entry = [q for q in qs if q["kind"] in engine.ENTRY]
     if entry:
         sid = entry[0]["source_input_id"]
@@ -421,7 +426,7 @@ def check(t, K):
                 show_photo(src["storage_path"])
             else:
                 rows = t.get("records", select="data", source_input_id=f"eq.{sid}", limit=8)
-                st.dataframe(pd.DataFrame([r["data"] for r in rows]), hide_index=True)
+                st.dataframe(pd.DataFrame([r["data"] for r in rows]), hide_index=True, alt="파일 앞부분 8줄")
                 st.caption("파일 앞부분 8줄")
         with right:
             for q in mine:
@@ -458,7 +463,7 @@ def ask(t, K):
                 before = llm.answer(t, model, q, lambda n, i: engine.run_tool(R, n, i)) if compare else None
                 text, ids = llm.answer(t, model, q, lambda n, i: engine.run_tool(K, n, i))
             except ERRORS as e:
-                st.error(f"답하지 못했어요: {e}")
+                st.error(str(e), title="답하지 못했어요")
                 return
         st.session_state.last = {"q": q, "text": text, "ids": ids, "before": before}
     last = st.session_state.get("last")
@@ -545,26 +550,26 @@ def user_link(t):
 
 
 def graph(t, K):
-    st.header("찾은 관계")
+    title("찾은 관계", t, K["types"] and engine.suggest_links)
     st.caption("읽은 기록의 종류와 칸, 그 사이 관계예요. 실선은 확정, 점선은 확인이 필요한 관계예요.")
     if not K["types"]:
         st.info("아직 확정된 기록이 없어요.")
         return
     pend = engine.pending(t, ["연결"])
-    view = st.radio("보기", ["구조만", "대상까지"], horizontal=True, key="graph_view")
-    st.graphviz_chart(build_dot(K, pend, view == "대상까지"))
+    view = st.segmented_control("보기", ["구조만", "대상까지"], default="구조만", required=True, key="graph_view")
+    st.graphviz_chart(build_dot(K, pend, view == "대상까지"), alt="기록 종류·칸·대상 분류와 관계 그림")
     for q in pend:
         card(t, K, q)
     if K["links"]:
         st.subheader("확정한 관계")
         for l in K["links"]:
-            left, right = st.columns([5, 1])
+            left, right = st.columns([5, 1], vertical_alignment="center")
             left.write(link_sentence({"from": l["from_ref"], "to": l["to_ref"], "kind": l["kind"], "name": l.get("name")})
                        .replace("이어져 있나요?", "이어져 있어요.").replace("인가요?", "예요.").replace("나요?", "요."))
             right.button("끊기", key=f"cut{l['id']}", on_click=act, args=(engine.cut_link, t, l))
     with st.expander("이어져 있다고 생각하는 칸이 있나요?"):
         refs = engine.refs(K)
-        a, b, c = st.columns(3)
+        a, b, c = st.columns(3, vertical_alignment="bottom")
         a.selectbox("칸", refs, key="pa")
         b.selectbox("이어질 칸", refs, index=min(1, len(refs) - 1), key="pb")
         c.selectbox("관계", llm.LINK_KINDS, key="pk")
@@ -572,8 +577,6 @@ def graph(t, K):
         st.caption("고른 관계는 기록으로 센 근거와 함께 '관계 제안' 카드로 올라가고, [맞아요]를 눌러야 이어져요.")
         if msg := st.session_state.pop("link_msg", None):
             st.info(msg)
-    if st.button("새로 추천받기"):
-        suggest(engine.suggest_links, t)
     st.button("홈으로", on_click=go, args=("홈",))
 
 
@@ -585,7 +588,7 @@ def widget(K, spec, key, remove=None):
             draw_view(K, spec, f"view{key}")
         elif spec["kind"] == "trend":
             if len(value):
-                st.line_chart(value)
+                st.line_chart(value, alt=spec["title"])
             else:
                 st.caption("아직 그릴 기록이 없어요.")
         else:
@@ -603,7 +606,7 @@ def draw_view(K, spec, key):
     """말로 만든 보기: AI가 지은 Vega-Lite 설계에 서비스가 고른 기록 줄을 넣고, 서비스의 한 가지 꾸밈으로 그린다."""
     rows = engine.view_rows(K, spec)
     st.vega_lite_chart(rows.drop(columns=["_id", "_photo"]), engine.vega_of(spec, engine.view_cols(K, spec["type"])),
-                       width="stretch", key=key)
+                       width="stretch", key=key, alt=spec["title"])
 
 
 def adopt(t, kind, m):
@@ -651,7 +654,7 @@ def build_chat(t, K, kind):
 
 
 def dashboard(t, K):
-    st.header("대시보드")
+    title("대시보드", t, K["types"] and engine.suggest_widgets)
     st.caption("확정한 기록 구조에서 자동으로 만든 현황과, 확정한 관계에서 나온 추천 지표예요. 숫자는 모두 기록에서 셌어요.")
     if not K["types"]:
         st.info("아직 확정된 기록이 없어요.")
@@ -672,12 +675,10 @@ def dashboard(t, K):
     for i, spec in enumerate(engine.auto_widgets(K)):
         with cols[i % 2]:
             widget(K, spec, f"a{i}")
-    if st.button("새로 추천받기"):
-        suggest(engine.suggest_widgets, t)
 
 
 def automation(t, K):
-    st.header("자동화")
+    title("자동화", t, K["types"] and engine.suggest_automations)
     st.caption("반복되는 일을 찾으면 자동으로 할지 물어봐요. 켜 두면 홈의 '오늘 먼저 볼 것'에 알아서 보여 줘요.")
     if not K["types"]:
         st.info("아직 확정된 기록이 없어요.")
@@ -692,7 +693,7 @@ def automation(t, K):
     for a in on:
         hits = engine.run_automation(K, a["spec"])
         with st.container(border=True):
-            left, right = st.columns([5, 1])
+            left, right = st.columns([5, 1], vertical_alignment="center")
             left.write(f"**{a['spec']['title']}** · 지금 {len(hits)}건")
             left.caption(f"{a['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in a['spec']['conditions'])}")
             right.button("끄기", key=f"off{a['id']}", on_click=act, args=(set_status, t, "automations", a["id"], "꺼짐"))
@@ -705,10 +706,9 @@ def automation(t, K):
     if off:
         with st.expander(f"꺼 둔 자동화 {len(off)}개"):
             for a in off:
-                st.write(a["spec"]["title"])
-                st.button("다시 켜기", key=f"on{a['id']}", on_click=act, args=(set_status, t, "automations", a["id"], "켜짐"))
-    if st.button("새로 추천받기"):
-        suggest(engine.suggest_automations, t)
+                left, right = st.columns([5, 1], vertical_alignment="center")
+                left.write(a["spec"]["title"])
+                right.button("다시 켜기", key=f"on{a['id']}", on_click=act, args=(set_status, t, "automations", a["id"], "켜짐"))
 
 
 # ---- 대상: AI 제안 + 직접 설정 (직접 바꾼 것도 카드로 올라가 [적용]을 눌러야 반영된다) ----
@@ -777,7 +777,7 @@ def class_tree(K, C, depth=0):
 
 
 def entities_page(t, K):
-    st.header("대상")
+    title("대상", t, K["types"] and engine.suggest_entities)
     st.caption("기록에 나오는 품목·설비·고객 같은 대상과 그 정보예요. AI와 규칙이 제안하고, "
                "직접 고친 것도 카드로 올라가 [적용]을 눌러야 반영돼요.")
     if not K["types"]:
@@ -791,7 +791,7 @@ def entities_page(t, K):
     if msg := st.session_state.pop("ent_msg", None):
         st.info(msg)
     if not K["classes"]:
-        st.info("아직 등록한 대상이 없어요. 위 카드에서 [등록]을 누르거나 [새로 추천받기]를 눌러 보세요.")
+        st.info("위 카드에서 [등록]을 누르거나 오른쪽 위 [새로 추천받기]를 눌러 보세요.", title="아직 등록한 대상이 없어요")
     else:
         st.subheader("분류")
         for C in [c for c, p in K["classes"].items() if not p or p not in K["classes"]]:
@@ -800,7 +800,7 @@ def entities_page(t, K):
             with tab:
                 df = engine.entity_frame(K, C)
                 key = f"ed{t.id}{C}"
-                st.data_editor(df.drop(columns=["_eid"]), key=key, num_rows="dynamic", hide_index=True,
+                st.data_editor(df.drop(columns=["_eid"]), key=key, num_rows="dynamic", hide_index=True, alt=f"{C} 대상 표",
                                disabled=["분류", "별칭"])
                 st.button("바꾼 것 올리기", key=f"sub{C}", on_click=submit_edits, args=(t, C, df, key))
                 st.caption("값을 고치거나 맨 아래에 새 대상을 적고 [바꾼 것 올리기]를 누르면 카드로 올라가요. 줄 지우기는 반영하지 않아요.")
@@ -825,15 +825,13 @@ def entities_page(t, K):
             for L in class_links:
                 with st.expander(f"{L['from_ref']} — {L['to_ref']}{' · ' + L['name'] if L.get('name') else ''}"):
                     pairs = engine.link_pairs(K, L)
-                    st.dataframe(pairs, hide_index=True)
+                    st.dataframe(pairs, hide_index=True, alt="관계로 이어진 대상 쌍")
                     c1, c2 = st.columns(2)
                     c1.text_input("관계 정보 이름", key=f"lan{L['id']}", placeholder="예: 단가")
                     c2.selectbox("값 종류", list(engine.DTYPE_KO), format_func=engine.DTYPE_KO.get, key=f"lad{L['id']}")
-                    edited = st.data_editor(pairs[[L["from_ref"], L["to_ref"]]].assign(값=None), key=f"le{L['id']}",
+                    edited = st.data_editor(pairs[[L["from_ref"], L["to_ref"]]].assign(값=None), key=f"le{L['id']}", alt="대상 쌍마다 관계 정보 값",
                                             num_rows="dynamic", hide_index=True)
                     st.button("관계 정보 올리기", key=f"lab{L['id']}", on_click=add_link_attr, args=(t, L, edited))
-    if st.button("새로 추천받기"):
-        suggest(engine.suggest_entities, t)
 
 
 # ---- 계정과 메뉴 ----
@@ -860,7 +858,7 @@ with st.sidebar:
     st.radio("메뉴", PAGES, key="page")
 
 if not accounts:
-    st.info("왼쪽에서 계정을 먼저 만들어 주세요. 계정마다 빈 상태에서 시작해요.")
+    st.info("계정마다 빈 상태에서 시작해요.", title="왼쪽에서 계정을 먼저 만들어 주세요")
     st.stop()
 
 tenant = db.Tenant(accounts[st.session_state.tenant_name])
