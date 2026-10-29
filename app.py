@@ -13,15 +13,22 @@ st.markdown("""<style>
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] {display: none !important;}
 section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px !important; transform: none !important;}
-.block-container {padding-top: 2.5rem; max-width: 1080px;}
-h1 {font-size: 1.6rem !important; font-weight: 600 !important; letter-spacing: -0.01em;}
-h2 {font-size: 1.25rem !important; font-weight: 600 !important;}
-h3 {font-size: 1.05rem !important; font-weight: 600 !important;}
-[data-testid="stCaptionContainer"] {color: #71717A;}
-section[data-testid="stSidebar"] [role="radiogroup"] label {padding: 6px 10px; border-radius: 6px; width: 100%; margin: 0;}
-section[data-testid="stSidebar"] [role="radiogroup"] label:hover {background: #ECECEE;}
-section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {background: #E4E4E7; font-weight: 600;}
-section[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child {display: none;}
+.block-container {padding-top: 32px; max-width: 1080px;}
+/* 글자 단계 24 · 20 · 16, 소제목 위는 넉넉히 */
+h1 {font-size: 24px !important; font-weight: 600 !important; letter-spacing: -0.01em;}
+h2 {font-size: 20px !important; font-weight: 600 !important;}
+h3 {font-size: 16px !important; font-weight: 600 !important; padding-top: 16px !important;}
+[data-testid="stCaptionContainer"] {color: #71717A !important; max-width: 46rem;}
+/* 메뉴: 동그라미를 숨기고 고른 줄은 메뉴 폭 전체를 칠한다 */
+section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stRadio"]),
+section[data-testid="stSidebar"] [data-testid="stRadio"], section[data-testid="stSidebar"] [data-testid="stRadioGroup"],
+section[data-testid="stSidebar"] [data-testid="stRadioGroup"] > div {width: 100% !important;}
+section[data-testid="stSidebar"] [data-testid="stRadioOption"] {width: 100%; padding: 8px 12px; border-radius: 8px; margin: 0;}
+section[data-testid="stSidebar"] [data-testid="stRadioOption"] > div > div:first-child {display: none;}
+section[data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {background: #ECECEE;}
+section[data-testid="stSidebar"] [data-testid="stRadioOption"][data-selected="true"] {background: #E4E4E7; font-weight: 600;}
+/* 답할 카드만 살짝 떠 보이게 (보여 주기만 하는 칸은 평평하게) */
+[class*="st-key-card"] {box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.06);}
 /* 파일 칸: 영어 버튼·안내를 우리말로 바꾸고 아이콘은 숨긴다 */
 [data-testid="stFileUploaderDropzone"] button * {display: none;}
 [data-testid="stFileUploaderDropzone"] button::after {content: "파일 고르기";}
@@ -107,6 +114,21 @@ def ref_text(ref):
     return f"{p}({T})" if p else T
 
 
+def line(df, alt):
+    """날짜별 추이 선. 대화로 만든 보기와 같은 꾸밈(VIEW_STYLE)으로, 날짜는 '10/12'처럼 짧게 가로로."""
+    d = df.copy()
+    d.index = pd.to_datetime(d.index, errors="coerce")
+    d.index.name = "날짜"
+    long = d.reset_index().melt(id_vars="날짜", var_name="계열", value_name="값").dropna(subset=["값", "날짜"])
+    long["날짜"] = long["날짜"].dt.strftime("%Y-%m-%d")
+    st.vega_lite_chart(long, {
+        "mark": {"type": "line"},
+        "encoding": {"x": {"field": "날짜", "type": "temporal", "title": None, "axis": {"format": "%-m/%-d", "labelAngle": 0, "tickCount": {"interval": "day", "step": 1}}},
+                     "y": {"field": "값", "type": "quantitative", "title": None},
+                     "color": {"field": "계열", "type": "nominal", "title": None}},
+        "height": engine.VIEW_HEIGHT, "config": engine.VIEW_STYLE}, width="stretch", alt=alt)
+
+
 def fmtv(v):
     return fmt(v) if engine.to_number(v) is not None else (str(v) if engine.filled(v) else "없음")
 
@@ -133,6 +155,7 @@ def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올
 def pick_table(df, key, notes=None):
     """기록 표. 줄을 누르면 그 줄의 원본 사진이 보인다. notes: 칸 이름 → 설명(칸 이름에 마우스를 올리면 보인다)."""
     view = df.drop(columns=[c for c in ("_id", "_photo") if c in df])
+    view = view.apply(lambda c: c if pd.api.types.is_numeric_dtype(c) else c.fillna(""))  # "None" 대신 빈칸
     config = {c: st.column_config.Column(help=h) for c, h in (notes or {}).items() if c in view}
     sel = st.dataframe(view, hide_index=True, column_config=config, on_select="rerun", selection_mode="single-row", key=key, alt="기록 표",
                        height=min(38 + 35 * len(df), 360))
@@ -215,7 +238,7 @@ def card(t, K, q):
     ev = q.get("evidence") or {}
     user = bool(ev.get("user"))
     ok = lambda label: "적용" if user else label
-    with st.container(border=True):
+    with st.container(border=True, key=f"card{q['id']}"):
         label = {"칸 더하기": "새 칸", "다른 이름": "같은 칸"}.get(P.get("op"), CAPTION[kind]) if kind == "칸 설정" else CAPTION[kind]
         st.caption(label + (" · 직접 고친 것" if user else ""))
         if kind == "종류":
@@ -229,11 +252,11 @@ def card(t, K, q):
                     ("하나씩 볼게요", (engine.answer_type, t, q, "하나씩")))
         elif kind == "칸":
             st.write(f"**'{P['label']}' 칸이 처음 보여요. '{P['type']}'에 '{P['name']}'({engine.DTYPE_KO[P['dtype']]}) 칸을 추가할까요?**")
-            st.caption(f"읽은 값 예: {ev.get('samples', [])} · 추가하면 지난 기록에는 빈칸으로 들어가요.")
+            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))} · 추가하면 지난 기록에는 빈칸으로 들어가요.")
             buttons(q, ("아니요", (engine.answer_prop, t, q, False)), ("추가", (engine.answer_prop, t, q, True)))
         elif kind == "같은 칸":
             st.write(f"**'{P['label']}'은(는) '{P['type']}'의 '{P['similar_to']}' 칸과 같은 칸인가요?**")
-            st.caption(f"읽은 값 예: {ev.get('samples', [])} · 지난 기록과 이름만 달라요.")
+            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))} · 지난 기록과 이름만 달라요.")
             buttons(q, ("다른 칸", (engine.answer_same, t, q, False)), ("같은 칸", (engine.answer_same, t, q, True)))
         elif kind == "애매한 값":
             st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 맞나요?**")
@@ -350,7 +373,7 @@ def title(text, t=None, fn=None):
 # ---- 화면 ----
 
 MODEL_KO = {"claude-haiku-5-5": "빠르게 (Haiku)", "claude-sonnet-5-5": "보통 (Sonnet)", "claude-opus-5-5": "꼼꼼하게 (Opus)"}
-CARD_H = 180  # 오늘 먼저 볼 것 카드는 모두 같은 높이
+CARD_H = 150  # 오늘 먼저 볼 것 카드는 모두 같은 높이
 
 
 def home(t, K, name):
@@ -393,7 +416,7 @@ def home(t, K, name):
             nums = engine.prop_names(K, T, "number")
             if nums and len(df):
                 st.caption(f"추이 · {nums[0]}")
-                st.line_chart(engine.trend(K, T, df, [nums[0]]), alt=f"{T} {nums[0]} 추이")
+                line(engine.trend(K, T, df, [nums[0]]), f"{T} {nums[0]} 추이")
 
 
 def week(t, K):
@@ -703,10 +726,11 @@ def graph_data(K, pend, with_entities=False):
     """기록 종류(남색 원)·칸(작은 남색 점)·대상 분류(황토 원)·분류 정보·상위 분류·관계. 확정은 실선, 제안은 점선."""
     nodes, edges = [], []
 
-    def dot(id_, label, color, big=False):
+    def dot(id_, label, color, big=False, box=False):
         c = {"background": color, "border": color, "highlight": {"background": color, "border": color},
              "hover": {"background": color, "border": color}}  # 누른 점은 테두리 대신 빛으로 보인다
         nodes.append({"id": id_, "label": label, "color": c, **(
+            {"shape": "box", "font": {"color": "#FFFFFF"}, "margin": 10, "shapeProperties": {"borderRadius": 8}} if box else
             {"shape": "circle", "font": {"color": "#FFFFFF"}, "widthConstraint": {"minimum": 60}} if big else
             {"shape": "dot", "size": 6})})
 
@@ -722,7 +746,7 @@ def graph_data(K, pend, with_entities=False):
                 line(f"P:{T}.{p['name']}", f"C:{p['ref_class']}", label="가리킴", dashes=[2, 4], arrows="to")
     for C, parent in K["classes"].items():
         n = sum(1 for e in K["entities"].values() if e["class_name"] == C)
-        dot(f"C:{C}", f"{C}\n대상 {n}개", "#D4A72C", big=True)
+        dot(f"C:{C}", f"{C}\n대상 {n}개", "#D4A72C", box=True)
         if parent:
             line(f"C:{C}", f"C:{parent}", label="종류의 하나", arrows="to", color="#71717A")
         for a in K["props"].get(C, []):
@@ -881,7 +905,7 @@ def graph(t, K):
         nodes, edges = graph_data(K, pend, view == "대상까지")
         KG(data={"nodes": nodes, "edges": edges, "selected": st.session_state.get("kg_pick")}, key="kg",
            on_clicked_change=pick_node)
-        st.caption("남색 원 기록 종류 · 황토 원 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
+        st.caption("남색 원 기록 종류 · 황토 상자 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
         st.caption("점을 누르면 오른쪽에서 설정을 고치고, 빈 곳을 누르면 닫혀요. 끌어서 옮기고, 오른쪽 아래 [+]·[−]로 크기를 바꿔요.")
         with st.expander("점 고르기"):  # 마우스 없이도 점을 고를 수 있게
             names = {n["id"]: f"{n['label'].replace(chr(10), ' ')} · {NODE_KO[n['id'][0]]}" for n in nodes}
@@ -915,6 +939,21 @@ def graph(t, K):
     st.button("홈으로", on_click=go, args=("홈",))
 
 
+def is_chart(spec):
+    return spec["kind"] in ("view", "trend")
+
+
+def grid(items, draw):
+    """두 장씩 한 줄. 숫자 지표를 먼저 모으고 그림은 그 아래에 둬서 같은 줄 카드 높이가 비슷하다."""
+    items = sorted(items, key=lambda x: is_chart(x[0]))
+    for i, item in enumerate(items):
+        if i % 2 == 0 or is_chart(item[0]) != is_chart(items[i - 1][0]):
+            cols, n = st.columns(2), 0
+        with cols[n]:
+            draw(*item)
+        n += 1
+
+
 def widget(K, spec, key, remove=None):
     value, ev = engine.run_widget(K, spec)
     with st.container(border=True, height="stretch"):  # 같은 줄 카드는 높이를 맞춘다
@@ -923,11 +962,11 @@ def widget(K, spec, key, remove=None):
             draw_view(K, spec, f"view{key}")
         elif spec["kind"] == "trend":
             if len(value):
-                st.line_chart(value, alt=spec["title"])
+                line(value, spec["title"])
             else:
                 st.caption("아직 그릴 기록이 없어요.")
         else:
-            st.write(f"### {fmt(value)}")
+            st.metric(spec["title"], fmt(value), label_visibility="collapsed")
             cond = " 그리고 ".join(cond_text(c) for c in spec.get("conditions") or [])
             st.caption(f"{spec['type']}{' · ' + cond if cond else ''}")
         st.space("stretch")  # 근거 기록과 [내리기]는 카드 맨 아래에
@@ -1003,17 +1042,10 @@ def dashboard(t, K):
     ws = t.get("widgets", select="id,spec", status="eq.올림", order="id")
     if ws:
         st.subheader("올린 지표")
-        for i, w in enumerate(ws):
-            if i % 2 == 0:
-                cols = st.columns(2)  # 두 장씩 한 줄
-            with cols[i % 2]:
-                widget(K, w["spec"], f"w{w['id']}", (set_status, t, "widgets", w["id"], "내림"))
+        grid([(w["spec"], f"w{w['id']}", (set_status, t, "widgets", w["id"], "내림")) for w in ws],
+             lambda spec, key, rm: widget(K, spec, key, rm))
     st.subheader("자동으로 만든 현황")
-    for i, spec in enumerate(engine.auto_widgets(K)):
-        if i % 2 == 0:
-            cols = st.columns(2)
-        with cols[i % 2]:
-            widget(K, spec, f"a{i}")
+    grid([(spec, f"a{i}") for i, spec in enumerate(engine.auto_widgets(K))], lambda spec, key: widget(K, spec, key))
 
 
 def automation(t, K):
@@ -1065,7 +1097,7 @@ def unsent(key):
 
 def unsent_note(key):
     if n := unsent(key):
-        st.caption(f":orange[올리지 않은 고침 {n}개가 있어요. [바꾼 것 올리기]를 누르지 않고 다른 화면으로 가면 사라져요.]")
+        st.caption(f"**올리지 않은 고침 {n}개가 있어요.** [바꾼 것 올리기]를 누르지 않고 다른 화면으로 가면 사라져요.")
 
 
 def submit_edits(t, C, df, key):

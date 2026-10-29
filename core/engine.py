@@ -1047,7 +1047,8 @@ def pair_evidence(K, a, b):
             pa, pb = via(K, T, a), via(K, T, b)
             if pa and pb:
                 pairs |= {tuple(map(str, x)) for x in frame(K, T)[[pa, pb]].dropna().drop_duplicates().itertuples(index=False)}
-        return f"기록에 같이 나온 대상 쌍 {len(pairs)}개 {sorted(pairs)[:3]}"
+        shown = ", ".join("–".join(x) for x in sorted(pairs)[:3])
+        return f"기록에 같이 나온 대상 쌍 {len(pairs)}개({shown}{' 등' if len(pairs) > 3 else ''})"
     (Ta, pa), (Tb, pb) = split(a), split(b)
     if Ta in K["classes"] and Tb in K["types"] and via(K, Tb, Ta):
         Ta, pa = Tb, f"{via(K, Tb, Ta)}.{pa}"
