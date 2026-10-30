@@ -39,6 +39,9 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14p
 .st-key-cv_on0 [data-testid="stFileUploaderDropzone"] {flex-direction: column; justify-content: center; align-items: center;
   min-height: 200px; gap: 12px; text-align: center;}
 .ps-arrow-big {text-align: center; color: #A1A1AA; font-size: 18px;}
+/* 올리기 네 칸: 넓은 화면은 와이어프레임 비율(가로 1 : 세로 1.9), 좁은 화면은 내용만큼 쌓고 화살표를 아래로 */
+@media (min-width: 769px) {.st-key-cv_on0, [class*="st-key-cv_off"] {aspect-ratio: 1 / 1.9; min-height: 400px;}}
+@media (max-width: 768px) {.ps-arrow-big {transform: rotate(90deg); line-height: 1;}}
 .st-key-cv_on0 [data-testid="stFileUploaderDropzoneInstructions"]::after {content: "사진이나 CSV를 여기로 끌어 놓으세요";}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
 .ps-steps .ps-on {padding: 4px 10px; border: 1px solid #0F766E; border-radius: 8px; background: var(--ps-accent-bg);
@@ -164,7 +167,7 @@ def canvas():
     for arrow in cols[1::2]:
         arrow.markdown('<div class="ps-arrow-big">→</div>', unsafe_allow_html=True)
     for i, ((name, _), col) in enumerate(zip(STEPS, cols[::2])):
-        with col, st.container(border=True, height=CANVAS_H, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
+        with col, st.container(border=True, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
             st.markdown(f"**{name}**")
             if i == 0 and waiting:
                 st.caption("올린 종이를 읽었어요.")
@@ -614,7 +617,6 @@ def title(text, t=None, fn=None):
 # ---- 화면 ----
 
 MODEL_KO = {"claude-haiku-5-5": "빠르게 (Haiku)", "claude-sonnet-5-5": "보통 (Sonnet)", "claude-opus-5-5": "꼼꼼하게 (Opus)"}
-CANVAS_H = 440  # 올리기 네 칸의 높이(와이어프레임 비율: 폭의 두 배쯤)
 CARD_H = 170  # 오늘 먼저 볼 것 카드는 모두 같은 높이
 HOME_MAX = 2  # 오늘 먼저 볼 것에 띄우는 걸린 자동화 카드 수(확인 카드와 합쳐 세 장)
 FOLLOW_MAX = 2  # 카드마다 이어서 볼 것 수
