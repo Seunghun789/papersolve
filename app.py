@@ -25,11 +25,21 @@ st.markdown("""<style>
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
 .st-key-close_sidebar, .st-key-remember {display: none;}
 .st-key-cv_on0 {border: 2px solid #0F766E !important;}
-section[data-testid="stSidebar"] [class*="st-key-nav_"] button {justify-content: flex-start; padding: 6px 12px; border-radius: 8px;}
+/* 메뉴: 단계 이름 아래 왼쪽 정렬 버튼, 고른 메뉴는 메뉴 폭 전체를 칠한다 */
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: 2px;}
+section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; padding: 7px 12px;
+  border-radius: 8px; width: 100%;}
+section[data-testid="stSidebar"] [class*="st-key-nav"] button > div,
+section[data-testid="stSidebar"] [class*="st-key-nav"] button p {justify-content: flex-start; text-align: left; width: 100%;}
 section[data-testid="stSidebar"] [class*="st-key-nav_"] button:hover {background: var(--ps-hover-bg);}
-section[data-testid="stSidebar"] [class*="st-key-navon_"] button {justify-content: flex-start; padding: 6px 12px; border-radius: 8px;
-  background: var(--ps-accent-bg); color: var(--ps-accent-text); font-weight: 600;}
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 8px 0 -8px 4px;}
+section[data-testid="stSidebar"] [class*="st-key-navon_"] button {background: var(--ps-accent-bg); color: var(--ps-accent-text);}
+section[data-testid="stSidebar"] [class*="st-key-navon_"] button p {font-weight: 600;}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14px 0 2px 4px;}
+/* 올리기 네 칸의 ① 칸: 끌어 놓는 칸을 크게, 안내는 한 줄 */
+.st-key-cv_on0 [data-testid="stFileUploaderDropzone"] {flex-direction: column; justify-content: center; align-items: center;
+  min-height: 200px; gap: 12px; text-align: center;}
+.ps-arrow-big {text-align: center; color: #A1A1AA; font-size: 18px;}
+.st-key-cv_on0 [data-testid="stFileUploaderDropzoneInstructions"]::after {content: "사진이나 CSV를 여기로 끌어 놓으세요";}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
 .ps-steps .ps-on {padding: 4px 10px; border: 1px solid #0F766E; border-radius: 8px; background: var(--ps-accent-bg);
   color: var(--ps-accent-text); font-weight: 600;}
@@ -150,8 +160,11 @@ def canvas():
     """올리기의 첫 화면: 종이 → 확인 → 내 기록 → 묻기 네 칸. 첫 칸에서 바로 올린다."""
     waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
     notes = ["", "칸 · 대상 · 관계를 확인해요", "표 · 지표 · 챙길 일로 쌓여요", "답과 근거 기록이 여기에 와요"]
-    for i, ((name, _), col) in enumerate(zip(STEPS, st.columns(4))):
-        with col, st.container(border=True, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
+    cols = st.columns([10, 1, 10, 1, 10, 1, 10], gap="small", vertical_alignment="center")  # 칸 사이에 화살표
+    for arrow in cols[1::2]:
+        arrow.markdown('<div class="ps-arrow-big">→</div>', unsafe_allow_html=True)
+    for i, ((name, _), col) in enumerate(zip(STEPS, cols[::2])):
+        with col, st.container(border=True, height=CANVAS_H, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
             st.markdown(f"**{name}**")
             if i == 0 and waiting:
                 st.caption("올린 종이를 읽었어요.")
@@ -166,7 +179,6 @@ def canvas():
 def empty():
     """기록이 없을 때의 화면. 메뉴마다 채워졌을 때의 모양을 빈 틀로 보여 주고, 예시 데이터는 쓰지 않는다."""
     page = st.session_state.page
-    place(page)
     st.caption(NOTE[page])
     if page == "올리기":
         canvas()
@@ -602,6 +614,7 @@ def title(text, t=None, fn=None):
 # ---- 화면 ----
 
 MODEL_KO = {"claude-haiku-5-5": "빠르게 (Haiku)", "claude-sonnet-5-5": "보통 (Sonnet)", "claude-opus-5-5": "꼼꼼하게 (Opus)"}
+CANVAS_H = 440  # 올리기 네 칸의 높이(와이어프레임 비율: 폭의 두 배쯤)
 CARD_H = 170  # 오늘 먼저 볼 것 카드는 모두 같은 높이
 HOME_MAX = 2  # 오늘 먼저 볼 것에 띄우는 걸린 자동화 카드 수(확인 카드와 합쳐 세 장)
 FOLLOW_MAX = 2  # 카드마다 이어서 볼 것 수
@@ -744,11 +757,14 @@ def write_form(t, K):
 
 
 def read_file(t, key="up"):
-    f = st.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"], key=f"{key}file")
+    f = st.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"], key=f"{key}file",
+                         label_visibility="collapsed" if key == "cv" else "visible")
     if f and not f.name.lower().endswith(".csv"):
         st.image(f, caption=f.name, alt="올린 사진")
-    with st.expander("모델 고르기"):
-        model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
+    model = llm.MODELS[0]  # 처음 화면(네 칸)은 기본 모델로 읽는다
+    if key != "cv":
+        with st.expander("모델 고르기"):
+            model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
     if st.button("읽기 시작", type="primary", key=f"{key}read", width="stretch" if key == "cv" else "content"):
         if not f:
             st.error("사진이나 파일을 먼저 넣어 주세요.")
@@ -1625,8 +1641,10 @@ if st.session_state.get("_remembered") != (tid, st.query_params.get("a")):
 page = st.session_state.page
 if page == "홈" and K["types"]:
     st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
-if tenant:
+if first_run() is not None:
     steps_bar()
+elif not K["types"]:
+    place(page)  # 기록이 없으면 제목 위에 이 메뉴의 단계
 if page == "올리기":
     upload(tenant, K)
 elif not tenant:
