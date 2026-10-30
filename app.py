@@ -21,9 +21,12 @@ COLOR = {
 st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent-text: {COLOR["accent_text"]};
 --ps-text-muted: {COLOR["text_muted"]}; --ps-hover-bg: {COLOR["hover_bg"]};}}</style>""", unsafe_allow_html=True)
 st.markdown("""<style>
+/* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
+@media (min-width: 769px) {
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] {display: none !important;}
 section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px !important; transform: none !important;}
+}
 .block-container {padding-top: 32px; max-width: 1080px;}
 /* 글자 단계 24 · 20 · 16, 소제목 위는 넉넉히 */
 body, [data-testid="stMetricValue"], [data-testid="stDataFrame"] {font-variant-numeric: tabular-nums;}
