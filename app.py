@@ -1,4 +1,5 @@
 """papersolve 웹 프로토타입. 화면만 담고, 규칙은 core/engine.py, Claude 호출은 core/llm.py 에 있다."""
+import time
 from datetime import date
 
 import anthropic
@@ -22,6 +23,7 @@ st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent
 --ps-text-muted: {COLOR["text_muted"]}; --ps-hover-bg: {COLOR["hover_bg"]};}}</style>""", unsafe_allow_html=True)
 st.markdown("""<style>
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
+.st-key-close_sidebar {display: none;}  /* 사이드바를 접는 스크립트 칸은 자리를 차지하지 않게 */
 @media (min-width: 769px) {
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] {display: none !important;}
@@ -1429,7 +1431,15 @@ with st.sidebar:
     with st.expander("새 계정 만들기", expanded=not accounts):
         st.text_input("이름", key="new_tenant", placeholder="예: 우리마트")
         st.button("만들기", on_click=make_tenant)
-    st.radio("메뉴", PAGES, key="page", format_func=lambda p: f"{p}  {waiting}" if p == "확인" and waiting else p)
+    st.radio("메뉴", PAGES, key="page", format_func=lambda p: f"{p}  {waiting}" if p == "확인" and waiting else p,
+             on_change=lambda: st.session_state.__setitem__("_close_sidebar", time.time()))
+
+if n := st.session_state.pop("_close_sidebar", 0):
+    # 좁은 화면(휴대폰)에서 메뉴를 고르면 사이드바를 접는다. 넓은 화면은 그대로 둔다. n(고른 시각)은 매번 새로 실행되게 붙인다
+    st.container(key="close_sidebar").iframe(f"""<script>/* {n} */
+const d = window.parent.document;
+if (window.parent.innerWidth < 769) d.querySelector('[data-testid="stSidebarCollapseButton"] button')?.click();
+</script>""", height=1)
 
 if not accounts:
     st.info("계정마다 빈 상태에서 시작해요.", title="왼쪽에서 계정을 먼저 만들어 주세요")
