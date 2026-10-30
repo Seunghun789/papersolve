@@ -1,4 +1,8 @@
+# 웹 화면 전체(홈·올리기·확인·묻기 등 버튼, 표, 카드)를 그린다 — app.py
 streamlit==1.66.1
+# Claude를 불러 종이 사진을 읽고, 칸·대상·지표·자동화를 제안하고, 묻기 답과 주간 요약 문장을 만든다 — core/llm.py
 anthropic==2.3.0
+# 올린 CSV를 읽고 기록을 표로 만들어 세고 거른다 — core/engine.py, app.py
 pandas==3.1.0
+# Supabase에 기록을 넣고 꺼낸다(REST 호출) — core/db.py
 requests==2.34.2

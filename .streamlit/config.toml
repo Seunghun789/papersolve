@@ -1,3 +1,9 @@
+[server]
+enableStaticServing = true  # static/fonts 의 글꼴 파일을 앱이 직접 제공한다
+
+[browser]
+gatherUsageStats = false  # Streamlit 사용 통계를 보내지 않는다
+
 [client]
 toolbarMode = "minimal"
 
@@ -9,7 +15,7 @@ secondaryBackgroundColor = "#F4F4F5"
 textColor = "#1F1F1F"
 borderColor = "#E4E4E7"
 showWidgetBorder = true
-font = "-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', sans-serif"
+font = "IBM Plex Sans KR"  # static/fonts 에서 직접 제공 (SIL OFL 1.1, static/fonts/OFL.txt)
 baseFontSize = 14
 baseRadius = "8px"
 showSidebarBorder = true
@@ -17,3 +23,23 @@ showSidebarBorder = true
 [theme.sidebar]
 backgroundColor = "#F7F7F8"
 secondaryBackgroundColor = "#ECECEE"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans KR"
+url = "app/static/fonts/IBMPlexSansKR-Regular.ttf"
+weight = 400
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans KR"
+url = "app/static/fonts/IBMPlexSansKR-Regular.ttf"
+weight = 500
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans KR"
+url = "app/static/fonts/IBMPlexSansKR-SemiBold.ttf"
+weight = 600
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans KR"
+url = "app/static/fonts/IBMPlexSansKR-SemiBold.ttf"
+weight = 700

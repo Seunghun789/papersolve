@@ -1390,7 +1390,7 @@ VIEW_STYLE = {
     "locale": {"time": {"dateTime": "%Y. %m. %d. %A %X", "date": "%Y. %m. %d.", "time": "%H:%M", "periods": ["오전", "오후"],
                         "days": ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
                         "shortDays": ["일", "월", "화", "수", "목", "금", "토"], "months": MONTHS, "shortMonths": MONTHS}},
-    "font": "-apple-system, BlinkMacSystemFont, Apple SD Gothic Neo, sans-serif",
+    "font": "IBM Plex Sans KR, -apple-system, BlinkMacSystemFont, Apple SD Gothic Neo, sans-serif",
     "background": "transparent",
     "view": {"stroke": None},
     "range": {"category": CHART},

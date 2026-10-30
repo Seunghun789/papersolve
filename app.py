@@ -26,6 +26,7 @@ st.markdown("""<style>
 section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px !important; transform: none !important;}
 .block-container {padding-top: 32px; max-width: 1080px;}
 /* 글자 단계 24 · 20 · 16, 소제목 위는 넉넉히 */
+body, [data-testid="stMetricValue"], [data-testid="stDataFrame"] {font-variant-numeric: tabular-nums;}
 h1 {font-size: 24px !important; font-weight: 600 !important; letter-spacing: -0.01em;}
 h2 {font-size: 20px !important; font-weight: 600 !important;}
 h3 {font-size: 16px !important; font-weight: 600 !important; padding-top: 16px !important;}
@@ -41,7 +42,7 @@ section[data-testid="stSidebar"] [data-testid="stRadioOption"][data-selected="tr
 section[data-testid="stSidebar"] h3 {font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.02em; padding-top: 0 !important;}
 [class*="st-key-card"] [data-testid="stMarkdownContainer"] p strong {font-size: 15px;}
 /* 답할 카드만 살짝 떠 보이게 (보여 주기만 하는 칸은 평평하게) */
-[class*="st-key-card"] {box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.06);}
+[class*="st-key-card"] {border-radius: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.06);}
 /* 파일 칸: 영어 버튼·안내를 우리말로 바꾸고 아이콘은 숨긴다 */
 [data-testid="stFileUploaderDropzone"] button * {display: none;}
 [data-testid="stFileUploaderDropzone"] button::after {content: "파일 고르기";}
@@ -255,14 +256,16 @@ def recent(t, K):
     st.caption("관계는 [끊기], 지표는 [내리기], 자동화는 [끄기]로 빼요.")
 
 
-def card(t, K, q):
+def card(t, K, q, label=True):
+    """label: 카드 맨 위 종류 이름표. 같은 이름의 소제목 아래에서는 빼서 겹치지 않게 한다."""
     P, kind = q["payload"], q["kind"]
     ev = q.get("evidence") or {}
     user = bool(ev.get("user"))
     ok = lambda label: "적용" if user else label
     with st.container(border=True, key=f"card{q['id']}"):
-        label = {"칸 더하기": "새 칸", "다른 이름": "같은 칸"}.get(P.get("op"), CAPTION[kind]) if kind == "칸 설정" else CAPTION[kind]
-        st.caption(label + (" · 직접 고친 것" if user else ""))
+        name = {"칸 더하기": "새 칸", "다른 이름": "같은 칸"}.get(P.get("op"), CAPTION[kind]) if kind == "칸 설정" else CAPTION[kind]
+        if label or user:
+            st.caption(name + (" (직접 고친 것)" if user else ""))
         if kind == "종류":
             st.write(f"**이 기록을 '{P['type']}'(으)로 정리할까요?**")
             st.caption("칸: " + " · ".join(
@@ -274,11 +277,11 @@ def card(t, K, q):
                     ("하나씩 볼게요", (engine.answer_type, t, q, "하나씩")))
         elif kind == "칸":
             st.write(f"**'{P['label']}' 칸이 처음 보여요. '{P['type']}'에 '{P['name']}'({engine.DTYPE_KO[P['dtype']]}) 칸을 추가할까요?**")
-            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))} · 추가하면 지난 기록에는 빈칸으로 들어가요.")
+            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))}. 추가하면 지난 기록에는 빈칸으로 들어가요.")
             buttons(q, ("아니요", (engine.answer_prop, t, q, False)), ("추가", (engine.answer_prop, t, q, True)))
         elif kind == "같은 칸":
             st.write(f"**'{P['label']}'은(는) '{P['type']}'의 '{P['similar_to']}' 칸과 같은 칸인가요?**")
-            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))} · 지난 기록과 이름만 달라요.")
+            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))}. 지난 기록과 이름만 달라요.")
             buttons(q, ("다른 칸", (engine.answer_same, t, q, False)), ("같은 칸", (engine.answer_same, t, q, True)))
         elif kind == "애매한 값":
             st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 맞나요?**")
@@ -302,7 +305,7 @@ def card(t, K, q):
             st.write(f"**'{P['title']}'을(를) 대시보드에 올릴까요?**")
             value, rows = engine.run_widget(K, P)
             now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] in ("trend", "view") else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
-            st.caption(f"{asked_for(ev)}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} · {now_}")
+            st.caption(f"{asked_for(ev)}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} {now_}.")
             buttons(q, ("아니요", (engine.answer_widget, t, q, False)), ("올리기", (engine.answer_widget, t, q, True)))
         elif kind == "업무":
             st.write(f"**'{P['title']}'를 자동으로 할까요?**")
@@ -433,7 +436,7 @@ def home(t, K, name):
             df = engine.frame(K, T)
             nums = engine.prop_names(K, T, "number")
             if nums and len(df):  # 추이를 먼저 크게, 표는 그 아래
-                st.caption(f"추이 · {nums[0]}")
+                st.caption(f"{nums[0]} 추이")
                 line(engine.trend(K, T, df, [nums[0]]), f"{T} {nums[0]} 추이")
             st.caption(f"{len(df)}줄")
             pick_table(df, f"home{T}", {p["name"]: p["description"] for p in K["props"][T] if p.get("description")})
@@ -452,7 +455,7 @@ def week(t, K):
         return
     lines, facts = st.session_state[key]
     with st.container(border=True):
-        st.caption("이번 주 요약 · 오늘까지 7일과 그 전 7일")
+        st.caption("이번 주 요약: 오늘까지 7일과 그 전 7일")
         for i, line in enumerate(lines):
             st.write(line["text"])
             rows = engine.records_by_id(K, {f"r{x}" for x in line["ids"]})
@@ -553,7 +556,7 @@ def check(t, K):
         mine = [q for q in entry if q["source_input_id"] == sid]
         left, right = st.columns(2)
         with left, st.container(border=True):
-            st.caption(f"원본 · {src['name']}")
+            st.caption(f"원본: {src['name']}")
             if src["channel"] == "사진":
                 show_photo(src["storage_path"])
             else:
@@ -574,7 +577,7 @@ def check(t, K):
     if links:
         st.subheader("관계 제안")
         for q in links:
-            card(t, K, q)
+            card(t, K, q, label=False)
     recent(t, K)
     st.button("홈으로", on_click=go, args=("홈",))
 
@@ -620,13 +623,13 @@ def ask(t, K):
     for col, (pick, note, (text, ids), KK) in zip(st.columns(2), sides):
         with col:
             with st.container(border=True):
-                st.caption(f"{pick} · {note}")
+                st.caption(f"{pick}: {note}")
                 st.write(text)
             st.button("이 답이 맞아요", key=f"up{pick}", on_click=vote, args=(t, last, pick),
                       disabled=st.session_state.get("voted") == last["q"])
             evidence(KK, ids, f"ev{pick}")
     picks = [v["pick"] for v in t.get("eval_votes", select="pick")]
-    st.caption(f"지금까지 맞다고 고른 답 · 확정 후 {picks.count('확정 후')}번, 확정 전 {picks.count('확정 전')}번")
+    st.caption(f"지금까지 맞다고 고른 답: 확정 후 {picks.count('확정 후')}번, 확정 전 {picks.count('확정 전')}번")
 
 
 def evidence(K, ids, key):
@@ -648,7 +651,7 @@ let visP = null
 const nets = new WeakMap()
 const OPTIONS = {
   autoResize: true, height: "540px", width: "100%",
-  nodes: { borderWidth: 0, borderWidthSelected: 0, font: { size: 12, color: "#3F3F46", face: "-apple-system, 'Apple SD Gothic Neo', sans-serif" } },
+  nodes: { borderWidth: 0, borderWidthSelected: 0, font: { size: 12, color: "#3F3F46", face: "'IBM Plex Sans KR', -apple-system, 'Apple SD Gothic Neo', sans-serif" } },
   edges: { width: 1, smooth: false, color: { color: "#A1A1AA" }, arrows: { to: { enabled: false, scaleFactor: 0.5 } },
            font: { size: 10, color: "#71717A", strokeWidth: 3, strokeColor: "#FFFFFF" } },
   physics: { solver: "forceAtlas2Based", stabilization: { iterations: 300 } },
@@ -849,7 +852,7 @@ def node_panel(t, K, nid):
         if kind == "E" and int(ref) in K["entities"]:
             e = K["entities"][int(ref)]
             C = e["class_name"]
-            st.caption(f"대상 · {C}")
+            st.caption(f"{C} 대상")
             st.write(f"**{e['name']}**")
             df = engine.entity_frame(K, C)
             one = df[df["_eid"] == e["id"]].reset_index(drop=True)
@@ -868,7 +871,7 @@ def node_panel(t, K, nid):
                          args=(t, C, e["name"], f"kga{e['id']}"), width="stretch")
         elif kind == "C" and ref in K["classes"]:
             st.caption("대상 분류")
-            st.write(f"**{ref}** · 대상 {len(engine.members(K, ref))}개")
+            st.write(f"**{ref}** (대상 {len(engine.members(K, ref))}개)")
             class_tools(t, ref, engine.entity_frame(K, ref)["이름"].tolist())
         elif kind == "T" and ref in K["types"]:
             st.caption("기록 종류")
@@ -883,10 +886,10 @@ def node_panel(t, K, nid):
         elif kind == "P" and (p := next((x for x in K["props"].get(engine.split(ref)[0], [])
                                          if x["name"] == engine.split(ref)[1]), None)):
             T = engine.split(ref)[0]
-            st.caption(f"칸 · {T}")
+            st.caption(f"{T}의 칸")
             st.write(f"**{p['name']}**")
             names = [a for (TT, a), pp in K["alias"].items() if TT == T and pp == p["name"] and a != p["name"]]
-            st.caption(f"값의 종류: {engine.DTYPE_KO[p['dtype']]} · 다른 이름: {', '.join(names) or '없음'}. "
+            st.caption(f"값의 종류: {engine.DTYPE_KO[p['dtype']]}. 다른 이름: {', '.join(names) or '없음'}. "
                        "칸 이름과 값의 종류는 바꾸지 않아요.")
             ku, kd = f"kgu{ref}", f"kgx{ref}"
             st.text_input("단위", value=p.get("unit") or "", key=ku, placeholder="예: kg")
@@ -896,7 +899,7 @@ def node_panel(t, K, nid):
             left.text_input("다른 이름", key=f"kgl{ref}", placeholder="종이에 이렇게도 적혀요")
             right.button("다른 이름 더하기", on_click=add_prop_alias, args=(t, T, p["name"], f"kgl{ref}"), width="stretch")
         elif kind == "A":
-            st.caption(f"대상 정보 칸 · {engine.split(ref)[0]}")
+            st.caption(f"{engine.split(ref)[0]}의 대상 정보 칸")
             st.write(f"**{engine.split(ref)[1]}**")
             st.caption("값은 대상 점에서 고치고, 새 정보는 분류 점에서 더해요.")
         else:
@@ -927,7 +930,7 @@ def graph(t, K):
         st.caption("청록 원 기록 종류 · 주황 상자 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
         st.caption("점을 누르면 오른쪽에서 설정을 고치고, 빈 곳을 누르면 닫혀요.")
         with st.expander("점 고르기"):  # 마우스 없이도 점을 고를 수 있게
-            names = {n["id"]: f"{n['label'].replace(chr(10), ' ')} · {NODE_KO[n['id'][0]]}" for n in nodes}
+            names = {n["id"]: f"{n['label'].replace(chr(10), ' ')} ({NODE_KO[n['id'][0]]})" for n in nodes}
             st.selectbox("점", list(names), format_func=names.get, index=None, key="kg_select",
                          placeholder="고르면 오른쪽에 설정 칸이 열려요", on_change=select_node)
     with right:
@@ -937,7 +940,7 @@ def graph(t, K):
             card(t, K, q)
         st.caption(f"관계 제안 {len(pend)}개" if pend else "확인할 관계 제안이 없어요.")
         for q in pend:
-            card(t, K, q)
+            card(t, K, q, label=False)
     if K["links"]:
         st.subheader("확정한 관계")
         for l in K["links"]:
@@ -1017,7 +1020,7 @@ def build_chat(t, K, kind):
     msgs = st.session_state.setdefault(key, [])
     yes = "올리기" if kind == "지표" else "켜기"
     with st.container(border=True):
-        st.caption("말로 만들기 · 고칠 점은 이어서 말하면 돼요.")
+        st.caption("말로 만들기. 고칠 점은 이어서 말하면 돼요.")
         for i, m in enumerate(msgs):
             st.markdown(m["text"])
             if not m.get("spec"):
@@ -1028,7 +1031,7 @@ def build_chat(t, K, kind):
                 st.caption(f"근거 기록 {len(engine.view_rows(K, m['spec']))}줄")
             else:
                 hits = engine.run_automation(K, m["spec"])
-                st.caption(f"{m['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in m['spec']['conditions'])} · 지금 걸린 {len(hits)}건")
+                st.caption(f"{m['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in m['spec']['conditions'])}. 지금 걸린 {len(hits)}건")
             if m.get("done"):
                 st.caption("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
             else:
@@ -1081,7 +1084,7 @@ def automation(t, K):
         hits = engine.run_automation(K, a["spec"])
         with st.container(border=True):
             left, right = st.columns([5, 1], vertical_alignment="center")
-            left.write(f"**{a['spec']['title']}** · 지금 {len(hits)}건")
+            left.write(f"**{a['spec']['title']}**, 지금 {len(hits)}건")
             left.caption(f"{a['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in a['spec']['conditions'])}")
             right.button("끄기", key=f"off{a['id']}", on_click=act, args=(set_status, t, "automations", a["id"], "꺼짐"),
                          kwargs={"done": "껐어요. 홈에서 빠져요."})
@@ -1113,7 +1116,7 @@ def unsent(key):
 
 def unsent_note(key):
     if n := unsent(key):
-        st.caption(f"**올리지 않은 고침 {n}개** · 다른 화면으로 가면 사라져요.")
+        st.caption(f"**올리지 않은 고침 {n}개.** 다른 화면으로 가면 사라져요.")
 
 
 def submit_edits(t, C, df, key):
@@ -1193,7 +1196,7 @@ def class_tools(t, C, names):
 
 def class_tree(K, C, depth=0):
     n = sum(1 for e in K["entities"].values() if e["class_name"] == C)
-    st.write(("　" * depth) + ("└ " if depth else "") + f"**{C}** · 대상 {n}개")
+    st.write(("　" * depth) + ("└ " if depth else "") + f"**{C}** (대상 {n}개)")
     for child in [c for c, p in K["classes"].items() if p == C]:
         class_tree(K, child, depth + 1)
 
