@@ -989,6 +989,11 @@ def impact(t, K, q):
         K2["entities"][P["entity_id"]]["attrs"][P["attr"]] = P["new"]
     elif q["kind"] == "되돌리기" and P["kind"] == "속성 값" and P["was"]["entity_id"] in K2["entities"]:
         K2["entities"][P["was"]["entity_id"]]["attrs"][P["was"]["attr"]] = P["was"]["old"]
+    elif q["kind"] == "같은 대상":
+        eid = find_entity(K2, P["class"], P["same_as"])
+        if not eid:
+            return []
+        K2["ealias"].setdefault(P["value"].strip(), []).append(eid)
     elif q["kind"] == "관계 속성":
         L = next((l for l in K2["links"] if l["id"] == P["link_id"]), None)
         if not L:
@@ -1017,6 +1022,38 @@ def impact(t, K, q):
             if not same_value(before, after):
                 out.append(f"지표 '{w['spec']['title']}' {before} → {after}")
     return out
+
+
+def spelled(K, C, value):
+    """분류 C 를 가리키는 칸에 value 로 적힌 기록 id들. [같은 대상] 카드에서 표기마다 몇 줄인지 센다."""
+    ids = []
+    for T in K["types"]:
+        cols = [p["name"] for p in ref_props(K, T) if p["ref_class"] == C]
+        for r in K["records"]:
+            if r["type_name"] == T and any(str(resolve(K, T, r["data"]).get(c, "")).strip() == value.strip() for c in cols):
+                ids.append(r["id"])
+    return ids
+
+
+def backtest(K, spec, days=30):
+    """켜기 전에: 지난 days 일 동안 날마다 그날까지의 기록으로 규칙을 돌렸다면 걸렸을 기록 id들."""
+    if not valid_spec(K, spec):
+        return []
+    df, today, ids = frame(K, spec["type"]), date.today(), set()
+    for i in range(days):
+        d = today - timedelta(days=i)
+        part = df[df["날짜"] <= d.isoformat()]
+        ids |= set(match(scoped(K, spec["type"], part, spec.get("scope", "all"), d), spec["conditions"], d)["_id"])
+    return sorted(int(i) for i in ids)
+
+
+def week_change(K, spec):
+    """지표의 이번 값과 일주일 전 값(그날까지의 기록으로 다시 센 값). kpi·count_where 만."""
+    if spec.get("kind") not in ("kpi", "count_where"):
+        return None
+    ago = date.today() - timedelta(days=7)
+    past = {**K, "records": [r for r in K["records"] if r["occurred_at"] <= ago.isoformat()]}
+    return run_widget(K, spec)[0], run_widget(past, spec, ago)[0]
 
 
 # ---- 지식그래프: 관계 ----
@@ -1508,6 +1545,12 @@ def week_facts(t, K):
         mine = [r for r in K["records"] if r["type_name"] == T]
         this = [r["id"] for r in mine if r["occurred_at"] > cut]
         add(f"{T}{'' if T.endswith('기록') else ' 기록'} 수", len(this), sum(cut2 < r["occurred_at"] <= cut for r in mine), this)
+        if (ent := entity(K, T)) and this:
+            df = frame(K, T)
+            df = df[df["날짜"] > cut]
+            top = df[ent].dropna().astype(str).value_counts().head(3)
+            add(f"이번 주 {T}에 많이 나온 {ent} 3개", ", ".join(f"{k} {v}줄" for k, v in top.items()), None,
+                df[df[ent].astype(str).isin(top.index)]["_id"])
     for a in t.get("automations", select="spec", status="eq.켜짐", order="id"):
         hits, was = run_automation(K, a["spec"]), run_automation(past, a["spec"], ago)
         ent = entity(K, a["spec"]["type"])

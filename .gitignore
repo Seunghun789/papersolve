@@ -19,3 +19,7 @@ app/
 
 # 가상환경
 .venv/
+
+# 리서치 보고서
+reports/
+research_notes/

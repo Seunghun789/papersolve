@@ -204,24 +204,56 @@ def first_fill():
     return kind
 
 
-def buttons(q, no, yes, extra=None):
+def later(q):
+    st.session_state.setdefault("later", set()).add(q["id"])
+
+
+def buttons(q, no, yes, extra=None, note="", wait=False):
+    """note: [예]를 누른 뒤 덧붙일 한 줄. wait: [나중에]를 둔다(이번 접속 동안 카드를 맨 뒤로)."""
     user = bool((q.get("evidence") or {}).get("user"))
     undo = q["kind"] in engine.UNDOABLE and q["payload"].get("op") != "칸 더하기"
     yes_done = "반영했어요. 확인 화면의 '최근 반영한 것'에서 되돌릴 수 있어요." if undo else "반영했어요."
     row = st.container(horizontal=True, horizontal_alignment="right")  # 버튼은 오른쪽에 작게
     row.button(no[0], key=f"n{q['id']}", on_click=act, args=no[1],
                kwargs={"done": "올린 것을 거두었어요." if user else "넘겼어요."})
+    if wait:
+        row.button("나중에", key=f"w{q['id']}", on_click=later, args=(q,))
     if extra:
         row.button(extra[0], key=f"x{q['id']}", on_click=act, args=extra[1], kwargs={"done": "하나씩 물을게요."})
+    yes_done += note
     row.button(yes[0], key=f"y{q['id']}", type=first_fill(), on_click=act, args=yes[1], kwargs={"done": yes_done})
 
 
-def show_impact(t, K, q):
+def show_impact(t, K, q, ids=(), what=""):
+    """적용하면 바뀌는 것: 기록 N줄(눌러서 표), 켜 둔 자동화·올린 지표를 이름과 전·후 값으로."""
     try:
         lines = engine.impact(t, K, q)
     except (KeyError, ValueError):
         lines = []
-    st.caption("적용하면: " + "; ".join(lines) if lines else "켜 둔 자동화·올린 지표에는 바뀌는 것이 없어요.")
+    with st.container(border=True):
+        st.caption("적용하면")
+        if ids:
+            rows = engine.records_by_id(K, {f"r{i}" for i in ids})
+            with st.expander(f"기록 {len(rows)}줄{what}"):
+                pick_table(pd.DataFrame(rows), f"imp{q['id']}")
+        for l in lines:
+            st.caption(l)
+        if not lines:
+            st.caption("켜 둔 자동화·올린 지표에는 바뀌는 것이 없어요.")
+
+
+def trial(K, spec, key):
+    """켜기 전에: 지금 걸린 것과, 지난 30일 동안 날마다 돌렸다면 걸렸을 기록(코드가 센다)."""
+    hits = engine.run_automation(K, spec)
+    ent = engine.entity(K, spec["type"])
+    names = ", ".join(hits[ent].astype(str).head(4)) if ent and len(hits) else ""
+    st.caption(f"지금 걸린 것 {len(hits)}건{': ' + names if names else ''}")
+    past = engine.backtest(K, spec)
+    if past:
+        with st.expander(f"지난 30일이었다면 {len(past)}번 걸렸어요 (근거 {len(past)}줄)"):
+            pick_table(pd.DataFrame(engine.records_by_id(K, {f"r{i}" for i in past})), key)
+    else:
+        st.caption("지난 30일 기록에는 걸린 것이 없어요.")
 
 
 def asked_for(ev):
@@ -268,13 +300,19 @@ def card(t, K, q, label=True):
             st.caption(name + (" (직접 고친 것)" if user else ""))
         if kind == "종류":
             st.write(f"**이 기록을 '{P['type']}'(으)로 정리할까요?**")
-            st.caption("칸: " + " · ".join(
-                f"{p['name']}({'대상' if p['is_entity'] else engine.DTYPE_KO[p['dtype']]}{', ' + p['unit'] if p.get('unit') else ''})"
-                for p in P["props"]))
+            unsure = {u["payload"]["label"] for u in engine.pending(t, ["애매한 값"])
+                      if u["source_input_id"] == q["source_input_id"]}
+            st.caption("이 종이에서 찾은 칸")
+            st.dataframe(pd.DataFrame([{
+                "칸": p["name"],
+                "값의 종류": ("대상" if p["is_entity"] else engine.DTYPE_KO[p["dtype"]]) + (f", {p['unit']}" if p.get("unit") else ""),
+                "상태": "확인할 것" if p["label"] in unsure else "확인됨"} for p in P["props"]]),
+                hide_index=True, alt="이 종이에서 찾은 칸과 상태")
             if P.get("links"):
                 st.caption("찾은 관계: " + ", ".join(f"{l['from']} → {l['to']} ({l['kind']})" for l in P["links"]))
+            note = f" 읽기 애매한 칸 {len(unsure)}개는 아직 보지 않았어요. 아래 카드에서 따로 물어요." if unsure else ""
             buttons(q, ("아니요", (engine.answer_type, t, q, "아니요")), ("맞아요", (engine.answer_type, t, q, "맞아요")),
-                    ("하나씩 볼게요", (engine.answer_type, t, q, "하나씩")))
+                    ("하나씩 볼게요", (engine.answer_type, t, q, "하나씩")), note=note)
         elif kind == "칸":
             st.write(f"**'{P['label']}' 칸이 처음 보여요. '{P['type']}'에 '{P['name']}'({engine.DTYPE_KO[P['dtype']]}) 칸을 추가할까요?**")
             st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))}. 추가하면 지난 기록에는 빈칸으로 들어가요.")
@@ -282,6 +320,8 @@ def card(t, K, q, label=True):
         elif kind == "같은 칸":
             st.write(f"**'{P['label']}'은(는) '{P['type']}'의 '{P['similar_to']}' 칸과 같은 칸인가요?**")
             st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))}. 지난 기록과 이름만 달라요.")
+            n = sum(P["label"] in r["data"] for r in t.get("records", select="data", source_input_id=f"eq.{q['source_input_id']}"))
+            st.caption(f"같은 칸이면 이 종이의 기록 {n}줄의 '{P['label']}' 값이 '{P['similar_to']}' 칸으로 들어가요.")
             buttons(q, ("다른 칸", (engine.answer_same, t, q, False)), ("같은 칸", (engine.answer_same, t, q, True)))
         elif kind == "애매한 값":
             st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 맞나요?**")
@@ -306,11 +346,16 @@ def card(t, K, q, label=True):
             value, rows = engine.run_widget(K, P)
             now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] in ("trend", "view") else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
             st.caption(f"{asked_for(ev)}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} {now_}.")
+            if change := engine.week_change(K, P):
+                st.caption(f"일주일 전 값 {fmt(change[1])} → 지금 {fmt(change[0])}")
             buttons(q, ("아니요", (engine.answer_widget, t, q, False)), ("올리기", (engine.answer_widget, t, q, True)))
         elif kind == "업무":
+            gap = any(c["op"] == "older_than_days" for c in P["conditions"])
+            if gap:
+                st.caption("빠진 기록: 대상마다 기록이 들어오던 간격에서 찾았어요")
             st.write(f"**'{P['title']}'를 자동으로 할까요?**")
-            st.caption(f"{asked_for(ev)}{P['type']}: {' 그리고 '.join(cond_text(c) for c in P['conditions'])} · "
-                       f"지금 걸린 {len(engine.run_automation(K, P))}건 · {P.get('reason') or ''}")
+            st.caption(f"{asked_for(ev)}{P['type']}: {' 그리고 '.join(cond_text(c) for c in P['conditions'])} · {P.get('reason') or ''}")
+            trial(K, P, f"t{q['id']}")
             buttons(q, ("아니요", (engine.answer_automation, t, q, False)), ("켜기", (engine.answer_automation, t, q, True)))
         elif kind == "대상 분류":
             vals = P.get("values") or []
@@ -326,7 +371,13 @@ def card(t, K, q, label=True):
         elif kind == "같은 대상":
             st.write(f"**'{P['value']}'은(는) {P['class']} '{P['same_as']}'와 같은 대상인가요?**")
             st.caption(P.get("reason") or "")
-            buttons(q, ("다른 대상", (engine.answer_same_entity, t, q, False)), (ok("같은 대상"), (engine.answer_same_entity, t, q, True)))
+            mine = engine.spelled(K, P["class"], P["value"])
+            a, b = st.columns(2)
+            a.metric(f"'{P['value']}'(으)로 적힌 기록", f"{len(mine)}줄")
+            b.metric(f"'{P['same_as']}'(으)로 적힌 기록", f"{len(engine.spelled(K, P['class'], P['same_as']))}줄")
+            show_impact(t, K, q, mine, f"의 '{P['value']}'이(가) '{P['same_as']}'(으)로 묶여요")
+            buttons(q, ("다른 대상", (engine.answer_same_entity, t, q, False)), (ok("같은 대상"), (engine.answer_same_entity, t, q, True)),
+                    wait=True)
         elif kind == "대상 속성":
             if P.get("type"):
                 st.write(f"**'{P['attr']}'는 {P['class']}마다 정해진 값인가요?**")
@@ -364,7 +415,8 @@ def card(t, K, q, label=True):
                            "보이는 글자만 바뀌고 숫자는 그대로예요.")
             elif P["op"] == "다른 이름":
                 st.write(f"**종이에 '{P['alias']}'(으)로 적힌 것도 '{P['type']}'의 '{P['prop']}' 칸으로 읽을까요?**")
-                st.caption("이미 읽은 기록과 다음 읽기 모두 이 칸으로 들어가요.")
+                n = sum(P["alias"] in r["data"] for r in K["records"] if r["type_name"] == P["type"])
+                st.caption(f"이미 읽은 기록 {n}줄과 다음 읽기 모두 이 칸으로 들어가요.")
             else:
                 st.write(f"**'{P['type']}'에 '{P['name']}'({engine.DTYPE_KO[P['dtype']]}"
                          f"{', ' + P['unit'] if P.get('unit') else ''}) 칸을 추가할까요?**")
@@ -396,31 +448,46 @@ def title(text, t=None, fn=None):
 # ---- 화면 ----
 
 MODEL_KO = {"claude-haiku-5-5": "빠르게 (Haiku)", "claude-sonnet-5-5": "보통 (Sonnet)", "claude-opus-5-5": "꼼꼼하게 (Opus)"}
-CARD_H = 150  # 오늘 먼저 볼 것 카드는 모두 같은 높이
+CARD_H = 170  # 오늘 먼저 볼 것 카드는 모두 같은 높이
+HOME_MAX = 2  # 오늘 먼저 볼 것에 띄우는 걸린 자동화 카드 수(확인 카드와 합쳐 세 장)
+FOLLOW_MAX = 2  # 카드마다 이어서 볼 것 수
 
 
 def home(t, K, name):
     st.caption(name)
     st.header("오늘 먼저 볼 것")
-    autos = t.get("automations", select="id,spec", status="eq.켜짐", order="id") or [None]
+    autos = t.get("automations", select="id,spec", status="eq.켜짐", order="id")
+    runs = [(a, engine.run_automation(K, a["spec"])) for a in autos]
+    hit = sorted([r for r in runs if len(r[1])], key=lambda r: -len(r[1]))
+    quiet = [a for a, h in runs if not len(h)]
     cols = st.columns(3)
-    for i, a in enumerate(autos):
-        if a is None:
-            with cols[0], st.container(border=True, height=CARD_H):
-                st.metric("자동화", "없음")
-                st.caption("자동화에서 업무를 켜 두면 여기에 알아서 보여요.")
-            continue
-        hits = engine.run_automation(K, a["spec"])
+    if not autos:
+        with cols[0], st.container(border=True, height=CARD_H):
+            st.metric("자동화", "없음")
+            st.caption("자동화에서 업무를 켜 두면 여기에 알아서 보여요.")
+    elif not hit:
+        with cols[0], st.container(border=True, height=CARD_H):
+            st.metric("켜 둔 자동화", f"{len(autos)}개")
+            st.caption("오늘은 걸린 것이 없어요.")
+    shown = hit[:HOME_MAX]  # 걸린 것이 많은 순서로 몇 장만. 걸린 카드는 닫지 않는다
+    for i, (a, hits) in enumerate(shown):
         ent = engine.entity(K, a["spec"]["type"])
         late = any(c["op"] == "older_than_days" for c in a["spec"]["conditions"])
         with cols[i % 3], st.container(border=True, height=CARD_H):
             st.metric(a["spec"]["title"], f"{len(hits)}건")
             names = ", ".join(f"{r[ent]}{' (마지막 ' + r['날짜'][5:].replace('-', '/') + ')' if late else ''}"
-                              for _, r in hits.head(4).iterrows()) if ent and len(hits) else ""
-            st.caption(names or " 그리고 ".join(cond_text(c) for c in a["spec"]["conditions"]))
-            if more := engine.follow(K, a["spec"], hits):
-                st.caption("이어서 볼 것: " + ", ".join(f"{n} ({why})" for n, why in more[:4]))
-    with cols[len(autos) % 3], st.container(border=True, height=CARD_H):
+                              for _, r in hits.head(4).iterrows()) if ent else ""
+            st.caption(f"{names} · 근거 {len(hits)}줄" if names else f"근거 {len(hits)}줄")
+            for n, why in engine.follow(K, a["spec"], hits)[:FOLLOW_MAX]:
+                st.caption(f"이어서 볼 것: {n} ({why})")
+    if len(hit) > len(shown) or quiet:
+        more = len(hit) - len(shown)
+        with st.expander(" · ".join(([f"더 걸린 자동화 {more}개"] if more else []) + ([f"걸린 것이 없는 자동화 {len(quiet)}개"] if quiet else []))):
+            for a, hits in hit[len(shown):]:
+                st.caption(f"{a['spec']['title']}: {len(hits)}건")
+            for a in quiet:
+                st.caption(f"{a['spec']['title']}: 걸린 것 없음")
+    with cols[len(shown) if shown else 1], st.container(border=True, height=CARD_H):
         n = len(engine.pending(t, engine.CHECK))
         st.metric("확인", f"{n}개")
         st.button(f"확인할 것 {n}개" if n else "확인할 것 없음", on_click=go, args=("확인",), disabled=not n, width="stretch")
@@ -463,7 +530,10 @@ def week(t, K):
                 with st.expander(f"근거 기록 {len(rows)}줄"):
                     pick_table(pd.DataFrame(rows), f"wk{i}")
         with st.expander("센 숫자"):
-            st.dataframe(pd.DataFrame(facts).drop(columns=["n", "ids"]), hide_index=True, alt="이번 주 센 숫자")
+            shown = pd.DataFrame(facts).drop(columns=["n", "ids"])
+            for c in ("이번 주", "지난주", "차이"):  # 건수와 '설비 A 3줄' 같은 글이 한 열에 섞인다
+                shown[c] = shown[c].map(lambda v: v if isinstance(v, str) else fmt(v))
+            st.dataframe(shown, hide_index=True, alt="이번 주 센 숫자")
 
 
 def upload(t, K):
@@ -541,7 +611,7 @@ def read_file(t):
 
 def check(t, K):
     st.button("← 올리기로", on_click=go, args=("올리기",))
-    qs = engine.pending(t, engine.CHECK)
+    qs = sorted(engine.pending(t, engine.CHECK), key=lambda q: q["id"] in st.session_state.get("later", set()))
     st.header(f"확인할 것 {len(qs)}개")
     if not qs:
         st.success("홈에서 기록을 보세요.", title="확인할 것이 없어요")
@@ -582,51 +652,108 @@ def check(t, K):
     st.button("홈으로", on_click=go, args=("홈",))
 
 
+FN_KO = {"count": "줄 수", "sum": "합계", "avg": "평균", "min": "가장 작은 값", "max": "가장 큰 값", "latest": "가장 최근 값"}
+
+
+def understood(calls):
+    """AI가 부른 조회 도구의 입력을 쉬운 말로: '기록 종류 설비 점검 · 진동 > 7 · 진동 가장 큰 값 · 설비별'."""
+    out = []
+    for name, inp in calls:
+        if name == "schema" or not inp.get("type"):
+            continue
+        parts = [inp["type"]]
+        parts += [cond_text(c) for c in inp.get("where") or []]
+        if name == "aggregate":
+            parts.append(f"{inp.get('prop') or ''} {FN_KO.get(inp.get('fn'), '')}".strip())
+            if inp.get("group_by"):
+                parts.append(f"{inp['group_by']}별")
+        if (line := " · ".join(parts)) not in out:
+            out.append(line)
+    return out
+
+
+def examples(K):
+    """질문 칸 아래 예시: 확정한 기록 종류·칸 이름으로만 만든다."""
+    out = []
+    for T in K["types"][:2]:
+        out.append(f"이번 주 {T} 몇 건?")
+        nums, ent = engine.prop_names(K, T, "number"), engine.entity(K, T)
+        if nums and ent:
+            out.append(f"{ent}별 {nums[0]} 가장 큰 값은?")
+    return out[:3]
+
+
+def verified(t, q):
+    """[이 답이 맞아요]로 고른 적이 있는 같은 질문의 답."""
+    v = t.get("eval_votes", select="pick,answer_before,answer_after", question=f"eq.{q}", order="id.desc", limit=1)
+    return (v[0]["answer_after"] if v[0]["pick"] == "확정 후" else v[0]["answer_before"]) if v else None
+
+
 def ask(t, K):
     st.header("묻기")
     st.caption("숫자는 기록에서 세고, 근거 기록과 원본 사진을 함께 보여 줘요.")
     if not K["types"]:
         empty()
         return
+    row = st.container(horizontal=True)
+    for i, ex in enumerate(examples(K)):
+        row.button(ex, key=f"ex{i}", on_click=st.session_state.__setitem__, args=("qtext", ex))
     with st.form("ask", border=False):  # 질문을 적고 Enter만 눌러도 묻는다
         left, right = st.columns([5, 1], vertical_alignment="bottom")
-        question = left.text_input("질문", placeholder="예: 최근에 기준을 넘은 기록은? / 이번 주 미팅은 누구야?")
+        question = left.text_input("질문", key="qtext", placeholder="예: 최근에 기준을 넘은 기록은? / 이번 주 미팅은 누구야?")
         sent = right.form_submit_button("묻기", type="primary", width="stretch")
-        compare = st.toggle("나란히 보기", help="같은 질문을 구조를 확정하기 전(종이에서 읽은 그대로)과 지금 지식으로 함께 답해요.")
+        compare = st.toggle("나란히 보기", help="같은 질문을 구조를 확정하기 전(종이에서 읽은 그대로)과 지금 지식으로 함께 답해요. "
+                                                "고르기 전에는 어느 쪽인지 가려 둬요.")
         with st.expander("모델 고르기"):
             model = st.selectbox("답하는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m))
     if sent and not question.strip():
         st.warning("질문을 적어 주세요.")  # 13
     if sent and question.strip():
         q = question.strip()
+        calls, calls_before = [], []
+
+        def tool(KK, log):
+            return lambda n, i: (log.append((n, i)), engine.run_tool(KK, n, i))[1]
         with st.spinner("기록을 찾는 중이에요..."):
             try:
                 R = engine.raw(K)
-                before = llm.answer(t, model, q, lambda n, i: engine.run_tool(R, n, i)) if compare else None
-                text, ids = llm.answer(t, model, q, lambda n, i: engine.run_tool(K, n, i))
+                before = llm.answer(t, model, q, tool(R, calls_before)) if compare else None
+                text, ids = llm.answer(t, model, q, tool(K, calls))
             except ERRORS as e:
                 fail("답하지 못했어요", e)
                 return
-        st.session_state.last = {"q": q, "text": text, "ids": ids, "before": before}
+        st.session_state.last = {"q": q, "text": text, "ids": ids, "before": before, "how": understood(calls),
+                                 "how_before": understood(calls_before), "checked": verified(t, q)}
     last = st.session_state.get("last")
     if not last:
         return
     if not last.get("before"):
         with st.container(border=True):
-            st.caption(last["q"])
+            top = st.columns([4, 1])
+            top[0].caption(last["q"])
+            if last.get("checked"):
+                top[1].caption("확인한 답")
+            for h in last.get("how") or []:
+                st.caption(f"이렇게 찾았어요: {h}")
             st.write(last["text"])
+            if last.get("checked") and last["checked"].strip() != last["text"].strip():
+                st.caption(f"전에 맞다고 고른 답: {last['checked']}")
         evidence(K, last["ids"], "evidence")
         return
     st.caption(last["q"])
-    sides = (("확정 전", "종이에서 읽은 그대로", last["before"], engine.raw(K)),
-             ("확정 후", "지금 쌓은 지식", (last["text"], last["ids"]), K))
-    for col, (pick, note, (text, ids), KK) in zip(st.columns(2), sides):
+    sides = [("확정 전", "종이에서 읽은 그대로", last["before"], engine.raw(K), last.get("how_before")),
+             ("확정 후", "지금 쌓은 지식", (last["text"], last["ids"]), K, last.get("how"))]
+    if hash(last["q"]) % 2:  # 어느 쪽이 확정 후인지 위치로 알 수 없게
+        sides.reverse()
+    shown = st.session_state.get("voted") == last["q"]
+    for n, (col, (pick, note, (text, ids), KK, how)) in enumerate(zip(st.columns(2), sides), 1):
         with col:
             with st.container(border=True):
-                st.caption(f"{pick}: {note}")
+                st.caption(f"답 {n}" + (f" = {pick}: {note}" if shown else ""))
+                for h in how or []:
+                    st.caption(f"이렇게 찾았어요: {h}")
                 st.write(text)
-            st.button("이 답이 맞아요", key=f"up{pick}", on_click=vote, args=(t, last, pick),
-                      disabled=st.session_state.get("voted") == last["q"])
+            st.button("이 답이 맞아요", key=f"up{pick}", on_click=vote, args=(t, last, pick), disabled=shown)
             evidence(KK, ids, f"ev{pick}")
     picks = [v["pick"] for v in t.get("eval_votes", select="pick")]
     st.caption(f"지금까지 맞다고 고른 답: 확정 후 {picks.count('확정 후')}번, 확정 전 {picks.count('확정 전')}번")
@@ -846,6 +973,12 @@ def add_prop_user(t, K, T):
     s.ent_msg = UP
 
 
+def relations(out, into):
+    """설정 칸의 관계 목록: 이 점에서 나가는 관계와 이 점으로 들어오는 관계를 나눠 보여 준다."""
+    st.caption("나가는 관계: " + (", ".join(out) or "없음"))
+    st.caption("들어오는 관계: " + (", ".join(into) or "없음"))
+
+
 def node_panel(t, K, nid):
     kind, _, ref = nid.partition(":")
     with st.container(border=True):
@@ -865,6 +998,10 @@ def node_panel(t, K, nid):
             else:
                 st.caption(f"아직 정보가 없어요. '{C}' 점에서 [정보 더하기]로 더할 수 있어요.")
             st.caption("별칭: " + (", ".join(engine.aliases_of(K, e["id"])) or "없음"))
+            name = lambda i: K["entities"][i]["name"] if i in K["entities"] else "?"
+            kinds = {l["id"]: l["kind"] for l in K["links"]}
+            relations([f"{kinds.get(x['link_id'], '')} → {name(x['to_entity'])}" for x in K["elinks"] if x["from_entity"] == e["id"]],
+                      [f"{name(x['from_entity'])} → {kinds.get(x['link_id'], '')}" for x in K["elinks"] if x["to_entity"] == e["id"]])
             left, right = st.columns([3, 1], vertical_alignment="bottom")
             left.text_input("별칭", key=f"kga{e['id']}", placeholder="예: P-03")
             right.button("별칭 더하기", key=f"kgab{e['id']}", on_click=add_entity_alias,
@@ -873,6 +1010,10 @@ def node_panel(t, K, nid):
             st.caption("대상 분류")
             st.write(f"**{ref}** (대상 {len(engine.members(K, ref))}개)")
             class_tools(t, ref, engine.entity_frame(K, ref)["이름"].tolist())
+            up = engine.ancestors(K, ref)  # 하위 분류는 상위 분류의 관계도 물려받는다
+            via = lambda C: "" if C == ref else f" ({C}에서)"
+            relations([f"{l['kind']} → {l['to_ref']}{via(l['from_ref'])}" for l in K["links"] if l["from_ref"] in up],
+                      [f"{l['from_ref']} → {l['kind']}{via(l['to_ref'])}" for l in K["links"] if l["to_ref"] in up])
         elif kind == "T" and ref in K["types"]:
             st.caption("기록 종류")
             st.write(f"**{ref}**")
@@ -1030,14 +1171,20 @@ def build_chat(t, K, kind):
                 draw_view(K, m["spec"], f"{key}v{i}")
                 st.caption(f"근거 기록 {len(engine.view_rows(K, m['spec']))}줄")
             else:
-                hits = engine.run_automation(K, m["spec"])
-                st.caption(f"{m['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in m['spec']['conditions'])}. 지금 걸린 {len(hits)}건")
+                st.caption(f"{m['spec']['type']}: {' 그리고 '.join(cond_text(c) for c in m['spec']['conditions'])}")
+                trial(K, m["spec"], f"{key}t{i}")
             if m.get("done"):
                 st.caption("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
             else:
                 st.button(yes, key=f"{key}b{i}", type="primary", on_click=adopt, args=(t, kind, m))
         example = "예: 일일 합격률 추이를 선 그래프로 / 미팅 예약 달력" if kind == "지표" else "예: 진동이 7을 넘으면 먼저 볼 것에 올려 줘"
-        if req := st.chat_input(example, key=f"{key}in"):
+        last = next((m for m in reversed(msgs) if m.get("spec")), None)
+        if kind == "지표" and last and not last.get("done"):
+            ent = engine.entity(K, last["spec"].get("type")) if last["spec"].get("type") in K["types"] else None
+            row = st.container(horizontal=True)
+            for say in ([f"{ent}별로 나눠줘"] if ent else []) + ["지난달만", "표로 보여줘"]:
+                row.button(say, key=f"{key}c{say}", on_click=st.session_state.__setitem__, args=(f"{key}chip", say))
+        if req := st.chat_input(example, key=f"{key}in") or st.session_state.pop(f"{key}chip", None):
             history = [{"role": m["role"], "content": m.get("raw") or m["text"]} for m in msgs]
             msgs.append({"role": "user", "text": req})
             with st.spinner("확정한 기록으로 만드는 중이에요..."):
@@ -1210,6 +1357,7 @@ def entities_page(t, K):
     engine.suggest_entity_rules(t, K)
     pend = engine.pending(t, engine.ENTITY) + [q for q in engine.pending(t, ["연결"])
                                                if "." not in q["payload"]["from"] and "." not in q["payload"]["to"]]
+    pend.sort(key=lambda q: q["id"] in st.session_state.get("later", set()))
     if pend:
         st.subheader(f"확인할 것 {len(pend)}개")
         for q in pend:
