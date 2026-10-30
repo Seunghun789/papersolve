@@ -43,6 +43,8 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14p
 @media (min-width: 769px) {.st-key-cv_on0, [class*="st-key-cv_off"] {aspect-ratio: 1 / 1.9; min-height: 400px;}}
 @media (max-width: 768px) {.ps-arrow-big {transform: rotate(90deg); line-height: 1;}}
 .st-key-cv_on0 [data-testid="stFileUploaderDropzoneInstructions"]::after {content: "사진이나 CSV를 여기로 끌어 놓으세요";}
+.ps-logo {font-size: 1.5rem; font-weight: 400; letter-spacing: -0.01em; padding: 0.5rem 0 1rem;}
+.ps-logo b {font-weight: 600;}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
 .ps-steps .ps-on {padding: 4px 10px; border: 1px solid #0F766E; border-radius: 8px; background: var(--ps-accent-bg);
   color: var(--ps-accent-text); font-weight: 600;}
@@ -1585,6 +1587,89 @@ def entities_page(t, K):
                     st.button("관계 정보 올리기", key=f"lab{L['id']}", on_click=add_link_attr, args=(t, L, edited))
 
 
+# ---- 랜딩 (계정이 없는 첫 방문) ----
+LANDING_CSS = """<style>
+section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], header[data-testid="stHeader"] {display: none;}
+.block-container {max-width: 1200px; padding-top: 1.5rem;}
+.ps-glows {position: fixed; inset: 0; z-index: 0; filter: blur(110px); transform: translateZ(0); pointer-events: none;}
+.ps-glow {position: absolute; border-radius: 50%; will-change: transform, opacity;}
+.ps-g1 {width: 620px; height: 620px; background: #0F766E; left: 50%; top: 10%; animation: ps-drift1 16s ease-in-out infinite;}
+.ps-g2 {width: 420px; height: 420px; background: #1C8F84; left: 62%; top: 30%; animation: ps-drift2 22s ease-in-out infinite;}
+@keyframes ps-drift1 {0% {transform: translate(0,0) scale(1); opacity: .75} 40% {transform: translate(-120px,60px) scale(1.15); opacity: .45}
+  70% {transform: translate(80px,-40px) scale(.9); opacity: .12} 100% {transform: translate(0,0) scale(1); opacity: .75}}
+@keyframes ps-drift2 {0% {transform: translate(0,0); opacity: .15} 50% {transform: translate(-160px,90px) scale(1.2); opacity: .6} 100% {transform: translate(0,0); opacity: .15}}
+@media (prefers-reduced-motion: reduce) {.ps-glow {animation: none;}}
+.ps-hero h1 {font-size: 3.4rem; line-height: 1.3; font-weight: 600; margin: 12vh 0 1.5rem; padding: 0;}
+.ps-hero p {font-size: 1.05rem; line-height: 1.8;}
+.ps-note {font-size: 0.8rem; margin-top: 0.5rem;}
+.ps-cards {display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 8vh 0 6vh;}
+.ps-card {border-radius: 12px; padding: 20px;}
+.ps-card b {font-size: 1rem;} .ps-card p {font-size: 0.9rem; margin: 8px 0 0;}
+@media (max-width: 768px) {.ps-hero h1 {font-size: 2.2rem; margin-top: 6vh;} .ps-cards {grid-template-columns: 1fr 1fr;}}
+</style>"""
+DARK = """<style>
+.stApp {background: #0A0A0B;} .stApp, .ps-hero h1 {color: #FAFAFA;} .ps-logo {color: #FAFAFA;}
+.ps-hero p {color: #A1A1AA;} .ps-note {color: #71717A;}
+.ps-card {background: #141416; border: 1px solid #27272A; color: #FAFAFA;} .ps-card p {color: #A1A1AA;} .ps-card.on {border-color: #0F766E;}
+.st-key-login button {background: #1F1F23; color: #FAFAFA; border: none;}
+[data-testid="stMain"] > div {position: relative; z-index: 1;}
+</style>"""
+LOGIN = """<style>
+.stApp {background: linear-gradient(to right, #FFFFFF 50%, #E4E4E7 50%, #E4E4E7 calc(50% + 1px), #F7F7F8 calc(50% + 1px));}
+.ps-card {background: #FFFFFF; border: 1px solid #E4E4E7; margin-bottom: 14px;} .ps-card p {color: #71717A;} .ps-card.on {border: 2px solid #0F766E;}
+.ps-hero, .ps-note {text-align: center;} .ps-hero h1 {font-size: 2.4rem; margin-top: 6vh;} .ps-hero p {color: #52525B;} .ps-note {color: #A1A1AA;}
+.st-key-google button {background: #FFFFFF;} .st-key-kakao button {background: #FEE500; color: #191919; border: none;}
+@media (max-width: 768px) {.stApp {background: #FFFFFF;}}
+</style>"""
+STEP_CARDS = [("① 종이", "사진이나 CSV 한 장을 올려요"), ("② 확인", "AI가 찾은 칸 · 대상을 예/아니오로 확인해요"),
+              ("③ 내 기록", "표 · 지표 · 챙길 일로 쌓여요"), ("④ 묻기", "물으면 기록에서 센 답과 근거가 와요")]
+
+
+def step_cards():
+    return "".join(f'<div class="ps-card{" on" if i == 0 else ""}"><b>{h}</b><p>{p}</p></div>' for i, (h, p) in enumerate(STEP_CARDS))
+
+
+def enter():
+    st.session_state.entered = True
+    st.session_state.landing = None
+
+
+def landing():
+    """계정이 없는 첫 방문: 랜딩(무슨 서비스인지) → [바로 써 보기]로 올리기, [로그인]은 로그인 화면(모양만)."""
+    st.markdown(LANDING_CSS, unsafe_allow_html=True)
+    if st.session_state.get("landing") == "login":
+        st.markdown(LOGIN, unsafe_allow_html=True)
+        st.button("papersolve", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
+        left, right = st.columns(2, gap="xlarge")
+        with left:
+            st.markdown('<div class="ps-hero"><h1>손으로 적은 기록을 찍으면<br>표 · 챙길 일 · 답이 돼요</h1>'
+                        '<p>점검표, 재고 장부, 메모를 사진으로 올리세요.<br>AI가 칸을 찾아 주고, 맞는지만 [맞아요]로 확인하면 돼요.</p></div>',
+                        unsafe_allow_html=True)
+            _, mid, _ = st.columns([1, 3, 1])
+            with mid:
+                st.button("바로 써 보기", key="go", type="primary", on_click=enter, width="stretch")
+                st.markdown('<div class="ps-note">가입 없이 시작해요. 이 브라우저에 기록이 이어져요.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
+                if st.button("Google로 계속하기", key="google", width="stretch") | st.button("카카오로 계속하기", key="kakao", width="stretch"):
+                    st.toast("로그인은 준비 중이에요. 지금은 [바로 써 보기]로 시작해요.")
+                st.markdown('<div class="ps-note">로그인은 준비 중이에요. 지금은 [바로 써 보기]로 시작해요.</div>', unsafe_allow_html=True)
+        with right:
+            st.markdown(step_cards(), unsafe_allow_html=True)
+        st.stop()
+    st.markdown(DARK + '<div class="ps-glows"><div class="ps-glow ps-g1"></div><div class="ps-glow ps-g2"></div></div>', unsafe_allow_html=True)
+    logo, _, login = st.columns([2, 6, 1], vertical_alignment="center")
+    logo.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
+    login.button("로그인", key="login", on_click=lambda: st.session_state.update(landing="login"), width="stretch")
+    st.markdown('<div class="ps-hero"><h1>종이 장부는 그대로,<br>정리는 AI가 할게요</h1>'
+                '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>맞는지만 확인하면 챙길 일과 답이 따라와요.</p></div>',
+                unsafe_allow_html=True)
+    go, _ = st.columns([1, 4])
+    go.button("바로 써 보기  →", key="go", type="primary", on_click=enter, width="stretch")
+    st.markdown('<div class="ps-note">가입 없이 시작해요 · 로그인은 준비 중</div>'
+                f'<div class="ps-cards">{step_cards()}</div>', unsafe_allow_html=True)
+    st.stop()
+
+
 # ---- 계정과 메뉴 ----
 # 계정 고르기는 없다. 계정은 주소의 ?a=번호 로 이어지고, 처음 종이를 올릴 때 새로 생긴다.
 
@@ -1616,7 +1701,7 @@ waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
 if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
     st.session_state.page = "홈" if K["types"] else "올리기"
 with st.sidebar:
-    st.subheader("papersolve")
+    st.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
     for head, items in GROUPS:
         if head:
             st.caption(head)
@@ -1640,6 +1725,8 @@ if st.session_state.get("_remembered") != (tid, st.query_params.get("a")):
     st.session_state._remembered = (tid, st.query_params.get("a"))
     st.container(key="remember").iframe(f"<script>const w = window.parent; {remember.replace('localStorage', 'w.localStorage')}</script>", height=1)
 
+if not tid and not st.session_state.get("entered"):
+    landing()  # 계정이 없는 첫 방문은 랜딩부터
 page = st.session_state.page
 if page == "홈" and K["types"]:
     st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
