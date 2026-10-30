@@ -1,14 +1,17 @@
 """Supabase REST 호출. 계정(tenant)마다 Tenant 로 묶어 읽고 쓴다."""
+import os
 from pathlib import Path
 
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
-env = dict(
+# 로컬은 .env, 배포(Streamlit Cloud)는 Secrets 가 넘겨 주는 환경 변수에서 키를 읽는다.
+env_file = ROOT / ".env"
+env = {**os.environ, **dict(
     line.split("=", 1)
-    for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines()
+    for line in (env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else [])
     if "=" in line and not line.startswith("#")
-)
+)}
 API = env["SUPABASE_URL"].strip().rstrip("/") + "/rest/v1/"
 HEADERS = {"apikey": (env.get("SUPABASE_SECRET_KEY") or env["SUPABASE_KEY"]).strip()}
 
