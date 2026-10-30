@@ -23,7 +23,10 @@ st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent
 --ps-text-muted: {COLOR["text_muted"]}; --ps-hover-bg: {COLOR["hover_bg"]};}}</style>""", unsafe_allow_html=True)
 st.markdown("""<style>
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
-.st-key-close_sidebar {display: none;}  /* 사이드바를 접는 스크립트 칸은 자리를 차지하지 않게 */
+.st-key-close_sidebar, .st-key-remember {display: none;}
+.st-key-cv_on0 {border: 2px solid #0F766E !important;}  /* 첫 바퀴 캔버스: 지금 할 칸 */
+[class*="st-key-cv_off"] {opacity: 0.55;}                  /* 아직 오지 않은 칸 */
+.ps-skel {height: 12px; border-radius: 4px; background: #F4F4F5; margin: 0 0 12px 0;}  /* 사이드바를 접는 스크립트 칸은 자리를 차지하지 않게 */
 @media (min-width: 769px) {
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] {display: none !important;}
@@ -97,9 +100,49 @@ def go(page):
     st.session_state.page = page
 
 
+STEPS = [("① 종이", "올리기"), ("② 칸 확인", "확인"), ("③ 내 기록", "홈"), ("④ 묻기", "묻기")]
+SKELETON = {  # 아직 오지 않은 단계의 빈 틀: (흐린 줄 폭들, 한 줄 안내)
+    1: (["40%", "25%", "30%"] * 3, "AI가 찾은 칸이 여기에 와요"),
+    2: (["35%", "100%", "100%", "100%", "100%"], "확정한 기록이 표와 추이로 쌓여요"),
+    3: (["100%", "70%"], "답과 근거 기록이 여기에 와요"),
+}
+
+
 def empty():
-    st.info("아직 확정된 기록이 없어요.")
-    st.button("← 올리기로", on_click=go, args=("올리기",))
+    """기록이 없을 때의 화면: 종이 → 칸 확인 → 내 기록 → 묻기 네 칸. 첫 칸에서 바로 올린다.
+    예시 데이터는 쓰지 않고, 아직 오지 않은 칸은 빈 틀로 둔다."""
+    waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
+    st.caption("종이 한 장을 올리면 아래 순서로 채워져요.")
+    cols = st.columns(4)
+    for i, ((name, _), col) in enumerate(zip(STEPS, cols)):
+        with col, st.container(border=True, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
+            st.markdown(f"**{name}**")
+            if i == 0 and waiting:
+                st.caption("올린 종이를 읽었어요.")
+                st.button(f"확인할 것 {waiting}개", type="primary", on_click=go, args=("확인",), width="stretch")
+            elif i == 0:
+                read_file(tenant, key="cv")
+            else:
+                bars, note = SKELETON[i]
+                st.markdown("".join(f'<div class="ps-skel" style="width:{w}"></div>' for w in bars), unsafe_allow_html=True)
+                st.caption(note)
+
+
+def first_run():
+    """이번 접속에서 계정을 처음 만든 사람의 첫 바퀴 진행. 끝난 단계 수(0~4), 첫 답을 받으면 None."""
+    if not st.session_state.get("first") or st.session_state.get("first_done"):
+        return None
+    return 1 + bool(K["types"]) + bool(K["types"] and st.session_state.get("saw_home"))
+
+
+def steps_bar():
+    """첫 바퀴 동안 화면 위의 얇은 띠: 끝난 단계, 지금 단계, 남은 단계. 누르면 그 화면으로 간다."""
+    if (done := first_run()) is None:
+        return
+    row = st.container(horizontal=True, key="steps_bar")
+    for i, (name, page) in enumerate(STEPS):
+        row.button(f"{name} · 끝" if i < done else name, key=f"step{i}", on_click=go, args=(page,),
+                   type="primary" if i == done else "tertiary", disabled=i > done)
 
 
 def set_status(t, table, rid, status):
@@ -458,8 +501,11 @@ HOME_MAX = 2  # 오늘 먼저 볼 것에 띄우는 걸린 자동화 카드 수(�
 FOLLOW_MAX = 2  # 카드마다 이어서 볼 것 수
 
 
-def home(t, K, name):
-    st.caption(name)
+def home(t, K):
+    if not K["types"]:
+        st.header("홈")
+        empty()
+        return
     st.header("오늘 먼저 볼 것")
     autos = t.get("automations", select="id,spec", status="eq.켜짐", order="id")
     runs = [(a, engine.run_automation(K, a["spec"])) for a in autos]
@@ -497,10 +543,6 @@ def home(t, K, name):
         st.metric("확인", f"{n}개")
         st.button(f"확인할 것 {n}개" if n else "확인할 것 없음", on_click=go, args=("확인",), disabled=not n, width="stretch")
 
-    if not K["types"]:
-        st.info("올리기에서 사진이나 CSV를 넣어 주세요.", title="아직 확정된 기록이 없어요")
-        st.button("← 올리기로", on_click=go, args=("올리기",))
-        return
     week(t, K)
     st.subheader("쌓인 기록")
     for T, tab in zip(K["types"], st.tabs(K["types"])):
@@ -543,6 +585,9 @@ def week(t, K):
 
 def upload(t, K):
     st.header("올리기")
+    if not K["types"]:
+        empty()
+        return
     st.caption("손글씨 사진이든 CSV든 그대로 올려 주세요. 무슨 기록인지 고르지 않아도 돼요.")
     paper, write = st.tabs(["사진·CSV", "직접 적기"])
     with paper:
@@ -592,19 +637,20 @@ def write_form(t, K):
         st.success("홈 표에 한 줄 늘었어요." + (f" 확인할 것 {len(new)}개가 있어요." if new else ""), title="저장했어요")
 
 
-def read_file(t):
-    f = st.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"])
+def read_file(t, key="up"):
+    f = st.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"], key=f"{key}file")
     if f and not f.name.lower().endswith(".csv"):
         st.image(f, caption=f.name, alt="올린 사진")
     with st.expander("모델 고르기"):
-        model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m))
-    if st.button("읽기 시작", type="primary"):
+        model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
+    if st.button("읽기 시작", type="primary", key=f"{key}read", width="stretch" if key == "cv" else "content"):
         if not f:
             st.error("사진이나 파일을 먼저 넣어 주세요.")
             return
         ingest = engine.ingest_csv if f.name.lower().endswith(".csv") else engine.ingest_photo
         with st.spinner("읽고 정리하는 중이에요..."):
             try:
+                t = t or new_account()  # 처음 올리는 사람은 이때 계정이 생긴다
                 ingest(t, model, f.name, f.getvalue())
             except ERRORS as e:
                 fail("읽지 못했어요", e)
@@ -618,6 +664,12 @@ def check(t, K):
     st.button("← 올리기로", on_click=go, args=("올리기",))
     qs = sorted(engine.pending(t, engine.CHECK), key=lambda q: q["id"] in st.session_state.get("later", set()))
     st.header(f"확인할 것 {len(qs)}개")
+    if not qs and not K["types"]:
+        empty()
+        return
+    if not qs and first_run() == 2:  # 첫 바퀴: 다 답하면 바로 내 기록으로
+        st.session_state._goto = "홈"
+        st.rerun()
     if not qs:
         st.success("홈에서 기록을 보세요.", title="확인할 것이 없어요")
         recent(t, K)
@@ -700,6 +752,8 @@ def ask(t, K):
     if not K["types"]:
         empty()
         return
+    if first_run() is not None and "qtext" not in st.session_state and examples(K):
+        st.session_state.qtext = examples(K)[0]  # 첫 바퀴: 누르기만 하면 첫 답을 받게
     row = st.container(horizontal=True)
     for i, ex in enumerate(examples(K)):
         row.button(ex, key=f"ex{i}", on_click=st.session_state.__setitem__, args=("qtext", ex))
@@ -727,6 +781,7 @@ def ask(t, K):
             except ERRORS as e:
                 fail("답하지 못했어요", e)
                 return
+        st.session_state.first_done = True
         st.session_state.last = {"q": q, "text": text, "ids": ids, "before": before, "how": understood(calls),
                                  "how_before": understood(calls_before), "checked": verified(t, q)}
     last = st.session_state.get("last")
@@ -1406,31 +1461,31 @@ def entities_page(t, K):
 
 
 # ---- 계정과 메뉴 ----
+# 계정 고르기는 없다. 계정은 주소의 ?a=번호 로 이어지고, 처음 종이를 올릴 때 새로 생긴다.
 
-def make_tenant():
-    name = st.session_state.new_tenant.strip()
-    if name:
-        db.new_tenant(name)
-        st.session_state.tenant_name = name
-        st.session_state.new_tenant = ""
+def account():
+    a = st.query_params.get("a", "")
+    return int(a) if a.isdigit() and db.get("tenants", select="id", id=f"eq.{a}") else None
+
+
+def new_account():
+    tid = db.new_tenant(f"계정 {time.time_ns()}")["id"]  # 이름은 화면에 보이지 않는다. 겹치지만 않게
+    st.query_params["a"] = str(tid)
+    st.session_state.first = True  # 이번 접속에서 처음 온 사람: 첫 바퀴 띠를 보인다
+    return db.Tenant(tid)
 
 
 if "_goto" in st.session_state:
     st.session_state.page = st.session_state.pop("_goto")
 
-accounts = {a["name"]: a["id"] for a in db.tenants()}
-waiting = 0
+tid = account()
+tenant = db.Tenant(tid) if tid else None
+K = knowledge(tid) if tid else {"types": []}
+waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
+if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
+    st.session_state.page = "홈" if K["types"] else "올리기"
 with st.sidebar:
     st.subheader("papersolve")
-    if accounts:
-        st.selectbox("계정", list(accounts), key="tenant_name")
-        tid = accounts[st.session_state.tenant_name]
-        waiting = len(engine.pending(db.Tenant(tid), engine.CHECK))
-        if "page" not in st.session_state:  # 기록이 있는 계정은 홈부터, 빈 계정은 올리기부터
-            st.session_state.page = "홈" if knowledge(tid)["types"] else "올리기"
-    with st.expander("새 계정 만들기", expanded=not accounts):
-        st.text_input("이름", key="new_tenant", placeholder="예: 우리마트")
-        st.button("만들기", on_click=make_tenant)
     st.radio("메뉴", PAGES, key="page", format_func=lambda p: f"{p}  {waiting}" if p == "확인" and waiting else p,
              on_change=lambda: st.session_state.__setitem__("_close_sidebar", time.time()))
 
@@ -1441,17 +1496,27 @@ const d = window.parent.document;
 if (window.parent.innerWidth < 769) d.querySelector('[data-testid="stSidebarCollapseButton"] button')?.click();
 </script>""", height=1)
 
-if not accounts:
-    st.info("계정마다 빈 상태에서 시작해요.", title="왼쪽에서 계정을 먼저 만들어 주세요")
-    st.stop()
+remember = (f'localStorage.setItem("ps_account", "{tid}")' if tid else
+            'localStorage.removeItem("ps_account")' if st.query_params.get("a") else
+            'const a = localStorage.getItem("ps_account"); if (a) { const u = new URL(w.location.href); '
+            'u.searchParams.set("a", a); w.location.replace(u.href); }')
+if st.session_state.get("_remembered") != (tid, st.query_params.get("a")):
+    # 주소에 계정이 없으면 이 브라우저가 기억한 계정으로 다시 열고, 있으면 기억해 둔다. 없는 번호면 지운다
+    st.session_state._remembered = (tid, st.query_params.get("a"))
+    st.container(key="remember").iframe(f"<script>const w = window.parent; {remember.replace('localStorage', 'w.localStorage')}</script>", height=1)
 
-tenant = db.Tenant(accounts[st.session_state.tenant_name])
-K = knowledge(tenant.id)
 page = st.session_state.page
-if page == "홈":
-    home(tenant, K, st.session_state.tenant_name)
-elif page == "올리기":
+if page == "홈" and K["types"]:
+    st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
+if tenant:
+    steps_bar()
+if page == "올리기":
     upload(tenant, K)
+elif not tenant:
+    st.header(page)
+    empty()
+elif page == "홈":
+    home(tenant, K)
 else:
     {"확인": check, "묻기": ask, "지식그래프": graph, "대상": entities_page, "대시보드": dashboard,
      "자동화": automation}[page](tenant, K)

@@ -23,3 +23,6 @@ app/
 # 리서치 보고서
 reports/
 research_notes/
+
+# DB를 통째로 내보낸 더미 계정 (dummy/ 의 나머지 샘플 파일은 올린다)
+dummy/db/

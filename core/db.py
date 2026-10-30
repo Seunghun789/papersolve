@@ -33,10 +33,6 @@ def post(table, body, **params):
     return call("POST", table, params, body, prefer)
 
 
-def tenants():
-    return get("tenants", select="id,name", order="id")
-
-
 def new_tenant(name):
     return post("tenants", {"name": name})[0]
 
