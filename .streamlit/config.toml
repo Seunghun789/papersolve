@@ -3,7 +3,7 @@ toolbarMode = "minimal"
 
 [theme]
 base = "light"
-primaryColor = "#1F1F1F"
+primaryColor = "#0F766E"  # app.py COLOR 의 버튼 채움색
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F4F4F5"
 textColor = "#1F1F1F"

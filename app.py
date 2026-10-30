@@ -9,6 +9,17 @@ import streamlit as st
 from core import db, engine, llm
 
 st.set_page_config(page_title="papersolve", layout="wide", initial_sidebar_state="expanded")
+# 색은 역할 이름으로 여기에만 둔다. 버튼 채움색은 .streamlit/config.toml 의 primaryColor 와 같은 값이다.
+COLOR = {
+    "accent_bg": "#F0FDFA", "accent_text": "#115E59",          # 고른 메뉴
+    "text_muted": "#71717A", "hover_bg": "#ECECEE",            # 설명 글, 메뉴 위에 올렸을 때
+    "type_fill": "#0F766E", "prop_dot": "#5EEAD4",              # 지식그래프: 기록 종류, 칸 (청록)
+    "class_fill": "#C2410C", "attr_dot": "#FDBA74",             # 지식그래프: 대상 분류, 분류 정보 (주황)
+    "entity_dot": "#D4D4D8", "entity_link": "#C2410C",          # 지식그래프: 대상, 대상 쌍
+    "line_weak": "#E4E4E7", "line": "#71717A", "line_strong": "#52525B",
+}
+st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent-text: {COLOR["accent_text"]};
+--ps-text-muted: {COLOR["text_muted"]}; --ps-hover-bg: {COLOR["hover_bg"]};}}</style>""", unsafe_allow_html=True)
 st.markdown("""<style>
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] {display: none !important;}
@@ -18,15 +29,15 @@ section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px 
 h1 {font-size: 24px !important; font-weight: 600 !important; letter-spacing: -0.01em;}
 h2 {font-size: 20px !important; font-weight: 600 !important;}
 h3 {font-size: 16px !important; font-weight: 600 !important; padding-top: 16px !important;}
-[data-testid="stCaptionContainer"] {color: #71717A !important; max-width: 46rem;}
+[data-testid="stCaptionContainer"] {color: var(--ps-text-muted) !important; max-width: 46rem;}
 /* 메뉴: 동그라미를 숨기고 고른 줄은 메뉴 폭 전체를 칠한다 */
 section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stRadio"]),
 section[data-testid="stSidebar"] [data-testid="stRadio"], section[data-testid="stSidebar"] [data-testid="stRadioGroup"],
 section[data-testid="stSidebar"] [data-testid="stRadioGroup"] > div {width: 100% !important;}
 section[data-testid="stSidebar"] [data-testid="stRadioOption"] {width: 100%; padding: 8px 12px; border-radius: 8px; margin: 0;}
 section[data-testid="stSidebar"] [data-testid="stRadioOption"] > div > div:first-child {display: none;}
-section[data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {background: #ECECEE;}
-section[data-testid="stSidebar"] [data-testid="stRadioOption"][data-selected="true"] {background: #E4E4E7; font-weight: 600;}
+section[data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {background: var(--ps-hover-bg);}
+section[data-testid="stSidebar"] [data-testid="stRadioOption"][data-selected="true"] {background: var(--ps-accent-bg); color: var(--ps-accent-text); font-weight: 600;}
 section[data-testid="stSidebar"] h3 {font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.02em; padding-top: 0 !important;}
 [class*="st-key-card"] [data-testid="stMarkdownContainer"] p strong {font-size: 15px;}
 /* 답할 카드만 살짝 떠 보이게 (보여 주기만 하는 칸은 평평하게) */
@@ -35,7 +46,7 @@ section[data-testid="stSidebar"] h3 {font-size: 18px !important; font-weight: 70
 [data-testid="stFileUploaderDropzone"] button * {display: none;}
 [data-testid="stFileUploaderDropzone"] button::after {content: "파일 고르기";}
 [data-testid="stFileUploaderDropzoneInstructions"] * {display: none;}
-[data-testid="stFileUploaderDropzoneInstructions"]::after {content: "200MB까지 · 사진(PNG, JPG) 또는 CSV"; font-size: 0.8rem; color: #71717A;}
+[data-testid="stFileUploaderDropzoneInstructions"]::after {content: "200MB까지 · 사진(PNG, JPG) 또는 CSV"; font-size: 0.8rem; color: var(--ps-text-muted);}
 </style>""", unsafe_allow_html=True)
 ERRORS = (anthropic.APIError, requests.RequestException, RuntimeError, KeyError, ValueError, pd.errors.ParserError)
 PAGES = ["홈", "올리기", "확인", "묻기", "지식그래프", "대상", "대시보드", "자동화"]
@@ -182,6 +193,16 @@ def save_fix(t, q):
     st.toast("고친 값을 저장했어요.")
 
 
+FILLED = []  # 이번 화면에서 채운 버튼을 이미 썼는지. 스크립트가 다시 돌 때마다 비워진다
+
+
+def first_fill():
+    """이번 화면에서 처음 부르면 'primary', 그 뒤로는 'secondary'."""
+    kind = "secondary" if FILLED else "primary"
+    FILLED.append(1)
+    return kind
+
+
 def buttons(q, no, yes, extra=None):
     user = bool((q.get("evidence") or {}).get("user"))
     undo = q["kind"] in engine.UNDOABLE and q["payload"].get("op") != "칸 더하기"
@@ -191,7 +212,7 @@ def buttons(q, no, yes, extra=None):
                kwargs={"done": "올린 것을 거두었어요." if user else "넘겼어요."})
     if extra:
         row.button(extra[0], key=f"x{q['id']}", on_click=act, args=extra[1], kwargs={"done": "하나씩 물을게요."})
-    row.button(yes[0], key=f"y{q['id']}", type="primary", on_click=act, args=yes[1], kwargs={"done": yes_done})
+    row.button(yes[0], key=f"y{q['id']}", type=first_fill(), on_click=act, args=yes[1], kwargs={"done": yes_done})
 
 
 def show_impact(t, K, q):
@@ -267,7 +288,7 @@ def card(t, K, q):
             else:
                 row = st.container(horizontal=True, horizontal_alignment="right")
                 row.button("아니요, 고칠게요", key=f"n{q['id']}", on_click=start_edit, args=(q,))
-                row.button("네, 맞아요", key=f"y{q['id']}", type="primary", on_click=act,
+                row.button("네, 맞아요", key=f"y{q['id']}", type=first_fill(), on_click=act,
                            args=(engine.answer_value, t, q), kwargs={"done": "반영했어요."})
         elif kind == "연결":
             st.write(f"**{link_sentence(P)}**")
@@ -721,7 +742,7 @@ def node_id(K, ref):
 
 
 def graph_data(K, pend, with_entities=False):
-    """기록 종류(남색 원)·칸(작은 남색 점)·대상 분류(황토 원)·분류 정보·상위 분류·관계. 확정은 실선, 제안은 점선."""
+    """기록 종류(청록 원)·칸(작은 청록 점)·대상 분류(주황 상자)·분류 정보·상위 분류·관계. 확정은 실선, 제안은 점선."""
     nodes, edges = [], []
 
     def dot(id_, label, color, big=False, box=False):
@@ -736,37 +757,37 @@ def graph_data(K, pend, with_entities=False):
         edges.append({"from": a, "to": b, **kw})
 
     for T in K["types"]:
-        dot(f"T:{T}", T, "#6366F1", big=True)
+        dot(f"T:{T}", T, COLOR["type_fill"], big=True)
         for p in K["props"][T]:
-            dot(f"P:{T}.{p['name']}", p["name"], "#A5B4FC")
-            line(f"T:{T}", f"P:{T}.{p['name']}", color="#E4E4E7")
+            dot(f"P:{T}.{p['name']}", p["name"], COLOR["prop_dot"])
+            line(f"T:{T}", f"P:{T}.{p['name']}", color=COLOR["line_weak"])
             if p.get("ref_class") in K["classes"]:
                 line(f"P:{T}.{p['name']}", f"C:{p['ref_class']}", label="가리킴", dashes=[2, 4], arrows="to")
     for C, parent in K["classes"].items():
         n = sum(1 for e in K["entities"].values() if e["class_name"] == C)
-        dot(f"C:{C}", f"{C}\n대상 {n}개", "#D4A72C", box=True)
+        dot(f"C:{C}", f"{C}\n대상 {n}개", COLOR["class_fill"], box=True)
         if parent:
-            line(f"C:{C}", f"C:{parent}", label="종류의 하나", arrows="to", color="#71717A")
+            line(f"C:{C}", f"C:{parent}", label="종류의 하나", arrows="to", color=COLOR["line"])
         for a in K["props"].get(C, []):
-            dot(f"A:{C}.{a['name']}", a["name"], "#F1DDA6")
-            line(f"C:{C}", f"A:{C}.{a['name']}", color="#E4E4E7")
+            dot(f"A:{C}.{a['name']}", a["name"], COLOR["attr_dot"])
+            line(f"C:{C}", f"A:{C}.{a['name']}", color=COLOR["line_weak"])
     for l in K["links"]:
         label = (l.get("name") or l["kind"]) + (" (" + ", ".join(d["name"] for d in l["attr_defs"]) + ")" if l.get("attr_defs") else "")
-        line(node_id(K, l["from_ref"]), node_id(K, l["to_ref"]), label=label, arrows="to", width=1.6, color="#52525B")
+        line(node_id(K, l["from_ref"]), node_id(K, l["to_ref"]), label=label, arrows="to", width=1.6, color=COLOR["line_strong"])
     for q in pend:
         P = q["payload"]
         line(node_id(K, P["from"]), node_id(K, P["to"]), label=f"{P.get('name') or P['kind']}?", arrows="to", dashes=True)
     if with_entities:
         for e in list(K["entities"].values())[:60]:
-            dot(f"E:{e['id']}", e["name"], "#D4D4D8")
-            line(f"E:{e['id']}", f"C:{e['class_name']}", color="#E4E4E7")
+            dot(f"E:{e['id']}", e["name"], COLOR["entity_dot"])
+            line(f"E:{e['id']}", f"C:{e['class_name']}", color=COLOR["line_weak"])
         for l in K["links"]:
             if "." in l["from_ref"] or "." in l["to_ref"]:
                 continue
             for a, b in engine.link_pairs(K, l)[[l["from_ref"], l["to_ref"]]].itertuples(index=False):
                 x, y = engine.find_entity(K, l["from_ref"], a), engine.find_entity(K, l["to_ref"], b)
                 if x and y:
-                    line(f"E:{x}", f"E:{y}", arrows="to", color="#D4A72C")
+                    line(f"E:{x}", f"E:{y}", arrows="to", color=COLOR["entity_link"])
     ids = {n["id"] for n in nodes}
     return nodes, [e for e in edges if e["from"] in ids and e["to"] in ids]
 
@@ -903,7 +924,7 @@ def graph(t, K):
         nodes, edges = graph_data(K, pend, view == "대상까지")
         KG(data={"nodes": nodes, "edges": edges, "selected": st.session_state.get("kg_pick")}, key="kg",
            on_clicked_change=pick_node)
-        st.caption("남색 원 기록 종류 · 황토 상자 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
+        st.caption("청록 원 기록 종류 · 주황 상자 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
         st.caption("점을 누르면 오른쪽에서 설정을 고치고, 빈 곳을 누르면 닫혀요.")
         with st.expander("점 고르기"):  # 마우스 없이도 점을 고를 수 있게
             names = {n["id"]: f"{n['label'].replace(chr(10), ' ')} · {NODE_KO[n['id'][0]]}" for n in nodes}

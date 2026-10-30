@@ -1384,6 +1384,8 @@ FIELD_KEYS = ("field", "groupby", "fields")
 # 색과 글꼴은 대시보드의 다른 차트와 같은 Streamlit 테마를 따르며, 날짜·요일은 한국어로 쓴다.
 STYLE_KEYS = ("$schema", "config", "width", "height", "autosize", "padding", "background", "title")
 MONTHS = [f"{m}월" for m in range(1, 13)]
+# 차트 계열 색. 강조색(청록, 버튼)과 대상 분류(주황, 지식그래프)를 빼고 고른 순서로, 색맹 구분 검사를 통과했다.
+CHART = ["#4F46E5", "#D97706", "#DB2777", "#65A30D", "#1F1F1F", "#A1A1AA"]
 VIEW_STYLE = {
     "locale": {"time": {"dateTime": "%Y. %m. %d. %A %X", "date": "%Y. %m. %d.", "time": "%H:%M", "periods": ["오전", "오후"],
                         "days": ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
@@ -1391,10 +1393,10 @@ VIEW_STYLE = {
     "font": "-apple-system, BlinkMacSystemFont, Apple SD Gothic Neo, sans-serif",
     "background": "transparent",
     "view": {"stroke": None},
-    "range": {"category": ["#1F1F1F", "#6366F1", "#D4A72C", "#10B981", "#A1A1AA", "#EF4444"]},
-    "mark": {"color": "#1F1F1F"},
+    "range": {"category": CHART},
+    "mark": {"color": CHART[0]},
     "bar": {"color": "#1F1F1F", "cornerRadiusEnd": 3},
-    "line": {"color": "#1F1F1F", "strokeWidth": 2},
+    "line": {"color": CHART[0], "strokeWidth": 2},
     "point": {"color": "#1F1F1F", "filled": True},
     "legend": {"orient": "bottom", "labelFontSize": 12, "labelColor": "#52525B", "titleFontSize": 12, "titleColor": "#71717A", "titleFontWeight": 500},
     "axis": {"labelFontSize": 12, "labelColor": "#71717A", "titleFontSize": 12, "titleColor": "#71717A", "titleFontWeight": 500,
