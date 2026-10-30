@@ -24,7 +24,16 @@ st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent
 st.markdown("""<style>
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
 .st-key-close_sidebar, .st-key-remember {display: none;}
-.st-key-cv_on0 {border: 2px solid #0F766E !important;}  /* 첫 바퀴 캔버스: 지금 할 칸 */
+.st-key-cv_on0 {border: 2px solid #0F766E !important;}
+section[data-testid="stSidebar"] [class*="st-key-nav_"] button {justify-content: flex-start; padding: 6px 12px; border-radius: 8px;}
+section[data-testid="stSidebar"] [class*="st-key-nav_"] button:hover {background: var(--ps-hover-bg);}
+section[data-testid="stSidebar"] [class*="st-key-navon_"] button {justify-content: flex-start; padding: 6px 12px; border-radius: 8px;
+  background: var(--ps-accent-bg); color: var(--ps-accent-text); font-weight: 600;}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 8px 0 -8px 4px;}
+.ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
+.ps-steps .ps-on {padding: 4px 10px; border: 1px solid #0F766E; border-radius: 8px; background: var(--ps-accent-bg);
+  color: var(--ps-accent-text); font-weight: 600;}
+.ps-steps .ps-off, .ps-steps .ps-arrow {color: #A1A1AA;}  /* 첫 바퀴 캔버스: 지금 할 칸 */
 [class*="st-key-cv_off"] {opacity: 0.55;}                  /* 아직 오지 않은 칸 */
 .ps-skel {height: 12px; border-radius: 4px; background: #F4F4F5; margin: 0 0 12px 0;}  /* 사이드바를 접는 스크립트 칸은 자리를 차지하지 않게 */
 @media (min-width: 769px) {
@@ -39,14 +48,6 @@ h1 {font-size: 24px !important; font-weight: 600 !important; letter-spacing: -0.
 h2 {font-size: 20px !important; font-weight: 600 !important;}
 h3 {font-size: 16px !important; font-weight: 600 !important; padding-top: 16px !important;}
 [data-testid="stCaptionContainer"] {color: var(--ps-text-muted) !important; max-width: 46rem;}
-/* 메뉴: 동그라미를 숨기고 고른 줄은 메뉴 폭 전체를 칠한다 */
-section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stRadio"]),
-section[data-testid="stSidebar"] [data-testid="stRadio"], section[data-testid="stSidebar"] [data-testid="stRadioGroup"],
-section[data-testid="stSidebar"] [data-testid="stRadioGroup"] > div {width: 100% !important;}
-section[data-testid="stSidebar"] [data-testid="stRadioOption"] {width: 100%; padding: 8px 12px; border-radius: 8px; margin: 0;}
-section[data-testid="stSidebar"] [data-testid="stRadioOption"] > div > div:first-child {display: none;}
-section[data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {background: var(--ps-hover-bg);}
-section[data-testid="stSidebar"] [data-testid="stRadioOption"][data-selected="true"] {background: var(--ps-accent-bg); color: var(--ps-accent-text); font-weight: 600;}
 section[data-testid="stSidebar"] h3 {font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.02em; padding-top: 0 !important;}
 [class*="st-key-card"] [data-testid="stMarkdownContainer"] p strong {font-size: 15px;}
 /* 답할 카드만 살짝 떠 보이게 (보여 주기만 하는 칸은 평평하게) */
@@ -100,21 +101,56 @@ def go(page):
     st.session_state.page = page
 
 
-STEPS = [("① 종이", "올리기"), ("② 칸 확인", "확인"), ("③ 내 기록", "홈"), ("④ 묻기", "묻기")]
-SKELETON = {  # 아직 오지 않은 단계의 빈 틀: (흐린 줄 폭들, 한 줄 안내)
-    1: (["40%", "25%", "30%"] * 3, "AI가 찾은 칸이 여기에 와요"),
-    2: (["35%", "100%", "100%", "100%", "100%"], "확정한 기록이 표와 추이로 쌓여요"),
-    3: (["100%", "70%"], "답과 근거 기록이 여기에 와요"),
+STEPS = [("① 종이", "올리기"), ("② 확인", "확인"), ("③ 내 기록", "홈"), ("④ 묻기", "묻기")]
+GROUPS = [(None, ["홈"]), ("① 종이", ["올리기"]), ("② 확인", ["확인", "대상", "지식그래프"]),
+          ("③ 내 기록", ["대시보드", "자동화"]), ("④ 묻기", ["묻기"])]  # 사이드바 메뉴 묶음. 홈은 따로
+PART = {"올리기": (0, ""), "확인": (1, "칸"), "대상": (1, "대상"), "지식그래프": (1, "관계"),
+        "대시보드": (2, "지표"), "자동화": (2, "챙길 일"), "묻기": (3, "")}  # 메뉴가 네 단계 중 어디인지
+NOTE = {
+    "홈": "챙길 일을 켜 두면 걸린 대상이 여기에 먼저 보여요.",
+    "올리기": "종이 한 장을 올리면 아래 순서로 채워져요.",
+    "확인": "올린 종이에서 AI가 찾은 칸을 원본과 나란히 보고 [맞아요]로 확인해요.",
+    "대상": "같은 품목·설비·고객을 하나로 묶고, 분류와 정보를 확인해요.",
+    "지식그래프": "칸과 대상이 어떻게 이어지는지(기준, 의존 등)를 그림으로 확인해요.",
+    "대시보드": "확인한 기록의 숫자 칸 추이와 지표가 여기에 그려져요.",
+    "자동화": "확인한 기준으로 챙길 일을 켜 두면 홈에 먼저 보여요.",
+    "묻기": "쌓인 기록에 물으면, 기록에서 센 답과 근거 기록·원본 사진이 함께 와요.",
 }
+TITLE = {"홈": "오늘 먼저 볼 것", "확인": "확인"}
 
 
-def empty():
-    """기록이 없을 때의 화면: 종이 → 칸 확인 → 내 기록 → 묻기 네 칸. 첫 칸에서 바로 올린다.
-    예시 데이터는 쓰지 않고, 아직 오지 않은 칸은 빈 틀로 둔다."""
+def bars(*widths, gap=12, h=12):
+    """빈 틀의 흐린 줄. 예시 값 대신 자리만 보인다."""
+    st.markdown("".join(f'<div class="ps-skel" style="width:{w};height:{h}px;margin-bottom:{gap}px"></div>'
+                        for w in widths), unsafe_allow_html=True)
+
+
+def faint_line():
+    st.markdown('<svg viewBox="0 0 600 120" width="100%" height="120"><polyline fill="none" stroke="#E4E4E7" stroke-width="3" '
+                'points="0,100 90,80 180,88 270,50 360,64 450,30 600,40"/></svg>', unsafe_allow_html=True)
+
+
+def place(page):
+    """맨 위 단계 표시: 이 메뉴가 '① 종이 → ② 확인 → ③ 내 기록 → ④ 묻기' 중 어디인지. 홈은 따로라 보이지 않는다."""
+    if page not in PART:
+        return
+    step, part = PART[page]
+    st.markdown('<div class="ps-steps">' + '<span class="ps-arrow">→</span>'.join(
+        f'<span class="{"ps-on" if i == step else "ps-off"}">{name}{" · " + part if i == step and part else ""}</span>'
+        for i, (name, _) in enumerate(STEPS)) + "</div>", unsafe_allow_html=True)
+
+
+def upload_button():
+    left, right = st.columns([1, 4], vertical_alignment="center")
+    left.button("사진 올리기", type="primary", on_click=go, args=("올리기",), key="up_go", width="stretch")
+    right.caption("종이 한 장이면 이 화면이 채워져요.")
+
+
+def canvas():
+    """올리기의 첫 화면: 종이 → 확인 → 내 기록 → 묻기 네 칸. 첫 칸에서 바로 올린다."""
     waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
-    st.caption("종이 한 장을 올리면 아래 순서로 채워져요.")
-    cols = st.columns(4)
-    for i, ((name, _), col) in enumerate(zip(STEPS, cols)):
+    notes = ["", "칸 · 대상 · 관계를 확인해요", "표 · 지표 · 챙길 일로 쌓여요", "답과 근거 기록이 여기에 와요"]
+    for i, ((name, _), col) in enumerate(zip(STEPS, st.columns(4))):
         with col, st.container(border=True, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
             st.markdown(f"**{name}**")
             if i == 0 and waiting:
@@ -123,9 +159,79 @@ def empty():
             elif i == 0:
                 read_file(tenant, key="cv")
             else:
-                bars, note = SKELETON[i]
-                st.markdown("".join(f'<div class="ps-skel" style="width:{w}"></div>' for w in bars), unsafe_allow_html=True)
-                st.caption(note)
+                bars("100%", "70%", "100%", "55%", "100%")
+                st.caption(notes[i])
+
+
+def empty():
+    """기록이 없을 때의 화면. 메뉴마다 채워졌을 때의 모양을 빈 틀로 보여 주고, 예시 데이터는 쓰지 않는다."""
+    page = st.session_state.page
+    place(page)
+    st.caption(NOTE[page])
+    if page == "올리기":
+        canvas()
+        return
+    if page == "홈":
+        for i, col in enumerate(st.columns(3)):
+            with col, st.container(border=True, height=CARD_H):
+                if i == 2:
+                    st.caption("확인")
+                bars("60%", "30%", "90%", h=14)
+        st.caption("켜 둔 자동화에 걸린 대상과 마지막 기록 날짜가 이 카드에 와요.")
+        st.subheader("쌓인 기록")
+        with st.container(border=True):
+            faint_line()
+    elif page == "확인":
+        left, right = st.columns([1, 1.3])
+        with left, st.container(border=True, height=420):
+            st.markdown("**확인할 종이가 아직 없어요**")
+            st.button("사진 올리기", type="primary", on_click=go, args=("올리기",), key="up_go", width="stretch")
+        with right:
+            with st.container(border=True):
+                st.caption("새 기록 종류")
+                bars("60%", "100%", "100%", "100%", "100%")
+            with st.container(border=True):
+                st.caption("읽기 애매한 칸")
+                bars("80%", "50%")
+        return
+    elif page == "대상":
+        left, right = st.columns([1, 3])
+        with left, st.container(border=True):
+            st.caption("분류")
+            bars("70%", "50%", "50%", "70%")
+        with right, st.container(border=True):
+            st.caption("대상 표")
+            for _ in range(6):
+                bars("100%")
+    elif page == "지식그래프":
+        left, right = st.columns([3, 1])
+        with left, st.container(border=True):
+            st.markdown('<svg viewBox="0 0 600 300" width="100%" height="300" stroke="#E4E4E7" stroke-width="2" fill="#F4F4F5">'
+                        '<path d="M200 120 L320 70 L380 200 L240 250 Z M320 70 L460 120 L380 200" fill="none"/>'
+                        '<circle cx="200" cy="120" r="22"/><circle cx="380" cy="200" r="22"/><circle cx="320" cy="70" r="12"/>'
+                        '<circle cx="240" cy="250" r="12"/><circle cx="460" cy="120" r="12"/></svg>', unsafe_allow_html=True)
+        with right, st.container(border=True):
+            st.caption("점을 누르면 열리는 설정")
+            bars("100%", "70%", "100%", "50%")
+    elif page == "대시보드":
+        for col in st.columns(3):
+            with col, st.container(border=True):
+                bars("50%", "30%", "40%", h=14)
+        with st.container(border=True):
+            faint_line()
+    elif page == "자동화":
+        with st.container(border=True):
+            st.caption("챙길 일을 말로 적어요")
+        for _ in range(3):
+            with st.container(border=True):
+                bars("40%", "70%")
+    elif page == "묻기":
+        with st.container(border=True):
+            st.caption("이렇게 찾았어요")
+            bars("100%", "75%", "50%")
+        st.caption("근거 기록 N줄")
+        bars("100%", "100%", "100%")
+    upload_button()
 
 
 def first_run():
@@ -140,7 +246,7 @@ def steps_bar():
     if (done := first_run()) is None:
         return
     row = st.container(horizontal=True, key="steps_bar")
-    for i, (name, page) in enumerate(STEPS):
+    for i, (name, page) in enumerate(STEPS):  # ③ 내 기록은 쌓인 기록이 보이는 홈으로 간다
         row.button(f"{name} · 끝" if i < done else name, key=f"step{i}", on_click=go, args=(page,),
                    type="primary" if i == done else "tertiary", disabled=i > done)
 
@@ -503,7 +609,7 @@ FOLLOW_MAX = 2  # 카드마다 이어서 볼 것 수
 
 def home(t, K):
     if not K["types"]:
-        st.header("홈")
+        st.header("오늘 먼저 볼 것")
         empty()
         return
     st.header("오늘 먼저 볼 것")
@@ -661,12 +767,13 @@ def read_file(t, key="up"):
 
 
 def check(t, K):
-    st.button("← 올리기로", on_click=go, args=("올리기",))
     qs = sorted(engine.pending(t, engine.CHECK), key=lambda q: q["id"] in st.session_state.get("later", set()))
-    st.header(f"확인할 것 {len(qs)}개")
     if not qs and not K["types"]:
+        st.header("확인")
         empty()
         return
+    st.button("← 올리기로", on_click=go, args=("올리기",))
+    st.header(f"확인할 것 {len(qs)}개")
     if not qs and first_run() == 2:  # 첫 바퀴: 다 답하면 바로 내 기록으로
         st.session_state._goto = "홈"
         st.rerun()
@@ -1475,6 +1582,12 @@ def new_account():
     return db.Tenant(tid)
 
 
+def pick(p):
+    """사이드바 메뉴: 화면을 바꾸고, 좁은 화면이면 사이드바를 접는다."""
+    st.session_state.page = p
+    st.session_state._close_sidebar = time.time()
+
+
 if "_goto" in st.session_state:
     st.session_state.page = st.session_state.pop("_goto")
 
@@ -1486,8 +1599,12 @@ if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 �
     st.session_state.page = "홈" if K["types"] else "올리기"
 with st.sidebar:
     st.subheader("papersolve")
-    st.radio("메뉴", PAGES, key="page", format_func=lambda p: f"{p}  {waiting}" if p == "확인" and waiting else p,
-             on_change=lambda: st.session_state.__setitem__("_close_sidebar", time.time()))
+    for head, items in GROUPS:
+        if head:
+            st.caption(head)
+        for p in items:
+            st.button(f"{p}  {waiting}" if p == "확인" and waiting else p, key=f"{'navon' if p == st.session_state.page else 'nav'}_{p}", type="tertiary",
+                      on_click=pick, args=(p,), width="stretch")
 
 if n := st.session_state.pop("_close_sidebar", 0):
     # 좁은 화면(휴대폰)에서 메뉴를 고르면 사이드바를 접는다. 넓은 화면은 그대로 둔다. n(고른 시각)은 매번 새로 실행되게 붙인다
@@ -1513,7 +1630,7 @@ if tenant:
 if page == "올리기":
     upload(tenant, K)
 elif not tenant:
-    st.header(page)
+    st.header(TITLE.get(page, page))
     empty()
 elif page == "홈":
     home(tenant, K)
