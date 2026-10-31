@@ -1,0 +1,1263 @@
+{
+ "tenant": {
+  "id": 2,
+  "name": "시험 · 중개 메모"
+ },
+ "object_types": [
+  {
+   "id": 2,
+   "tenant_id": 2,
+   "name": "고객 요청",
+   "created_at": "2026-10-25T08:06:33.715797+00:00",
+   "kind": "기록",
+   "parent_name": null
+  },
+  {
+   "id": 10,
+   "tenant_id": 2,
+   "name": "고객",
+   "created_at": "2026-10-25T12:39:34.279+00:00",
+   "kind": "대상",
+   "parent_name": null
+  }
+ ],
+ "property_defs": [
+  {
+   "id": 10,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "접수일",
+   "dtype": "date",
+   "unit": null,
+   "is_entity": false,
+   "position": 0,
+   "created_at": "2026-10-25T08:06:33.923184+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 11,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "고객",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": true,
+   "position": 1,
+   "created_at": "2026-10-25T08:06:34.454544+00:00",
+   "ref_class": "고객",
+   "description": null
+  },
+  {
+   "id": 12,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "지역",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 2,
+   "created_at": "2026-10-25T08:06:34.969089+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 13,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "예산",
+   "dtype": "number",
+   "unit": "만원",
+   "is_entity": false,
+   "position": 3,
+   "created_at": "2026-10-25T08:06:35.506063+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 14,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "요청",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 4,
+   "created_at": "2026-10-25T08:06:36.090878+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 15,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "미팅",
+   "dtype": "date",
+   "unit": null,
+   "is_entity": false,
+   "position": 5,
+   "created_at": "2026-10-25T08:06:36.645572+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 16,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "연락처",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 6,
+   "created_at": "2026-10-25T08:06:48.376527+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 17,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "name": "상태",
+   "dtype": "choice",
+   "unit": null,
+   "is_entity": false,
+   "position": 7,
+   "created_at": "2026-10-25T08:06:51.230665+00:00",
+   "ref_class": null,
+   "description": null
+  }
+ ],
+ "alias_dict": [
+  {
+   "id": 19,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "접수일",
+   "prop_name": "접수일",
+   "created_at": "2026-10-25T08:06:34.071511+00:00"
+  },
+  {
+   "id": 21,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "고객",
+   "prop_name": "고객",
+   "created_at": "2026-10-25T08:06:34.610419+00:00"
+  },
+  {
+   "id": 23,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "지역",
+   "prop_name": "지역",
+   "created_at": "2026-10-25T08:06:35.12359+00:00"
+  },
+  {
+   "id": 25,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "예산",
+   "prop_name": "예산",
+   "created_at": "2026-10-25T08:06:35.650507+00:00"
+  },
+  {
+   "id": 27,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "요청",
+   "prop_name": "요청",
+   "created_at": "2026-10-25T08:06:36.253471+00:00"
+  },
+  {
+   "id": 29,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "미팅",
+   "prop_name": "미팅",
+   "created_at": "2026-10-25T08:06:36.803873+00:00"
+  },
+  {
+   "id": 31,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "연락처",
+   "prop_name": "연락처",
+   "created_at": "2026-10-25T08:06:48.616121+00:00"
+  },
+  {
+   "id": 33,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "요청사항",
+   "prop_name": "요청",
+   "created_at": "2026-10-25T08:06:49.636196+00:00"
+  },
+  {
+   "id": 34,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "예산(만원)",
+   "prop_name": "예산",
+   "created_at": "2026-10-25T08:06:50.317838+00:00"
+  },
+  {
+   "id": 35,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "alias": "상태",
+   "prop_name": "상태",
+   "created_at": "2026-10-25T08:06:51.374156+00:00"
+  }
+ ],
+ "link_types": [],
+ "entities": [
+  {
+   "id": 11,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "황지호",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:36.266013+00:00"
+  },
+  {
+   "id": 12,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "신예린",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:36.722081+00:00"
+  },
+  {
+   "id": 13,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "조민재",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:37.119056+00:00"
+  },
+  {
+   "id": 14,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "한소율",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:37.490821+00:00"
+  },
+  {
+   "id": 15,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "임도현",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:37.872598+00:00"
+  },
+  {
+   "id": 16,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "권나은",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:38.200632+00:00"
+  },
+  {
+   "id": 17,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "오세훈",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:38.659402+00:00"
+  },
+  {
+   "id": 18,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "류아린",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:38.996067+00:00"
+  },
+  {
+   "id": 19,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "노지후",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:39.388462+00:00"
+  },
+  {
+   "id": 20,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "배하윤",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:39.791591+00:00"
+  },
+  {
+   "id": 21,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "문태양",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:40.182887+00:00"
+  },
+  {
+   "id": 22,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "문태양 010-1234-1037",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:40.495891+00:00"
+  },
+  {
+   "id": 23,
+   "tenant_id": 2,
+   "class_name": "고객",
+   "name": "서지안",
+   "attrs": {},
+   "created_at": "2026-10-25T12:39:40.80014+00:00"
+  }
+ ],
+ "entity_aliases": [
+  {
+   "id": 11,
+   "tenant_id": 2,
+   "entity_id": 11,
+   "alias": "황지호",
+   "created_at": "2026-10-25T12:39:36.50264+00:00"
+  },
+  {
+   "id": 12,
+   "tenant_id": 2,
+   "entity_id": 12,
+   "alias": "신예린",
+   "created_at": "2026-10-25T12:39:36.884791+00:00"
+  },
+  {
+   "id": 13,
+   "tenant_id": 2,
+   "entity_id": 13,
+   "alias": "조민재",
+   "created_at": "2026-10-25T12:39:37.271779+00:00"
+  },
+  {
+   "id": 14,
+   "tenant_id": 2,
+   "entity_id": 14,
+   "alias": "한소율",
+   "created_at": "2026-10-25T12:39:37.650202+00:00"
+  },
+  {
+   "id": 15,
+   "tenant_id": 2,
+   "entity_id": 15,
+   "alias": "임도현",
+   "created_at": "2026-10-25T12:39:38.044557+00:00"
+  },
+  {
+   "id": 16,
+   "tenant_id": 2,
+   "entity_id": 16,
+   "alias": "권나은",
+   "created_at": "2026-10-25T12:39:38.423069+00:00"
+  },
+  {
+   "id": 17,
+   "tenant_id": 2,
+   "entity_id": 17,
+   "alias": "오세훈",
+   "created_at": "2026-10-25T12:39:38.825391+00:00"
+  },
+  {
+   "id": 18,
+   "tenant_id": 2,
+   "entity_id": 18,
+   "alias": "류아린",
+   "created_at": "2026-10-25T12:39:39.229588+00:00"
+  },
+  {
+   "id": 19,
+   "tenant_id": 2,
+   "entity_id": 19,
+   "alias": "노지후",
+   "created_at": "2026-10-25T12:39:39.645361+00:00"
+  },
+  {
+   "id": 20,
+   "tenant_id": 2,
+   "entity_id": 20,
+   "alias": "배하윤",
+   "created_at": "2026-10-25T12:39:40.019984+00:00"
+  },
+  {
+   "id": 21,
+   "tenant_id": 2,
+   "entity_id": 21,
+   "alias": "문태양",
+   "created_at": "2026-10-25T12:39:40.343801+00:00"
+  },
+  {
+   "id": 22,
+   "tenant_id": 2,
+   "entity_id": 22,
+   "alias": "문태양 010-1234-1037",
+   "created_at": "2026-10-25T12:39:40.649288+00:00"
+  },
+  {
+   "id": 23,
+   "tenant_id": 2,
+   "entity_id": 23,
+   "alias": "서지안",
+   "created_at": "2026-10-25T12:39:40.960396+00:00"
+  }
+ ],
+ "entity_links": [],
+ "source_inputs": [
+  {
+   "id": 3,
+   "tenant_id": 2,
+   "channel": "사진",
+   "name": "2026-10-14.jpg",
+   "storage_path": "uploads/2-3.jpg",
+   "created_at": "2026-10-25T08:06:28.292882+00:00"
+  },
+  {
+   "id": 4,
+   "tenant_id": 2,
+   "channel": "파일",
+   "name": "records.csv",
+   "storage_path": "uploads/2-4.csv",
+   "created_at": "2026-10-25T08:06:39.177545+00:00"
+  }
+ ],
+ "records": [
+  {
+   "id": 45,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "고객": "문태양 010-1234-1037",
+    "미팅": "10/17(토) 오후 3시",
+    "예산": "5,000만원",
+    "요청": "보증금 낮은 반지하 제외",
+    "지역": "송파구",
+    "접수일": "2026.10.14"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/2-3.jpg",
+   "source_input_id": 3,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:33.234498+00:00"
+  },
+  {
+   "id": 46,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "고객": "서지안",
+    "미팅": "10/14(수) 오후 5시",
+    "상태": "미팅 예정",
+    "지역": "용산구",
+    "연락처": "010-1234-1000",
+    "요청사항": "베란다 있는 투룸",
+    "예산(만원)": "8000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 47,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "고객": "문태양",
+    "미팅": "10/17(토) 오후 3시",
+    "상태": "연락 대기",
+    "지역": "송파구",
+    "연락처": "010-1234-1037",
+    "요청사항": "보증금 낮은 반지하 제외",
+    "예산(만원)": "5000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 48,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "고객": "배하윤",
+    "미팅": "10/18(일) 오후 5시",
+    "상태": "미팅 예정",
+    "지역": "관악구",
+    "연락처": "010-1234-1074",
+    "요청사항": "역세권 원룸 월세 50 이하",
+    "예산(만원)": "12000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 49,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "고객": "노지후",
+    "미팅": "10/17(토) 오후 2시",
+    "상태": "완료",
+    "지역": "마포구",
+    "연락처": "010-1234-1111",
+    "요청사항": "보증금 낮은 반지하 제외",
+    "예산(만원)": "20000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 50,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "고객": "류아린",
+    "미팅": "10/18(일) 오후 5시",
+    "상태": "연락 대기",
+    "지역": "마포구",
+    "연락처": "010-1234-1148",
+    "요청사항": "보증금 낮은 반지하 제외",
+    "예산(만원)": "20000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 51,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "고객": "오세훈",
+    "미팅": "10/20(화) 오후 3시",
+    "상태": "미팅 예정",
+    "지역": "용산구",
+    "연락처": "010-1234-1185",
+    "요청사항": "역세권 원룸 월세 50 이하",
+    "예산(만원)": "20000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 52,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "고객": "권나은",
+    "미팅": "10/20(화) 오후 2시",
+    "상태": "미팅 예정",
+    "지역": "용산구",
+    "연락처": "010-1234-1222",
+    "요청사항": "반려견 가능한 빌라",
+    "예산(만원)": "12000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 53,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-20",
+   "data": {
+    "고객": "임도현",
+    "미팅": "10/24(토) 오후 3시",
+    "상태": "연락 대기",
+    "지역": "송파구",
+    "연락처": "010-1234-1259",
+    "요청사항": "보증금 낮은 반지하 제외",
+    "예산(만원)": "30000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 54,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-21",
+   "data": {
+    "고객": "한소율",
+    "미팅": "10/22(목) 오후 3시",
+    "상태": "미팅 예정",
+    "지역": "성동구",
+    "연락처": "010-1234-1296",
+    "요청사항": "신축 오피스텔 주차 필수",
+    "예산(만원)": "20000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 55,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-22",
+   "data": {
+    "고객": "조민재",
+    "미팅": "10/23(금) 오후 3시",
+    "상태": "완료",
+    "지역": "송파구",
+    "연락처": "010-1234-1333",
+    "요청사항": "초등학교 가까운 아파트",
+    "예산(만원)": "30000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 56,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-23",
+   "data": {
+    "고객": "신예린",
+    "미팅": "10/27(화) 오후 3시",
+    "상태": "연락 대기",
+    "지역": "강서구",
+    "연락처": "010-1234-1370",
+    "요청사항": "보증금 낮은 반지하 제외",
+    "예산(만원)": "5000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  },
+  {
+   "id": 57,
+   "tenant_id": 2,
+   "type_name": "고객 요청",
+   "occurred_at": "2026-10-24",
+   "data": {
+    "고객": "황지호",
+    "미팅": "10/25(일) 오후 2시",
+    "상태": "미팅 예정",
+    "지역": "용산구",
+    "연락처": "010-1234-1407",
+    "요청사항": "역세권 원룸 월세 50 이하",
+    "예산(만원)": "8000"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 4,
+   "status": "확정",
+   "created_at": "2026-10-25T08:06:47.699624+00:00"
+  }
+ ],
+ "proposals": [
+  {
+   "id": 10,
+   "tenant_id": 2,
+   "kind": "종류",
+   "payload": {
+    "type": "고객 요청",
+    "links": [],
+    "props": [
+     {
+      "name": "접수일",
+      "unit": null,
+      "dtype": "date",
+      "label": "접수일",
+      "is_entity": false
+     },
+     {
+      "name": "고객",
+      "unit": null,
+      "dtype": "text",
+      "label": "고객",
+      "is_entity": true
+     },
+     {
+      "name": "지역",
+      "unit": null,
+      "dtype": "text",
+      "label": "지역",
+      "is_entity": false
+     },
+     {
+      "name": "예산",
+      "unit": "만원",
+      "dtype": "number",
+      "label": "예산",
+      "is_entity": false
+     },
+     {
+      "name": "요청",
+      "unit": null,
+      "dtype": "text",
+      "label": "요청",
+      "is_entity": false
+     },
+     {
+      "name": "미팅",
+      "unit": null,
+      "dtype": "date",
+      "label": "미팅",
+      "is_entity": false
+     }
+    ],
+    "title": "고객 요청 메모"
+   },
+   "evidence": {
+    "rows": 1,
+    "samples": {
+     "고객": [
+      "문태양 010-1234-1037"
+     ],
+     "미팅": [
+      "10/17(토) 오후 3시"
+     ],
+     "예산": [
+      "5,000만원"
+     ],
+     "요청": [
+      "보증금 낮은 반지하 제외"
+     ],
+     "지역": [
+      "송파구"
+     ],
+     "접수일": [
+      "2026.10.14"
+     ]
+    }
+   },
+   "status": "승인",
+   "source_input_id": 3,
+   "decided_at": "2026-10-25T08:06:37.065674+00:00",
+   "created_at": "2026-10-25T08:06:33.087043+00:00"
+  },
+  {
+   "id": 11,
+   "tenant_id": 2,
+   "kind": "칸",
+   "payload": {
+    "name": "연락처",
+    "type": "고객 요청",
+    "unit": null,
+    "dtype": "text",
+    "label": "연락처",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "010-1234-1000",
+     "010-1234-1037",
+     "010-1234-1074",
+     "010-1234-1111"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 4,
+   "decided_at": "2026-10-25T08:06:48.895994+00:00",
+   "created_at": "2026-10-25T08:06:47.012552+00:00"
+  },
+  {
+   "id": 12,
+   "tenant_id": 2,
+   "kind": "같은 칸",
+   "payload": {
+    "made": null,
+    "name": "요청",
+    "type": "고객 요청",
+    "unit": null,
+    "dtype": "text",
+    "label": "요청사항",
+    "is_entity": false,
+    "similar_to": "요청"
+   },
+   "evidence": {
+    "samples": [
+     "베란다 있는 투룸",
+     "보증금 낮은 반지하 제외",
+     "역세권 원룸 월세 50 이하",
+     "반려견 가능한 빌라"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 4,
+   "decided_at": "2026-10-25T08:06:49.670253+00:00",
+   "created_at": "2026-10-25T08:06:47.163777+00:00"
+  },
+  {
+   "id": 13,
+   "tenant_id": 2,
+   "kind": "같은 칸",
+   "payload": {
+    "made": null,
+    "name": "예산",
+    "type": "고객 요청",
+    "unit": "만원",
+    "dtype": "number",
+    "label": "예산(만원)",
+    "is_entity": false,
+    "similar_to": "예산"
+   },
+   "evidence": {
+    "samples": [
+     "8000",
+     "5000",
+     "12000",
+     "20000"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 4,
+   "decided_at": "2026-10-25T08:06:50.355325+00:00",
+   "created_at": "2026-10-25T08:06:47.32031+00:00"
+  },
+  {
+   "id": 14,
+   "tenant_id": 2,
+   "kind": "칸",
+   "payload": {
+    "name": "상태",
+    "type": "고객 요청",
+    "unit": null,
+    "dtype": "choice",
+    "label": "상태",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "미팅 예정",
+     "연락 대기",
+     "완료"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 4,
+   "decided_at": "2026-10-25T08:06:51.5439+00:00",
+   "created_at": "2026-10-25T08:06:47.557099+00:00"
+  },
+  {
+   "id": 16,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": "avg",
+    "kind": "kpi",
+    "prop": "예산",
+    "type": "고객 요청",
+    "props": [],
+    "title": "평균 예산",
+    "reason": "확정된 관계는 없지만 예산은 숫자 칸이고 기록 13건 전체에서 평균 15000만원 수준이라 한눈에 보기 좋은 기본 지표입니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "거절",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:40:52.674043+00:00",
+   "created_at": "2026-10-25T08:09:45.970938+00:00"
+  },
+  {
+   "id": 17,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [
+     "예산"
+    ],
+    "title": "예산 추이",
+    "reason": "접수일 순서에 따른 예산 변화를 보여 주어 고객 요청의 규모가 시간에 따라 어떻게 바뀌는지 파악하게 합니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "거절",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:40:56.173082+00:00",
+   "created_at": "2026-10-25T08:09:46.113423+00:00"
+  },
+  {
+   "id": 18,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [],
+    "title": "연락 대기 고객 수",
+    "reason": "상태가 연락 대기인 요청은 아직 응대가 필요한 건이므로 수를 세면 후속 조치 우선순위를 정하기 좋습니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "연락 대기",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:40:59.842128+00:00",
+   "created_at": "2026-10-25T08:09:46.336831+00:00"
+  },
+  {
+   "id": 19,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [],
+    "title": "미팅 예정 고객 수",
+    "reason": "상태가 미팅 예정인 요청 수는 이번 기간 예약된 상담 규모를 바로 보여 줍니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "미팅 예정",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:41:00.851377+00:00",
+   "created_at": "2026-10-25T08:09:46.492845+00:00"
+  },
+  {
+   "id": 20,
+   "tenant_id": 2,
+   "kind": "업무",
+   "payload": {
+    "type": "고객 요청",
+    "scope": "latest",
+    "title": "연락 대기 고객",
+    "reason": "연락 대기 상태인 고객 요청을 매번 전체 목록에서 찾지 않도록 가장 최근 기록만 먼저 보여줍니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "연락 대기",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:43:08.24034+00:00",
+   "created_at": "2026-10-25T08:09:53.84185+00:00"
+  },
+  {
+   "id": 21,
+   "tenant_id": 2,
+   "kind": "업무",
+   "payload": {
+    "type": "고객 요청",
+    "scope": "latest",
+    "title": "이번 주 미팅",
+    "reason": "앞으로 7일 안에 잡힌 미팅을 놓치지 않도록 대상별 최근 기록 중 미팅이 임박한 건을 먼저 보여줍니다.",
+    "conditions": [
+     {
+      "op": "within_days",
+      "prop": "미팅",
+      "value": "7",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:12:24.387279+00:00",
+   "created_at": "2026-10-25T08:09:54.001292+00:00"
+  },
+  {
+   "id": 22,
+   "tenant_id": 2,
+   "kind": "업무",
+   "payload": {
+    "type": "고객 요청",
+    "scope": "latest",
+    "title": "예산 높은 요청",
+    "reason": "예산이 2억 원 이상인 요청은 우선 응대가 필요하므로 대상별 최근 기록에서 먼저 확인하도록 합니다.",
+    "conditions": [
+     {
+      "op": ">=",
+      "prop": "예산",
+      "value": "20000",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:43:09.960785+00:00",
+   "created_at": "2026-10-25T08:09:54.208134+00:00"
+  },
+  {
+   "id": 48,
+   "tenant_id": 2,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "고객",
+    "type": "고객 요청",
+    "class": "고객",
+    "values": [
+     "황지호",
+     "신예린",
+     "조민재",
+     "한소율",
+     "임도현",
+     "권나은",
+     "오세훈",
+     "류아린",
+     "노지후",
+     "배하윤",
+     "문태양",
+     "문태양 010-1234-1037",
+     "서지안"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T12:39:40.936514+00:00",
+   "created_at": "2026-10-25T10:11:06.865618+00:00"
+  },
+  {
+   "id": 68,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": "max",
+    "kind": "kpi",
+    "prop": "예산",
+    "type": "고객 요청",
+    "props": [],
+    "title": "최대 예산",
+    "reason": "확정한 관계는 없으며, 기존 평균 예산과 예산 추이와 겹치지 않도록 예산의 최대값을 한눈에 보는 지표입니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T12:43:43.293494+00:00"
+  },
+  {
+   "id": 69,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [],
+    "title": "완료된 요청 수",
+    "reason": "확정한 관계는 없으며, 미팅 예정과 연락 대기 지표와 함께 진행 단계를 나눠 보기 위해 완료 상태의 요청 수를 셉니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "완료",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T12:43:43.451918+00:00"
+  },
+  {
+   "id": 70,
+   "tenant_id": 2,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [],
+    "title": "최근 7일 접수 요청 수",
+    "reason": "확정한 관계는 없으며, 최근 일주일 동안 새로 들어온 고객 요청의 흐름을 확인하기 위해 접수일 기준으로 셉니다.",
+    "conditions": [
+     {
+      "op": "last_days",
+      "prop": "접수일",
+      "value": "7",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T12:43:43.607486+00:00"
+  }
+ ],
+ "widgets": [
+  {
+   "id": 5,
+   "tenant_id": 2,
+   "spec": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [],
+    "title": "연락 대기 고객 수",
+    "reason": "상태가 연락 대기인 요청은 아직 응대가 필요한 건이므로 수를 세면 후속 조치 우선순위를 정하기 좋습니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "연락 대기",
+      "value_prop": null
+     }
+    ]
+   },
+   "status": "올림",
+   "created_at": "2026-10-25T12:40:59.869774+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 2,
+   "spec": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "고객 요청",
+    "props": [],
+    "title": "미팅 예정 고객 수",
+    "reason": "상태가 미팅 예정인 요청 수는 이번 기간 예약된 상담 규모를 바로 보여 줍니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "미팅 예정",
+      "value_prop": null
+     }
+    ]
+   },
+   "status": "올림",
+   "created_at": "2026-10-25T12:41:00.88541+00:00"
+  }
+ ],
+ "automations": [
+  {
+   "id": 3,
+   "tenant_id": 2,
+   "spec": {
+    "type": "고객 요청",
+    "scope": "latest",
+    "title": "이번 주 미팅",
+    "reason": "앞으로 7일 안에 잡힌 미팅을 놓치지 않도록 대상별 최근 기록 중 미팅이 임박한 건을 먼저 보여줍니다.",
+    "conditions": [
+     {
+      "op": "within_days",
+      "prop": "미팅",
+      "value": "7",
+      "value_prop": null
+     }
+    ]
+   },
+   "status": "켜짐",
+   "created_at": "2026-10-25T08:12:24.341893+00:00"
+  },
+  {
+   "id": 5,
+   "tenant_id": 2,
+   "spec": {
+    "type": "고객 요청",
+    "scope": "latest",
+    "title": "연락 대기 고객",
+    "reason": "연락 대기 상태인 고객 요청을 매번 전체 목록에서 찾지 않도록 가장 최근 기록만 먼저 보여줍니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "상태",
+      "value": "연락 대기",
+      "value_prop": null
+     }
+    ]
+   },
+   "status": "켜짐",
+   "created_at": "2026-10-25T12:43:08.273013+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 2,
+   "spec": {
+    "type": "고객 요청",
+    "scope": "latest",
+    "title": "예산 높은 요청",
+    "reason": "예산이 2억 원 이상인 요청은 우선 응대가 필요하므로 대상별 최근 기록에서 먼저 확인하도록 합니다.",
+    "conditions": [
+     {
+      "op": ">=",
+      "prop": "예산",
+      "value": "20000",
+      "value_prop": null
+     }
+    ]
+   },
+   "status": "켜짐",
+   "created_at": "2026-10-25T12:43:09.944158+00:00"
+  }
+ ],
+ "eval_votes": []
+}

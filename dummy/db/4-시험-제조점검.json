@@ -1,0 +1,1935 @@
+{
+ "tenant": {
+  "id": 4,
+  "name": "시험 · 제조 점검"
+ },
+ "object_types": [
+  {
+   "id": 4,
+   "tenant_id": 4,
+   "name": "일일 설비 점검",
+   "created_at": "2026-10-25T08:10:37.716833+00:00",
+   "kind": "기록",
+   "parent_name": null
+  },
+  {
+   "id": 9,
+   "tenant_id": 4,
+   "name": "설비",
+   "created_at": "2026-10-25T10:13:18.295694+00:00",
+   "kind": "대상",
+   "parent_name": null
+  },
+  {
+   "id": 11,
+   "tenant_id": 4,
+   "name": "작업자",
+   "created_at": "2026-10-29T11:15:28.485814+00:00",
+   "kind": "대상",
+   "parent_name": null
+  }
+ ],
+ "property_defs": [
+  {
+   "id": 25,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "담당자",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 0,
+   "created_at": "2026-10-25T08:10:37.861057+00:00",
+   "ref_class": "작업자",
+   "description": null
+  },
+  {
+   "id": 26,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "설비",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": true,
+   "position": 1,
+   "created_at": "2026-10-25T08:10:38.393624+00:00",
+   "ref_class": "설비",
+   "description": null
+  },
+  {
+   "id": 27,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "점검 항목",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 2,
+   "created_at": "2026-10-25T08:10:38.909156+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 28,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "기준",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 3,
+   "created_at": "2026-10-25T08:10:39.439663+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 29,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "측정 온도",
+   "dtype": "number",
+   "unit": "℃",
+   "is_entity": false,
+   "position": 4,
+   "created_at": "2026-10-25T08:10:39.973152+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 30,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "합격여부",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 5,
+   "created_at": "2026-10-25T08:10:40.487164+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 31,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "날짜",
+   "dtype": "date",
+   "unit": null,
+   "is_entity": false,
+   "position": 6,
+   "created_at": "2026-10-25T08:10:55.344672+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 32,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "설비 A 온도",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 7,
+   "created_at": "2026-10-25T08:10:56.788209+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 33,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "설비 B 온도",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 8,
+   "created_at": "2026-10-25T08:10:57.996161+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 34,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "설비 C 온도",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 9,
+   "created_at": "2026-10-25T08:10:59.223939+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 35,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "습도",
+   "dtype": "number",
+   "unit": "%",
+   "is_entity": false,
+   "position": 10,
+   "created_at": "2026-10-25T08:11:00.460749+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 36,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "name": "압력",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 11,
+   "created_at": "2026-10-25T08:11:03.079251+00:00",
+   "ref_class": null,
+   "description": null
+  }
+ ],
+ "alias_dict": [
+  {
+   "id": 51,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "담당자",
+   "prop_name": "담당자",
+   "created_at": "2026-10-25T08:10:38.026218+00:00"
+  },
+  {
+   "id": 53,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "설비",
+   "prop_name": "설비",
+   "created_at": "2026-10-25T08:10:38.545283+00:00"
+  },
+  {
+   "id": 55,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "점검 항목",
+   "prop_name": "점검 항목",
+   "created_at": "2026-10-25T08:10:39.050543+00:00"
+  },
+  {
+   "id": 57,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "기준",
+   "prop_name": "기준",
+   "created_at": "2026-10-25T08:10:39.591009+00:00"
+  },
+  {
+   "id": 59,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "측정 온도(℃)",
+   "prop_name": "측정 온도",
+   "created_at": "2026-10-25T08:10:40.115216+00:00"
+  },
+  {
+   "id": 60,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "측정 온도",
+   "prop_name": "측정 온도",
+   "created_at": "2026-10-25T08:10:40.343502+00:00"
+  },
+  {
+   "id": 61,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "합격여부",
+   "prop_name": "합격여부",
+   "created_at": "2026-10-25T08:10:40.634834+00:00"
+  },
+  {
+   "id": 63,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "날짜",
+   "prop_name": "날짜",
+   "created_at": "2026-10-25T08:10:55.539626+00:00"
+  },
+  {
+   "id": 65,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "설비 A 온도",
+   "prop_name": "설비 A 온도",
+   "created_at": "2026-10-25T08:10:56.934733+00:00"
+  },
+  {
+   "id": 67,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "설비 B 온도",
+   "prop_name": "설비 B 온도",
+   "created_at": "2026-10-25T08:10:58.176183+00:00"
+  },
+  {
+   "id": 69,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "설비 C 온도",
+   "prop_name": "설비 C 온도",
+   "created_at": "2026-10-25T08:10:59.414274+00:00"
+  },
+  {
+   "id": 71,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "습도(%)",
+   "prop_name": "습도",
+   "created_at": "2026-10-25T08:11:00.617789+00:00"
+  },
+  {
+   "id": 72,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "습도",
+   "prop_name": "습도",
+   "created_at": "2026-10-25T08:11:00.800302+00:00"
+  },
+  {
+   "id": 73,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "판정",
+   "prop_name": "합격여부",
+   "created_at": "2026-10-25T08:11:01.53847+00:00"
+  },
+  {
+   "id": 74,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "점검자",
+   "prop_name": "담당자",
+   "created_at": "2026-10-25T08:11:02.201532+00:00"
+  },
+  {
+   "id": 75,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "alias": "압력",
+   "prop_name": "압력",
+   "created_at": "2026-10-25T08:11:03.222772+00:00"
+  }
+ ],
+ "link_types": [
+  {
+   "id": 4,
+   "tenant_id": 4,
+   "from_ref": "일일 설비 점검.기준",
+   "to_ref": "일일 설비 점검.측정 온도",
+   "kind": "최대 기준",
+   "reason": "기준 값이 '74℃ 이하'처럼 이하로 적혀 있어 측정 온도의 상한을 나타냄",
+   "created_at": "2026-10-25T08:11:05.701573+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 7,
+   "tenant_id": 4,
+   "from_ref": "일일 설비 점검.설비",
+   "to_ref": "일일 설비 점검.측정 온도",
+   "kind": "연결",
+   "reason": "직접 고른 관계예요. ",
+   "created_at": "2026-10-29T11:13:58.501754+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 8,
+   "tenant_id": 4,
+   "from_ref": "일일 설비 점검.측정 온도",
+   "to_ref": "일일 설비 점검.합격여부",
+   "kind": "영향",
+   "reason": "측정 온도가 기준을 넘은 줄이 불합격이에요.",
+   "created_at": "2026-10-29T11:15:42.945077+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 9,
+   "tenant_id": 4,
+   "from_ref": "일일 설비 점검.설비 A 온도",
+   "to_ref": "일일 설비 점검.합격여부",
+   "kind": "영향",
+   "reason": "설비 A 온도가 74를 넘은 날이 불합격이에요.",
+   "created_at": "2026-10-29T11:15:59.455188+00:00",
+   "name": null,
+   "attr_defs": []
+  }
+ ],
+ "entities": [
+  {
+   "id": 8,
+   "tenant_id": 4,
+   "class_name": "설비",
+   "name": "설비 C",
+   "attrs": {},
+   "created_at": "2026-10-25T10:13:19.854092+00:00"
+  },
+  {
+   "id": 9,
+   "tenant_id": 4,
+   "class_name": "설비",
+   "name": "설비 B",
+   "attrs": {},
+   "created_at": "2026-10-25T10:13:20.154377+00:00"
+  },
+  {
+   "id": 10,
+   "tenant_id": 4,
+   "class_name": "설비",
+   "name": "설비 A",
+   "attrs": {},
+   "created_at": "2026-10-25T10:13:20.447663+00:00"
+  },
+  {
+   "id": 24,
+   "tenant_id": 4,
+   "class_name": "작업자",
+   "name": "김민수",
+   "attrs": {},
+   "created_at": "2026-10-29T11:15:31.933799+00:00"
+  },
+  {
+   "id": 26,
+   "tenant_id": 4,
+   "class_name": "작업자",
+   "name": "박지훈",
+   "attrs": {},
+   "created_at": "2026-10-29T11:15:32.263114+00:00"
+  },
+  {
+   "id": 28,
+   "tenant_id": 4,
+   "class_name": "작업자",
+   "name": "이서연",
+   "attrs": {},
+   "created_at": "2026-10-29T11:15:32.672396+00:00"
+  }
+ ],
+ "entity_aliases": [
+  {
+   "id": 8,
+   "tenant_id": 4,
+   "entity_id": 8,
+   "alias": "설비 C",
+   "created_at": "2026-10-25T10:13:20.003376+00:00"
+  },
+  {
+   "id": 9,
+   "tenant_id": 4,
+   "entity_id": 9,
+   "alias": "설비 B",
+   "created_at": "2026-10-25T10:13:20.302734+00:00"
+  },
+  {
+   "id": 10,
+   "tenant_id": 4,
+   "entity_id": 10,
+   "alias": "설비 A",
+   "created_at": "2026-10-25T10:13:20.602083+00:00"
+  },
+  {
+   "id": 24,
+   "tenant_id": 4,
+   "entity_id": 24,
+   "alias": "김민수",
+   "created_at": "2026-10-29T11:15:32.103632+00:00"
+  },
+  {
+   "id": 26,
+   "tenant_id": 4,
+   "entity_id": 26,
+   "alias": "박지훈",
+   "created_at": "2026-10-29T11:15:32.520667+00:00"
+  },
+  {
+   "id": 28,
+   "tenant_id": 4,
+   "entity_id": 28,
+   "alias": "이서연",
+   "created_at": "2026-10-29T11:15:33.073002+00:00"
+  }
+ ],
+ "entity_links": [],
+ "source_inputs": [
+  {
+   "id": 7,
+   "tenant_id": 4,
+   "channel": "사진",
+   "name": "2026-10-24.jpg",
+   "storage_path": "uploads/4-7.jpg",
+   "created_at": "2026-10-25T08:10:30.391259+00:00"
+  },
+  {
+   "id": 8,
+   "tenant_id": 4,
+   "channel": "파일",
+   "name": "papersolve-sample-records.csv",
+   "storage_path": "uploads/4-8.csv",
+   "created_at": "2026-10-25T08:10:43.266201+00:00"
+  }
+ ],
+ "records": [
+  {
+   "id": 85,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-24",
+   "data": {
+    "기준": "74℃ 이하",
+    "설비": "설비 A",
+    "담당자": "박지훈",
+    "합격여부": "불합격",
+    "점검 항목": "온도",
+    "측정 온도(℃)": "75"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/4-7.jpg",
+   "source_input_id": 7,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:37.189392+00:00"
+  },
+  {
+   "id": 86,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-24",
+   "data": {
+    "기준": "70℃ 이하",
+    "설비": "설비 B",
+    "담당자": "박지훈",
+    "합격여부": "합격",
+    "점검 항목": "온도",
+    "측정 온도(℃)": "66"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/4-7.jpg",
+   "source_input_id": 7,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:37.189392+00:00"
+  },
+  {
+   "id": 87,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-24",
+   "data": {
+    "기준": "66℃ 이하",
+    "설비": "설비 C",
+    "담당자": "박지훈",
+    "합격여부": "합격",
+    "점검 항목": "온도",
+    "측정 온도(℃)": "61"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/4-7.jpg",
+   "source_input_id": 7,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:37.189392+00:00"
+  },
+  {
+   "id": 88,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-16",
+   "data": {
+    "날짜": "2026-09-16",
+    "판정": "합격",
+    "습도(%)": "56",
+    "점검자": "이서연",
+    "설비 A 온도": "71",
+    "설비 B 온도": "66",
+    "설비 C 온도": "63"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 89,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-17",
+   "data": {
+    "날짜": "2026-09-17",
+    "판정": "합격",
+    "습도(%)": "48",
+    "점검자": "김민수",
+    "설비 A 온도": "72",
+    "설비 B 온도": "64",
+    "설비 C 온도": "64"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 90,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-18",
+   "data": {
+    "날짜": "2026-09-18",
+    "판정": "합격",
+    "습도(%)": "58",
+    "점검자": "이서연",
+    "설비 A 온도": "69",
+    "설비 B 온도": "69",
+    "설비 C 온도": "66"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 91,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-19",
+   "data": {
+    "날짜": "2026-09-19",
+    "판정": "합격",
+    "습도(%)": "47",
+    "점검자": "김민수",
+    "설비 A 온도": "69",
+    "설비 B 온도": "67",
+    "설비 C 온도": "65"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 92,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-20",
+   "data": {
+    "날짜": "2026-09-20",
+    "판정": "합격",
+    "습도(%)": "51",
+    "점검자": "김민수",
+    "설비 A 온도": "74",
+    "설비 B 온도": "64",
+    "설비 C 온도": "63"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 93,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-21",
+   "data": {
+    "날짜": "2026-09-21",
+    "판정": "합격",
+    "습도(%)": "43",
+    "점검자": "박지훈",
+    "설비 A 온도": "73",
+    "설비 B 온도": "66",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 94,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-22",
+   "data": {
+    "날짜": "2026-09-22",
+    "판정": "불합격",
+    "습도(%)": "56",
+    "점검자": "박지훈",
+    "설비 A 온도": "76",
+    "설비 B 온도": "65",
+    "설비 C 온도": "63"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 95,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-23",
+   "data": {
+    "날짜": "2026-09-23",
+    "판정": "합격",
+    "습도(%)": "47",
+    "점검자": "박지훈",
+    "설비 A 온도": "72",
+    "설비 B 온도": "68",
+    "설비 C 온도": "65"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 96,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-24",
+   "data": {
+    "날짜": "2026-09-24",
+    "판정": "합격",
+    "습도(%)": "58",
+    "점검자": "김민수",
+    "설비 A 온도": "69",
+    "설비 B 온도": "66",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 97,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-25",
+   "data": {
+    "날짜": "2026-09-25",
+    "판정": "합격",
+    "습도(%)": "43",
+    "점검자": "김민수",
+    "설비 A 온도": "69",
+    "설비 B 온도": "69",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 98,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-26",
+   "data": {
+    "날짜": "2026-09-26",
+    "판정": "합격",
+    "습도(%)": "42",
+    "점검자": "이서연",
+    "설비 A 온도": "72",
+    "설비 B 온도": "64",
+    "설비 C 온도": "61"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 99,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-27",
+   "data": {
+    "날짜": "2026-09-27",
+    "판정": "합격",
+    "습도(%)": "56",
+    "점검자": "박지훈",
+    "설비 A 온도": "74",
+    "설비 B 온도": "65",
+    "설비 C 온도": "62"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 100,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-28",
+   "data": {
+    "날짜": "2026-09-28",
+    "판정": "합격",
+    "습도(%)": "48",
+    "점검자": "박지훈",
+    "설비 A 온도": "70",
+    "설비 B 온도": "70",
+    "설비 C 온도": "66"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 101,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-29",
+   "data": {
+    "날짜": "2026-09-29",
+    "판정": "합격",
+    "습도(%)": "51",
+    "점검자": "이서연",
+    "설비 A 온도": "68",
+    "설비 B 온도": "70",
+    "설비 C 온도": "61"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 102,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-09-30",
+   "data": {
+    "날짜": "2026-09-30",
+    "판정": "합격",
+    "습도(%)": "44",
+    "점검자": "이서연",
+    "설비 A 온도": "74",
+    "설비 B 온도": "68",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 103,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-01",
+   "data": {
+    "날짜": "2026-10-01",
+    "판정": "합격",
+    "습도(%)": "50",
+    "점검자": "이서연",
+    "설비 A 온도": "68",
+    "설비 B 온도": "66",
+    "설비 C 온도": "65"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 104,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-02",
+   "data": {
+    "날짜": "2026-10-02",
+    "판정": "합격",
+    "습도(%)": "44",
+    "점검자": "박지훈",
+    "설비 A 온도": "68",
+    "설비 B 온도": "69",
+    "설비 C 온도": "64"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 105,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-03",
+   "data": {
+    "날짜": "2026-10-03",
+    "판정": "합격",
+    "습도(%)": "52",
+    "점검자": "김민수",
+    "설비 A 온도": "70",
+    "설비 B 온도": "67",
+    "설비 C 온도": "62"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 106,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-04",
+   "data": {
+    "날짜": "2026-10-04",
+    "판정": "합격",
+    "습도(%)": "51",
+    "점검자": "김민수",
+    "설비 A 온도": "72",
+    "설비 B 온도": "66",
+    "설비 C 온도": "64"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 107,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-05",
+   "data": {
+    "날짜": "2026-10-05",
+    "판정": "불합격",
+    "습도(%)": "45",
+    "점검자": "이서연",
+    "설비 A 온도": "75",
+    "설비 B 온도": "65",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-05.jpg",
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 108,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-06",
+   "data": {
+    "날짜": "2026-10-06",
+    "판정": "합격",
+    "습도(%)": "51",
+    "점검자": "이서연",
+    "설비 A 온도": "74",
+    "설비 B 온도": "67",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 109,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-07",
+   "data": {
+    "날짜": "2026-10-07",
+    "판정": "합격",
+    "습도(%)": "42",
+    "점검자": "박지훈",
+    "설비 A 온도": "73",
+    "설비 B 온도": "66",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 110,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-08",
+   "data": {
+    "날짜": "2026-10-08",
+    "판정": "합격",
+    "습도(%)": "48",
+    "점검자": "김민수",
+    "설비 A 온도": "69",
+    "설비 B 온도": "70",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 111,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-09",
+   "data": {
+    "날짜": "2026-10-09",
+    "판정": "합격",
+    "습도(%)": "57",
+    "점검자": "이서연",
+    "설비 A 온도": "74",
+    "설비 B 온도": "66",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 112,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-10",
+   "data": {
+    "날짜": "2026-10-10",
+    "판정": "합격",
+    "습도(%)": "54",
+    "점검자": "이서연",
+    "설비 A 온도": "71",
+    "설비 B 온도": "65",
+    "설비 C 온도": "65"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 113,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-11",
+   "data": {
+    "날짜": "2026-10-11",
+    "판정": "합격",
+    "습도(%)": "48",
+    "점검자": "박지훈",
+    "설비 A 온도": "73",
+    "설비 B 온도": "65",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 114,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "날짜": "2026-10-12",
+    "판정": "불합격",
+    "습도(%)": "52",
+    "점검자": "김민수",
+    "설비 A 온도": "77",
+    "설비 B 온도": "64",
+    "설비 C 온도": "62"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-12.jpg",
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 115,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "날짜": "2026-10-13",
+    "판정": "합격",
+    "습도(%)": "52",
+    "점검자": "김민수",
+    "설비 A 온도": "74",
+    "설비 B 온도": "66",
+    "설비 C 온도": "62"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 116,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "날짜": "2026-10-14",
+    "판정": "합격",
+    "습도(%)": "45",
+    "점검자": "김민수",
+    "설비 A 온도": "72",
+    "설비 B 온도": "69",
+    "설비 C 온도": "63"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 117,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "날짜": "2026-10-15",
+    "판정": "합격",
+    "습도(%)": "45",
+    "점검자": "김민수",
+    "설비 A 온도": "72",
+    "설비 B 온도": "67",
+    "설비 C 온도": "61"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 118,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "날짜": "2026-10-16",
+    "판정": "합격",
+    "습도(%)": "56",
+    "점검자": "이서연",
+    "설비 A 온도": "69",
+    "설비 B 온도": "66",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 119,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "날짜": "2026-10-17",
+    "판정": "합격",
+    "습도(%)": "48",
+    "점검자": "이서연",
+    "설비 A 온도": "71",
+    "설비 B 온도": "67",
+    "설비 C 온도": "61"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 120,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "날짜": "2026-10-18",
+    "판정": "합격",
+    "습도(%)": "48",
+    "점검자": "박지훈",
+    "설비 A 온도": "70",
+    "설비 B 온도": "65",
+    "설비 C 온도": "64"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 121,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "날짜": "2026-10-19",
+    "판정": "합격",
+    "습도(%)": "46",
+    "점검자": "이서연",
+    "설비 A 온도": "73",
+    "설비 B 온도": "68",
+    "설비 C 온도": "66"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 122,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-20",
+   "data": {
+    "날짜": "2026-10-20",
+    "판정": "합격",
+    "습도(%)": "54",
+    "점검자": "김민수",
+    "설비 A 온도": "74",
+    "설비 B 온도": "66",
+    "설비 C 온도": "65"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 123,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-21",
+   "data": {
+    "날짜": "2026-10-21",
+    "판정": "합격",
+    "습도(%)": "55",
+    "점검자": "김민수",
+    "설비 A 온도": "72",
+    "설비 B 온도": "67",
+    "설비 C 온도": "63"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 124,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-22",
+   "data": {
+    "날짜": "2026-10-22",
+    "판정": "합격",
+    "습도(%)": "50",
+    "점검자": "박지훈",
+    "설비 A 온도": "71",
+    "설비 B 온도": "69",
+    "설비 C 온도": "60"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-22.jpg",
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 125,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-23",
+   "data": {
+    "날짜": "2026-10-23",
+    "압력": "1.2",
+    "판정": "합격",
+    "습도(%)": "42",
+    "점검자": "김민수",
+    "설비 A 온도": "70",
+    "설비 B 온도": "67",
+    "설비 C 온도": "62"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-23.jpg",
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 126,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-24",
+   "data": {
+    "날짜": "2026-10-24",
+    "압력": "1.4",
+    "판정": "불합격",
+    "습도(%)": "54",
+    "점검자": "박지훈",
+    "설비 A 온도": "75",
+    "설비 B 온도": "66",
+    "설비 C 온도": "61"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-24.jpg",
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  },
+  {
+   "id": 127,
+   "tenant_id": 4,
+   "type_name": "일일 설비 점검",
+   "occurred_at": "2026-10-25",
+   "data": {
+    "날짜": "2026-10-25",
+    "압력": "1.3",
+    "판정": "합격",
+    "습도(%)": "45",
+    "점검자": "김민수",
+    "설비 A 온도": "72",
+    "설비 B 온도": "68",
+    "설비 C 온도": "65"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-25.jpg",
+   "source_input_id": 8,
+   "status": "확정",
+   "created_at": "2026-10-25T08:10:54.706238+00:00"
+  }
+ ],
+ "proposals": [
+  {
+   "id": 29,
+   "tenant_id": 4,
+   "kind": "종류",
+   "payload": {
+    "type": "일일 설비 점검",
+    "links": [
+     {
+      "to": "측정 온도",
+      "from": "기준",
+      "kind": "최대 기준",
+      "reason": "기준 값이 '74℃ 이하'처럼 이하로 적혀 있어 측정 온도의 상한을 나타냄"
+     }
+    ],
+    "props": [
+     {
+      "name": "담당자",
+      "unit": null,
+      "dtype": "text",
+      "label": "담당자",
+      "is_entity": false
+     },
+     {
+      "name": "설비",
+      "unit": null,
+      "dtype": "text",
+      "label": "설비",
+      "is_entity": true
+     },
+     {
+      "name": "점검 항목",
+      "unit": null,
+      "dtype": "text",
+      "label": "점검 항목",
+      "is_entity": false
+     },
+     {
+      "name": "기준",
+      "unit": null,
+      "dtype": "text",
+      "label": "기준",
+      "is_entity": false
+     },
+     {
+      "name": "측정 온도",
+      "unit": "℃",
+      "dtype": "number",
+      "label": "측정 온도(℃)",
+      "is_entity": false
+     },
+     {
+      "name": "합격여부",
+      "unit": null,
+      "dtype": "text",
+      "label": "합격여부",
+      "is_entity": false
+     }
+    ],
+    "title": "일일 설비 점검표"
+   },
+   "evidence": {
+    "rows": 3,
+    "samples": {
+     "기준": [
+      "74℃ 이하",
+      "70℃ 이하",
+      "66℃ 이하"
+     ],
+     "설비": [
+      "설비 A",
+      "설비 B",
+      "설비 C"
+     ],
+     "담당자": [
+      "박지훈"
+     ],
+     "합격여부": [
+      "불합격",
+      "합격"
+     ],
+     "점검 항목": [
+      "온도"
+     ],
+     "측정 온도(℃)": [
+      "75",
+      "66",
+      "61"
+     ]
+    }
+   },
+   "status": "승인",
+   "source_input_id": 7,
+   "decided_at": "2026-10-25T08:10:40.907117+00:00",
+   "created_at": "2026-10-25T08:10:36.894129+00:00"
+  },
+  {
+   "id": 30,
+   "tenant_id": 4,
+   "kind": "연결",
+   "payload": {
+    "to": "일일 설비 점검.측정 온도",
+    "from": "일일 설비 점검.기준",
+    "kind": "최대 기준",
+    "reason": "기준 값이 '74℃ 이하'처럼 이하로 적혀 있어 측정 온도의 상한을 나타냄"
+   },
+   "evidence": {
+    "counted": "같이 적힌 기록 3건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:11:05.744235+00:00",
+   "created_at": "2026-10-25T08:10:42.962625+00:00"
+  },
+  {
+   "id": 31,
+   "tenant_id": 4,
+   "kind": "칸",
+   "payload": {
+    "name": "날짜",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "date",
+    "label": "날짜",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "2026-09-16",
+     "2026-09-17",
+     "2026-09-18",
+     "2026-09-19"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:10:55.952376+00:00",
+   "created_at": "2026-10-25T08:10:53.272516+00:00"
+  },
+  {
+   "id": 32,
+   "tenant_id": 4,
+   "kind": "칸",
+   "payload": {
+    "name": "설비 A 온도",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "number",
+    "label": "설비 A 온도",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "71",
+     "72",
+     "69",
+     "74"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:10:57.204176+00:00",
+   "created_at": "2026-10-25T08:10:53.454785+00:00"
+  },
+  {
+   "id": 33,
+   "tenant_id": 4,
+   "kind": "칸",
+   "payload": {
+    "name": "설비 B 온도",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "number",
+    "label": "설비 B 온도",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "66",
+     "64",
+     "69",
+     "67"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:10:58.392115+00:00",
+   "created_at": "2026-10-25T08:10:53.669973+00:00"
+  },
+  {
+   "id": 34,
+   "tenant_id": 4,
+   "kind": "칸",
+   "payload": {
+    "name": "설비 C 온도",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "number",
+    "label": "설비 C 온도",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "63",
+     "64",
+     "66",
+     "65"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:10:59.632904+00:00",
+   "created_at": "2026-10-25T08:10:53.817238+00:00"
+  },
+  {
+   "id": 35,
+   "tenant_id": 4,
+   "kind": "칸",
+   "payload": {
+    "name": "습도",
+    "type": "일일 설비 점검",
+    "unit": "%",
+    "dtype": "number",
+    "label": "습도(%)",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "56",
+     "48",
+     "58",
+     "47"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:11:00.872551+00:00",
+   "created_at": "2026-10-25T08:10:53.97546+00:00"
+  },
+  {
+   "id": 36,
+   "tenant_id": 4,
+   "kind": "같은 칸",
+   "payload": {
+    "made": null,
+    "name": "판정",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "choice",
+    "label": "판정",
+    "is_entity": false,
+    "similar_to": "합격여부"
+   },
+   "evidence": {
+    "samples": [
+     "합격",
+     "불합격"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:11:01.577865+00:00",
+   "created_at": "2026-10-25T08:10:54.18487+00:00"
+  },
+  {
+   "id": 37,
+   "tenant_id": 4,
+   "kind": "같은 칸",
+   "payload": {
+    "made": null,
+    "name": "점검자",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "choice",
+    "label": "점검자",
+    "is_entity": false,
+    "similar_to": "담당자"
+   },
+   "evidence": {
+    "samples": [
+     "이서연",
+     "김민수",
+     "박지훈"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:11:02.256769+00:00",
+   "created_at": "2026-10-25T08:10:54.33132+00:00"
+  },
+  {
+   "id": 38,
+   "tenant_id": 4,
+   "kind": "칸",
+   "payload": {
+    "name": "압력",
+    "type": "일일 설비 점검",
+    "unit": null,
+    "dtype": "number",
+    "label": "압력",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "1.2",
+     "1.4",
+     "1.3"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 8,
+   "decided_at": "2026-10-25T08:11:03.495782+00:00",
+   "created_at": "2026-10-25T08:10:54.501938+00:00"
+  },
+  {
+   "id": 39,
+   "tenant_id": 4,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "일일 설비 점검",
+    "props": [],
+    "title": "측정 온도 초과 건수",
+    "reason": "확정한 관계 '기준 → 측정 온도'(최대 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": ">",
+      "prop": "측정 온도",
+      "value": null,
+      "value_prop": "기준"
+     }
+    ]
+   },
+   "evidence": {
+    "from_link": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:11:08.896248+00:00",
+   "created_at": "2026-10-25T08:11:07.271653+00:00"
+  },
+  {
+   "id": 40,
+   "tenant_id": 4,
+   "kind": "업무",
+   "payload": {
+    "type": "일일 설비 점검",
+    "scope": "latest",
+    "title": "측정 온도 초과",
+    "reason": "확정한 관계 '기준 → 측정 온도'(최대 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": ">",
+      "prop": "측정 온도",
+      "value": null,
+      "value_prop": "기준"
+     }
+    ]
+   },
+   "evidence": {
+    "from_link": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:11:08.254337+00:00",
+   "created_at": "2026-10-25T08:11:07.801401+00:00"
+  },
+  {
+   "id": 50,
+   "tenant_id": 4,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "설비",
+    "type": "일일 설비 점검",
+    "class": "설비",
+    "values": [
+     "설비 C",
+     "설비 B",
+     "설비 A"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:13:20.55205+00:00",
+   "created_at": "2026-10-25T10:11:22.590858+00:00"
+  },
+  {
+   "id": 75,
+   "tenant_id": 4,
+   "kind": "연결",
+   "payload": {
+    "to": "일일 설비 점검.측정 온도",
+    "from": "일일 설비 점검.설비",
+    "kind": "연결",
+    "name": null,
+    "reason": "직접 고른 관계예요. "
+   },
+   "evidence": {
+    "user": true,
+    "counted": "같이 적힌 기록 3건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T11:13:58.698254+00:00",
+   "created_at": "2026-10-29T11:04:36.365865+00:00"
+  },
+  {
+   "id": 76,
+   "tenant_id": 4,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "담당자",
+    "type": "일일 설비 점검",
+    "class": "작업자",
+    "values": [
+     "김민수",
+     "박지훈",
+     "이서연"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T11:15:33.220991+00:00",
+   "created_at": "2026-10-29T11:11:06.964759+00:00"
+  },
+  {
+   "id": 77,
+   "tenant_id": 4,
+   "kind": "연결",
+   "payload": {
+    "to": "일일 설비 점검.합격여부",
+    "from": "일일 설비 점검.측정 온도",
+    "kind": "영향",
+    "name": null,
+    "reason": "측정 온도가 기준을 넘은 줄이 불합격이에요."
+   },
+   "evidence": {
+    "user": false,
+    "counted": "같이 적힌 기록 3건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T11:15:42.977053+00:00",
+   "created_at": "2026-10-29T11:11:08.097974+00:00"
+  },
+  {
+   "id": 78,
+   "tenant_id": 4,
+   "kind": "연결",
+   "payload": {
+    "to": "일일 설비 점검.합격여부",
+    "from": "일일 설비 점검.설비 A 온도",
+    "kind": "영향",
+    "name": null,
+    "reason": "설비 A 온도가 74를 넘은 날이 불합격이에요."
+   },
+   "evidence": {
+    "user": false,
+    "counted": "같이 적힌 기록 40건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T11:15:59.619606+00:00",
+   "created_at": "2026-10-29T11:11:08.566992+00:00"
+  },
+  {
+   "id": 79,
+   "tenant_id": 4,
+   "kind": "연결",
+   "payload": {
+    "to": "설비",
+    "from": "작업자",
+    "kind": "연결",
+    "name": "설비",
+    "reason": "'일일 설비 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 3개 [('박지훈', '설비 A'), ('박지훈', '설비 B'), ('박지훈', '설비 C')]"
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T11:15:36.155961+00:00"
+  },
+  {
+   "id": 80,
+   "tenant_id": 4,
+   "kind": "연결",
+   "payload": {
+    "to": "설비",
+    "from": "작업자",
+    "kind": "연결",
+    "name": "설비",
+    "reason": "'일일 설비 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 3개 [('박지훈', '설비 A'), ('박지훈', '설비 B'), ('박지훈', '설비 C')]"
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T11:15:36.187166+00:00"
+  },
+  {
+   "id": 89,
+   "tenant_id": 4,
+   "kind": "지표",
+   "payload": {
+    "kind": "view",
+    "type": "일일 설비 점검",
+    "vega": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v5.json\",\"mark\":{\"type\":\"line\",\"point\":true},\"encoding\":{\"x\":{\"field\":\"날짜\",\"type\":\"temporal\",\"title\":\"날짜\"},\"y\":{\"field\":\"측정 온도\",\"type\":\"quantitative\",\"aggregate\":\"mean\",\"title\":\"평균 온도(℃)\"},\"color\":{\"field\":\"설비\",\"type\":\"nominal\",\"title\":\"설비\"}}}",
+    "title": "설비별 온도 추이",
+    "reason": "사용자가 설비별 온도 추이를 요청해서, 날짜별 측정 온도를 설비로 나눠 선으로 그렸습니다.",
+    "conditions": []
+   },
+   "evidence": {
+    "request": "설비별 온도 추이 확인해줘"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T13:56:08.680338+00:00",
+   "created_at": "2026-10-29T13:56:08.466906+00:00"
+  }
+ ],
+ "widgets": [
+  {
+   "id": 3,
+   "tenant_id": 4,
+   "spec": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "일일 설비 점검",
+    "props": [],
+    "title": "측정 온도 초과 건수",
+    "reason": "확정한 관계 '기준 → 측정 온도'(최대 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": ">",
+      "prop": "측정 온도",
+      "value": null,
+      "value_prop": "기준"
+     }
+    ]
+   },
+   "status": "내림",
+   "created_at": "2026-10-25T08:11:08.855234+00:00"
+  },
+  {
+   "id": 12,
+   "tenant_id": 4,
+   "spec": {
+    "kind": "view",
+    "type": "일일 설비 점검",
+    "vega": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v5.json\",\"mark\":{\"type\":\"line\",\"point\":true},\"encoding\":{\"x\":{\"field\":\"날짜\",\"type\":\"temporal\",\"title\":\"날짜\"},\"y\":{\"field\":\"측정 온도\",\"type\":\"quantitative\",\"aggregate\":\"mean\",\"title\":\"평균 온도(℃)\"},\"color\":{\"field\":\"설비\",\"type\":\"nominal\",\"title\":\"설비\"}}}",
+    "title": "설비별 온도 추이",
+    "reason": "사용자가 설비별 온도 추이를 요청해서, 날짜별 측정 온도를 설비로 나눠 선으로 그렸습니다.",
+    "conditions": []
+   },
+   "status": "올림",
+   "created_at": "2026-10-29T13:56:08.639121+00:00"
+  }
+ ],
+ "automations": [
+  {
+   "id": 2,
+   "tenant_id": 4,
+   "spec": {
+    "type": "일일 설비 점검",
+    "scope": "latest",
+    "title": "측정 온도 초과",
+    "reason": "확정한 관계 '기준 → 측정 온도'(최대 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": ">",
+      "prop": "측정 온도",
+      "value": null,
+      "value_prop": "기준"
+     }
+    ]
+   },
+   "status": "켜짐",
+   "created_at": "2026-10-25T08:11:08.214385+00:00"
+  }
+ ],
+ "eval_votes": []
+}

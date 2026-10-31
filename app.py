@@ -1,4 +1,7 @@
 """papersolve 웹 프로토타입. 화면만 담고, 규칙은 core/engine.py, Claude 호출은 core/llm.py 에 있다."""
+import copy
+import datetime
+import json
 import time
 from datetime import date
 
@@ -43,7 +46,7 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14p
 @media (min-width: 769px) {.st-key-cv_on0, [class*="st-key-cv_off"] {aspect-ratio: 1 / 1.9; min-height: 400px;}}
 @media (max-width: 768px) {.ps-arrow-big {transform: rotate(90deg); line-height: 1;}}
 .st-key-cv_on0 [data-testid="stFileUploaderDropzoneInstructions"]::after {content: "사진이나 CSV를 여기로 끌어 놓으세요";}
-.ps-logo {font-size: 1.5rem; font-weight: 400; letter-spacing: -0.01em; padding: 0.5rem 0 1rem;}
+.ps-logo {font-size: 26px; font-weight: 400; letter-spacing: -0.01em; padding: 0.5rem 0 1rem;}
 .ps-logo b {font-weight: 600;}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
 .ps-steps .ps-on {padding: 4px 10px; border: 1px solid #0F766E; border-radius: 8px; background: var(--ps-accent-bg);
@@ -84,6 +87,11 @@ CAPTION = {"종류": "새 기록 종류", "칸": "새 칸", "같은 칸": "같�
 @st.cache_data(ttl=30, show_spinner=False)
 def knowledge(tid):
     return engine.load(db.Tenant(tid))
+
+
+def know(t):
+    """활용 사례는 세션마다 따로 바뀌므로 캐시하지 않는다."""
+    return engine.load(t) if isinstance(t, Demo) else know(t) if t else {"types": []}
 
 
 def act(fn, *args, done=None):
@@ -1238,7 +1246,7 @@ def node_panel(t, K, nid):
 
 def user_link(t):
     s = st.session_state
-    s.link_msg = engine.propose_link(t, knowledge(t.id), s.pa, s.pb, s.pk, "", user=True)
+    s.link_msg = engine.propose_link(t, know(t), s.pa, s.pb, s.pk, "", user=True)
 
 
 def graph(t, K):
@@ -1454,7 +1462,7 @@ def unsent_note(key):
 
 
 def submit_edits(t, C, df, key):
-    n = engine.user_entity_edits(t, knowledge(t.id), C, df, st.session_state.get(key) or {})
+    n = engine.user_entity_edits(t, know(t), C, df, st.session_state.get(key) or {})
     st.session_state.ent_msg = f"바꾼 것 {n}개를 {UP}" if n else "바뀐 것이 없어요."
 
 
@@ -1590,34 +1598,57 @@ def entities_page(t, K):
 # ---- 랜딩 (계정이 없는 첫 방문) ----
 LANDING_CSS = """<style>
 section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], header[data-testid="stHeader"] {display: none;}
-.block-container {max-width: 1200px; padding-top: 1.5rem;}
+[data-testid="stMainBlockContainer"], .block-container {max-width: calc(1224px + 6rem); padding: 0 3rem 0 !important;}  /* 내용 폭 1224px */
+.ps-logo {font-size: 26px; padding: 0 !important; line-height: 2.5rem;}
+.st-key-back button {padding: 0;} .st-key-back button p {font-size: 26px !important; font-weight: 400; letter-spacing: -0.01em;} .st-key-back button strong {font-weight: 600;}
+.st-key-login button {min-height: 40px; height: 40px; border-radius: 6px;}
+.st-key-go button {min-height: 48px; height: 48px; padding: 0 28px; border-radius: 6px;}
+[class*="st-key-go"] button p, .st-key-login button p {font-size: 1rem;}
 .ps-glows {position: fixed; inset: 0; z-index: 0; filter: blur(110px); transform: translateZ(0); pointer-events: none;}
 .ps-glow {position: absolute; border-radius: 50%; will-change: transform, opacity;}
-.ps-g1 {width: 620px; height: 620px; background: #0F766E; left: 50%; top: 10%; animation: ps-drift1 16s ease-in-out infinite;}
-.ps-g2 {width: 420px; height: 420px; background: #1C8F84; left: 62%; top: 30%; animation: ps-drift2 22s ease-in-out infinite;}
-@keyframes ps-drift1 {0% {transform: translate(0,0) scale(1); opacity: .75} 40% {transform: translate(-120px,60px) scale(1.15); opacity: .45}
-  70% {transform: translate(80px,-40px) scale(.9); opacity: .12} 100% {transform: translate(0,0) scale(1); opacity: .75}}
-@keyframes ps-drift2 {0% {transform: translate(0,0); opacity: .15} 50% {transform: translate(-160px,90px) scale(1.2); opacity: .6} 100% {transform: translate(0,0); opacity: .15}}
+.ps-g1, .ps-g2 {width: 560px; height: 560px; left: 45%; top: 25%; opacity: 0; animation: ps-flow 28s ease-in-out infinite;}
+.ps-g1 {background: #5EEAD4;}
+.ps-g2 {background: #99F6E4; animation-delay: -14s;}  /* 한 빛이 사라질 때 다른 빛이 들어온다 */
+@keyframes ps-flow {0% {transform: translate(-25vw, 15vh) scale(.85); opacity: 0} 25% {opacity: .7} 75% {opacity: .7}
+  100% {transform: translate(25vw, -10vh) scale(1.1); opacity: 0}}
 @media (prefers-reduced-motion: reduce) {.ps-glow {animation: none;}}
-.ps-hero h1 {font-size: 3.4rem; line-height: 1.3; font-weight: 600; margin: 12vh 0 1.5rem; padding: 0;}
-.ps-hero p {font-size: 1.05rem; line-height: 1.8;}
+.ps-hero h1 {font-size: clamp(2.4rem, 4.2vw, 62px) !important; line-height: 1.22 !important; font-weight: 600 !important; letter-spacing: -0.02em; margin: 150px 0 30px; padding: 0;}
+.ps-hero [data-testid="stHeaderActionElements"], .ps-hero h1 a {display: none;}
+.ps-hero p {font-size: 17px; line-height: 1.6; margin-bottom: 64px;}
 .ps-note {font-size: 0.8rem; margin-top: 0.5rem;}
-.ps-cards {display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 8vh 0 6vh;}
-.ps-card {border-radius: 12px; padding: 20px;}
-.ps-card b {font-size: 1rem;} .ps-card p {font-size: 0.9rem; margin: 8px 0 0;}
-@media (max-width: 768px) {.ps-hero h1 {font-size: 2.2rem; margin-top: 6vh;} .ps-cards {grid-template-columns: 1fr 1fr;}}
+.ps-cards {display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px; margin: 7vh 0 0;}
+.ps-cards .ps-card {position: relative; transition: border-color .2s, box-shadow .2s, transform .2s;}
+.ps-cards .ps-card:not(:last-child)::after {content: "→"; position: absolute; right: -30px; top: 50%; transform: translateY(-50%); color: #A1A1AA; font-size: 1.1rem;}
+.ps-card:hover {border-color: #0F766E !important; box-shadow: 0 0 0 4px rgba(15,118,110,.12); transform: translateY(-2px);}
+.ps-loop {position: relative; height: 56px; margin: 0 12.5% 10vh; border: 2px dashed #5EEAD4; border-top: none; border-radius: 0 0 16px 16px;}
+.ps-loop::before {content: ""; position: absolute; left: -7px; top: -2px; border: 6px solid transparent; border-bottom: 9px solid #0F766E; border-top: none;}
+.ps-loop span {position: absolute; left: 50%; bottom: -0.8rem; transform: translateX(-50%); background: #FFFFFF; padding: 0 14px; white-space: nowrap; font-size: 0.95rem; color: #0F766E;}
+.ps-card {border-radius: 14px; padding: 28px 24px;}
+.ps-card b {font-size: 1.15rem;} .ps-card p {font-size: 0.95rem; margin: 10px 0 0; line-height: 1.6;}
+@media (max-width: 768px) {.block-container {padding: 0.5rem 1.25rem 0;} .ps-hero h1 {margin-top: 8vh;} .ps-cards {grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8vh;}
+  .ps-cards .ps-card::after {display: none;} .ps-loop {margin: 0 25% 8vh;} .ps-loop span {white-space: normal; text-align: center; width: 70vw;}}
 </style>"""
-DARK = """<style>
-.stApp {background: #0A0A0B;} .stApp, .ps-hero h1 {color: #FAFAFA;} .ps-logo {color: #FAFAFA;}
-.ps-hero p {color: #A1A1AA;} .ps-note {color: #71717A;}
-.ps-card {background: #141416; border: 1px solid #27272A; color: #FAFAFA;} .ps-card p {color: #A1A1AA;} .ps-card.on {border-color: #0F766E;}
-.st-key-login button {background: #1F1F23; color: #FAFAFA; border: none;}
+HERO = """<style>
+.ps-hero h1 {color: #18181B;}
+.ps-hero p {color: #52525B;} .ps-note {color: #A1A1AA;}
+.ps-card {background: #FFFFFF; border: 1px solid #E4E4E7;}
+.ps-hero, .ps-cards, .ps-loop {position: relative; z-index: 2;} .ps-card p {color: #71717A;} .ps-card.on {border: 2px solid #0F766E;}
+/* 머리줄: 아래 구분선을 화면 양 끝까지(border-image 로 칸 밖까지 긋는다) */
+.st-key-ps_top {height: 71px; padding-bottom: 12px; box-sizing: content-box; justify-content: center; position: relative; z-index: 3;
+  border-image: linear-gradient(to bottom, transparent calc(100% - 1px), #E4E4E7 0) fill 0 / 0 / 0 100vmax;}
+.st-key-ps_top [data-testid="stHorizontalBlock"] {align-items: center;}
+.st-key-ps_top button {margin: 0 !important;}
+.st-key-logo button {padding: 0;} .st-key-ps_top .st-key-logo button p {font-size: 26px !important; font-weight: 400; letter-spacing: -0.01em;} .st-key-logo button strong {font-weight: 600;}
+.st-key-ps_top button p {font-size: 16px !important;} .st-key-login button p {font-weight: 600;}
+.st-key-ps_top [data-testid="stPopover"] button, [class*="st-key-nav_top_"] button {padding: 0; min-height: 0; justify-content: flex-start;}  /* 메뉴 글자가 칸 왼쪽 끝(로고에서 190px)에서 시작 */
+.st-key-login button {background: #FFFFFF; border: 1px solid #E4E4E7;} .st-key-login button:hover {border-color: #0F766E;}
 [data-testid="stMain"] > div {position: relative; z-index: 1;}
+.ps-glows {top: 73px; z-index: 0;}
 </style>"""
 LOGIN = """<style>
 .stApp {background: linear-gradient(to right, #FFFFFF 50%, #E4E4E7 50%, #E4E4E7 calc(50% + 1px), #F7F7F8 calc(50% + 1px));}
 .ps-card {background: #FFFFFF; border: 1px solid #E4E4E7; margin-bottom: 14px;} .ps-card p {color: #71717A;} .ps-card.on {border: 2px solid #0F766E;}
-.ps-hero, .ps-note {text-align: center;} .ps-hero h1 {font-size: 2.4rem; margin-top: 6vh;} .ps-hero p {color: #52525B;} .ps-note {color: #A1A1AA;}
+.ps-hero, .ps-note {text-align: center;} .ps-hero h1 {font-size: 2.4rem !important; margin-top: 6vh;} .ps-hero p {color: #52525B;} .ps-note {color: #A1A1AA;}
 .st-key-google button {background: #FFFFFF;} .st-key-kakao button {background: #FEE500; color: #191919; border: none;}
 @media (max-width: 768px) {.stApp {background: #FFFFFF;}}
 </style>"""
@@ -1629,6 +1660,85 @@ def step_cards():
     return "".join(f'<div class="ps-card{" on" if i == 0 else ""}"><b>{h}</b><p>{p}</p></div>' for i, (h, p) in enumerate(STEP_CARDS))
 
 
+CASES = [(4, "제조 설비 점검", "점검표 사진 · 이상 설비 챙기기"), (3, "생산 검사", "불량 기록 · 판정 기준"),
+         (1, "유통 재고", "재고 장부 · 부족 품목"), (2, "공인중개사 메모", "매물 메모 · 고객 연결")]
+
+
+DEFAULTS = {  # db/schema.sql 의 기본값: 메모리에 새로 넣는 줄에도 붙인다
+    "object_types": {"kind": "기록"}, "property_defs": {"is_entity": False, "position": 0}, "link_types": {"attr_defs": []},
+    "entities": {"attrs": {}}, "entity_links": {"attrs": {}}, "records": {"data": {}, "uncertain": [], "status": "대기"},
+    "proposals": {"status": "대기"}, "widgets": {"status": "올림"}, "automations": {"status": "켜짐"}}
+DUMMY = {4: "4-시험-제조점검", 3: "3-시험-생산검사", 1: "1-시험-유통재고", 2: "2-시험-중개메모"}
+
+
+def match(row, key, cond):
+    """PostgREST 조건 한 개(eq.값, in.(a,b), is.null)를 메모리의 줄에 맞춘다."""
+    op, _, val = cond.partition(".")
+    v = row.get(key)
+    if op == "eq":
+        return str(v).lower() == val.lower() if isinstance(v, bool) else str(v) == val
+    if op == "neq":
+        return str(v) != val
+    if op == "in":
+        return str(v) in [x.strip('"') for x in val.strip("()").split(",")]
+    if op == "is":
+        return v is None if val == "null" else str(v).lower() == val
+    return True
+
+
+class Demo(db.Tenant):
+    """활용 사례: 시험 계정을 이 브라우저 세션의 메모리로 복사해 실제 화면 그대로 누르고 바뀌는 것을 본다. DB에는 쓰지 않는다."""
+
+    def __init__(self, tid):
+        super().__init__(tid)
+        key = f"_demo_{tid}"
+        if key not in st.session_state:
+            d = json.load(open(f"dummy/db/{DUMMY[tid]}.json", encoding="utf-8"))
+            d.pop("tenant", None)
+            st.session_state[key] = d
+        self.tables = st.session_state[key]
+
+    def get(self, table, select=None, order=None, limit=None, **params):
+        rows = [r for r in self.tables.setdefault(table, []) if all(match(r, k, c) for k, c in params.items())]
+        for part in reversed((order or "").split(",") if order else []):
+            col, _, how = part.partition(".")
+            rows.sort(key=lambda r: (r.get(col) is None, r.get(col) if r.get(col) is not None else 0), reverse=how == "desc")
+        rows = rows[:int(limit)] if limit else rows
+        cols = select.split(",") if select and select != "*" else None
+        return copy.deepcopy([{c: r.get(c) for c in cols} if cols else r for r in rows])
+
+    def post(self, table, body, on_conflict=None, **params):
+        rows, out = self.tables.setdefault(table, []), []
+        keys = [k for k in (on_conflict or "").split(",") if k and k != "tenant_id"]
+        for r in (body if isinstance(body, list) else [body]):
+            same = next((x for x in rows if keys and all(x.get(k) == r.get(k) for k in keys)), None)
+            if same:
+                same.update(r)
+                out.append(copy.deepcopy(same))
+                continue
+            new = {**DEFAULTS.get(table, {}), "id": max([x["id"] for x in rows] + [0]) + 1, "tenant_id": self.id,
+                   "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), **r}
+            rows.append(new)
+            out.append(copy.deepcopy(new))
+        return out if isinstance(body, list) else out[0]
+
+    def patch(self, table, body, **params):
+        for r in self.tables.setdefault(table, []):
+            if all(match(r, k, c) for k, c in params.items()):
+                r.update(copy.deepcopy(body))
+
+    def delete(self, table, **params):
+        self.tables[table] = [r for r in self.tables.setdefault(table, []) if not all(match(r, k, c) for k, c in params.items())]
+
+
+def see_case(tid):
+    st.session_state.update(demo=tid, entered=True, landing=None, page="홈", _demo_home=False)
+
+
+def leave_case():
+    st.session_state.update(demo=None, page="올리기")
+
+
 def enter():
     st.session_state.entered = True
     st.session_state.landing = None
@@ -1636,10 +1746,10 @@ def enter():
 
 def landing():
     """계정이 없는 첫 방문: 랜딩(무슨 서비스인지) → [바로 써 보기]로 올리기, [로그인]은 로그인 화면(모양만)."""
-    st.markdown(LANDING_CSS, unsafe_allow_html=True)
+    st.html(LANDING_CSS)
     if st.session_state.get("landing") == "login":
-        st.markdown(LOGIN, unsafe_allow_html=True)
-        st.button("papersolve", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
+        st.html(LOGIN)
+        st.button("paper**solve**", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
         left, right = st.columns(2, gap="xlarge")
         with left:
             st.markdown('<div class="ps-hero"><h1>손으로 적은 기록을 찍으면<br>표 · 챙길 일 · 답이 돼요</h1>'
@@ -1656,17 +1766,27 @@ def landing():
         with right:
             st.markdown(step_cards(), unsafe_allow_html=True)
         st.stop()
-    st.markdown(DARK + '<div class="ps-glows"><div class="ps-glow ps-g1"></div><div class="ps-glow ps-g2"></div></div>', unsafe_allow_html=True)
-    logo, _, login = st.columns([2, 6, 1], vertical_alignment="center")
-    logo.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
-    login.button("로그인", key="login", on_click=lambda: st.session_state.update(landing="login"), width="stretch")
+    st.html(HERO)
+    top = st.container(key="ps_top")  # 스크롤해도 위에 붙어 있는 머리줄
+    with top:
+        logo, cases, docs, about, _, login = st.columns([190, 116, 92, 92, 583, 151], gap=None, vertical_alignment="center")  # 1224px 중 로고 190 · 메뉴 셋 · 버튼 151
+        logo.button("paper**solve**", key="logo", type="tertiary")
+        with cases.popover("활용 사례", type="tertiary"):
+            for cid, name, desc in CASES:
+                st.button(name, key=f"case_{cid}", help=desc, on_click=see_case, args=(cid,), width="stretch")
+                st.caption(desc)
+        for col, name in ((docs, "도큐먼트"), (about, "회사소개")):
+            if col.button(name, key=f"nav_top_{name}", type="tertiary"):
+                st.toast(f"{name}는 준비 중이에요.")
+        login.button("로그인", key="login", on_click=lambda: st.session_state.update(landing="login"), width="stretch")
     st.markdown('<div class="ps-hero"><h1>종이 장부는 그대로,<br>정리는 AI가 할게요</h1>'
                 '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>맞는지만 확인하면 챙길 일과 답이 따라와요.</p></div>',
                 unsafe_allow_html=True)
-    go, _ = st.columns([1, 4])
-    go.button("바로 써 보기  →", key="go", type="primary", on_click=enter, width="stretch")
+    st.button("바로 써 보기  →", key="go", type="primary", on_click=enter)
     st.markdown('<div class="ps-note">가입 없이 시작해요 · 로그인은 준비 중</div>'
-                f'<div class="ps-cards">{step_cards()}</div>', unsafe_allow_html=True)
+                f'<div class="ps-cards">{step_cards()}</div>'
+                '<div class="ps-loop"><span>④에서 다시 ① 종이로 · 올릴수록 묻는 건 줄고, 답은 정확해져요</span></div>'
+                '<div class="ps-glows"><div class="ps-glow ps-g1"></div><div class="ps-glow ps-g2"></div></div>', unsafe_allow_html=True)
     st.stop()
 
 
@@ -1694,9 +1814,10 @@ def pick(p):
 if "_goto" in st.session_state:
     st.session_state.page = st.session_state.pop("_goto")
 
-tid = account()
-tenant = db.Tenant(tid) if tid else None
-K = knowledge(tid) if tid else {"types": []}
+demo = st.session_state.get("demo")
+tid = demo or account()
+tenant = Demo(tid) if demo else db.Tenant(tid) if tid else None
+K = know(tenant)
 waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
 if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
     st.session_state.page = "홈" if K["types"] else "올리기"
@@ -1720,13 +1841,28 @@ remember = (f'localStorage.setItem("ps_account", "{tid}")' if tid else
             'localStorage.removeItem("ps_account")' if st.query_params.get("a") else
             'const a = localStorage.getItem("ps_account"); if (a) { const u = new URL(w.location.href); '
             'u.searchParams.set("a", a); w.location.replace(u.href); }')
-if st.session_state.get("_remembered") != (tid, st.query_params.get("a")):
+if not demo and st.session_state.get("_remembered") != (tid, st.query_params.get("a")):
     # 주소에 계정이 없으면 이 브라우저가 기억한 계정으로 다시 열고, 있으면 기억해 둔다. 없는 번호면 지운다
     st.session_state._remembered = (tid, st.query_params.get("a"))
     st.container(key="remember").iframe(f"<script>const w = window.parent; {remember.replace('localStorage', 'w.localStorage')}</script>", height=1)
 
 if not tid and not st.session_state.get("entered"):
     landing()  # 계정이 없는 첫 방문은 랜딩부터
+if demo:  # 활용 사례: 화면 위에 어떤 사례인지와 내 계정으로 가는 버튼
+    note, mine = st.columns([5, 1], vertical_alignment="center")
+    note.info(f"활용 사례 · {next(n for c, n, _ in CASES if c == demo)} · 눌러 보며 써 보세요. 이 창을 닫으면 처음으로 돌아가요.")
+    mine.button("내 종이로 시작", key="leave_case", type="primary", on_click=leave_case, width="stretch")
+    if st.session_state.page == "홈" and not waiting:  # 확인을 다 한 뒤 홈을 보면 다음은 묻기
+        st.session_state._demo_home = True
+    on = tenant.get("automations", select="id", status="eq.켜짐")
+    nxt = (("확인", f"확인할 것 {waiting}개에 [맞아요]나 [아니요]로 답해 보세요.") if waiting else
+           ("자동화", "챙길 일 카드에서 [켜기]를 눌러 보세요. 홈에 걸린 대상이 먼저 보여요.") if not on else
+           ("홈", "켜 둔 자동화에 걸린 대상과 [이번 주 요약 만들기]를 보세요.") if not st.session_state.get("_demo_home") else
+           ("묻기", "예시 질문을 눌러 물어보면, 기록에서 센 답과 근거 기록이 와요."))
+    hint, nxt_col = st.columns([5, 1], vertical_alignment="center")
+    hint.caption(f"다음에 눌러 볼 것 · {nxt[0]} — {nxt[1]}")
+    if nxt[0] != st.session_state.page:
+        nxt_col.button(f"{nxt[0]}로 가기", key="demo_next", on_click=pick, args=(nxt[0],), width="stretch")
 page = st.session_state.page
 if page == "홈" and K["types"]:
     st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
@@ -1734,7 +1870,11 @@ if first_run() is not None:
     steps_bar()
 elif not K["types"]:
     place(page)  # 기록이 없으면 제목 위에 이 메뉴의 단계
-if page == "올리기":
+if page == "올리기" and demo:
+    st.header("올리기")
+    st.caption("활용 사례에서는 종이를 새로 읽지 않아요. 아래 [직접 적기]로 적어 보거나, [내 종이로 시작]을 누르면 내 계정에서 올릴 수 있어요.")
+    write_form(tenant, K)
+elif page == "올리기":
     upload(tenant, K)
 elif not tenant:
     st.header(TITLE.get(page, page))

@@ -1,0 +1,1045 @@
+{
+ "tenant": {
+  "id": 3,
+  "name": "시험 · 생산 검사"
+ },
+ "object_types": [
+  {
+   "id": 3,
+   "tenant_id": 3,
+   "name": "일일 검사 기록",
+   "created_at": "2026-10-25T08:07:19.433389+00:00",
+   "kind": "기록",
+   "parent_name": null
+  }
+ ],
+ "property_defs": [
+  {
+   "id": 18,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "검사자",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 0,
+   "created_at": "2026-10-25T08:07:19.593396+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 19,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "로트번호",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 1,
+   "created_at": "2026-10-25T08:07:20.167261+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 20,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "제품",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": true,
+   "position": 2,
+   "created_at": "2026-10-25T08:07:20.726222+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 21,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "치수",
+   "dtype": "number",
+   "unit": "mm",
+   "is_entity": false,
+   "position": 3,
+   "created_at": "2026-10-25T08:07:21.261287+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 22,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "무게",
+   "dtype": "number",
+   "unit": "g",
+   "is_entity": false,
+   "position": 4,
+   "created_at": "2026-10-25T08:07:21.767558+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 23,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "외관",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 5,
+   "created_at": "2026-10-25T08:07:22.317173+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 24,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "name": "판정",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 6,
+   "created_at": "2026-10-25T08:07:22.845353+00:00",
+   "ref_class": null,
+   "description": null
+  }
+ ],
+ "alias_dict": [
+  {
+   "id": 37,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "검사자",
+   "prop_name": "검사자",
+   "created_at": "2026-10-25T08:07:19.756226+00:00"
+  },
+  {
+   "id": 39,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "로트번호",
+   "prop_name": "로트번호",
+   "created_at": "2026-10-25T08:07:20.341588+00:00"
+  },
+  {
+   "id": 41,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "제품",
+   "prop_name": "제품",
+   "created_at": "2026-10-25T08:07:20.900256+00:00"
+  },
+  {
+   "id": 43,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "치수(mm)",
+   "prop_name": "치수",
+   "created_at": "2026-10-25T08:07:21.430999+00:00"
+  },
+  {
+   "id": 44,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "치수",
+   "prop_name": "치수",
+   "created_at": "2026-10-25T08:07:21.625732+00:00"
+  },
+  {
+   "id": 45,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "무게(g)",
+   "prop_name": "무게",
+   "created_at": "2026-10-25T08:07:21.916836+00:00"
+  },
+  {
+   "id": 46,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "무게",
+   "prop_name": "무게",
+   "created_at": "2026-10-25T08:07:22.154703+00:00"
+  },
+  {
+   "id": 47,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "외관",
+   "prop_name": "외관",
+   "created_at": "2026-10-25T08:07:22.470524+00:00"
+  },
+  {
+   "id": 49,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "alias": "판정",
+   "prop_name": "판정",
+   "created_at": "2026-10-25T08:07:22.999149+00:00"
+  }
+ ],
+ "link_types": [],
+ "entities": [],
+ "entity_aliases": [],
+ "entity_links": [],
+ "source_inputs": [
+  {
+   "id": 5,
+   "tenant_id": 3,
+   "channel": "사진",
+   "name": "2026-10-14.jpg",
+   "storage_path": "uploads/3-5.jpg",
+   "created_at": "2026-10-25T08:07:12.85725+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 3,
+   "channel": "파일",
+   "name": "records.csv",
+   "storage_path": "uploads/3-6.csv",
+   "created_at": "2026-10-25T08:07:25.328973+00:00"
+  }
+ ],
+ "records": [
+  {
+   "id": 58,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "합격",
+    "검사자": "강서준",
+    "무게(g)": "119",
+    "치수(mm)": "49.9",
+    "로트번호": "L-A-1014"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/3-5.jpg",
+   "source_input_id": 5,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:18.852279+00:00"
+  },
+  {
+   "id": 59,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "외관": "기스",
+    "제품": "브라켓 B",
+    "판정": "불합격",
+    "검사자": "강서준",
+    "무게(g)": "120",
+    "치수(mm)": "50.4",
+    "로트번호": "L-B-1014"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/3-5.jpg",
+   "source_input_id": 5,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:18.852279+00:00"
+  },
+  {
+   "id": 60,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "외관": "기스",
+    "제품": "커버 C",
+    "판정": "불합격",
+    "검사자": "강서준",
+    "무게(g)": "121",
+    "치수(mm)": "50.0",
+    "로트번호": "L-C-1014"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/3-5.jpg",
+   "source_input_id": 5,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:18.852279+00:00"
+  },
+  {
+   "id": 61,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "120",
+    "치수(mm)": "49.9",
+    "로트번호": "L-A-1012"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-12.jpg",
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 62,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 B",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "120",
+    "치수(mm)": "49.9",
+    "로트번호": "L-B-1012"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-12.jpg",
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 63,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "121",
+    "치수(mm)": "50.1",
+    "로트번호": "L-C-1012"
+   },
+   "uncertain": [],
+   "photo_path": "photos/2026-10-12.jpg",
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 64,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "120",
+    "치수(mm)": "50.0",
+    "로트번호": "L-A-1013"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 65,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 B",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "121",
+    "치수(mm)": "50.2",
+    "로트번호": "L-B-1013"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 66,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "121",
+    "치수(mm)": "50.3",
+    "로트번호": "L-C-1013"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 67,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "합격",
+    "검사자": "강서준",
+    "무게(g)": "119",
+    "치수(mm)": "49.9",
+    "로트번호": "L-A-1014"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 68,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "외관": "기스",
+    "제품": "브라켓 B",
+    "판정": "불합격",
+    "검사자": "강서준",
+    "무게(g)": "120",
+    "치수(mm)": "50.4",
+    "로트번호": "L-B-1014"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 69,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "외관": "기스",
+    "제품": "커버 C",
+    "판정": "불합격",
+    "검사자": "강서준",
+    "무게(g)": "121",
+    "치수(mm)": "50.0",
+    "로트번호": "L-C-1014"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 70,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "120",
+    "치수(mm)": "49.9",
+    "로트번호": "L-A-1015"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 71,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 B",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "120",
+    "치수(mm)": "49.8",
+    "로트번호": "L-B-1015"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 72,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "119",
+    "치수(mm)": "49.9",
+    "로트번호": "L-C-1015"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 73,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "불합격",
+    "검사자": "정하은",
+    "무게(g)": "120",
+    "치수(mm)": "50.4",
+    "로트번호": "L-A-1016"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 74,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 B",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "119",
+    "치수(mm)": "50.0",
+    "로트번호": "L-B-1016"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 75,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "120",
+    "치수(mm)": "50.0",
+    "로트번호": "L-C-1016"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 76,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "불합격",
+    "검사자": "강서준",
+    "무게(g)": "121",
+    "치수(mm)": "50.4",
+    "로트번호": "L-A-1017"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 77,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "외관": "기스",
+    "제품": "브라켓 B",
+    "판정": "불합격",
+    "검사자": "강서준",
+    "무게(g)": "120",
+    "치수(mm)": "50.2",
+    "로트번호": "L-B-1017"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 78,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "합격",
+    "검사자": "강서준",
+    "무게(g)": "122",
+    "치수(mm)": "50.1",
+    "로트번호": "L-C-1017"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 79,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "외관": "기스",
+    "제품": "브라켓 A",
+    "판정": "불합격",
+    "검사자": "최도윤",
+    "무게(g)": "120",
+    "치수(mm)": "50.1",
+    "로트번호": "L-A-1018"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 80,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 B",
+    "판정": "합격",
+    "검사자": "최도윤",
+    "무게(g)": "119",
+    "치수(mm)": "49.9",
+    "로트번호": "L-B-1018"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 81,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "불합격",
+    "검사자": "최도윤",
+    "무게(g)": "124",
+    "치수(mm)": "50.1",
+    "로트번호": "L-C-1018"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 82,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 A",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "120",
+    "치수(mm)": "50.0",
+    "로트번호": "L-A-1019"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 83,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "외관": "양호",
+    "제품": "브라켓 B",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "120",
+    "치수(mm)": "50.0",
+    "로트번호": "L-B-1019"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  },
+  {
+   "id": 84,
+   "tenant_id": 3,
+   "type_name": "일일 검사 기록",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "외관": "양호",
+    "제품": "커버 C",
+    "판정": "합격",
+    "검사자": "정하은",
+    "무게(g)": "121",
+    "치수(mm)": "50.1",
+    "로트번호": "L-C-1019"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 6,
+   "status": "확정",
+   "created_at": "2026-10-25T08:07:30.838072+00:00"
+  }
+ ],
+ "proposals": [
+  {
+   "id": 15,
+   "tenant_id": 3,
+   "kind": "종류",
+   "payload": {
+    "type": "일일 검사 기록",
+    "links": [],
+    "props": [
+     {
+      "name": "검사자",
+      "unit": null,
+      "dtype": "text",
+      "label": "검사자",
+      "is_entity": false
+     },
+     {
+      "name": "로트번호",
+      "unit": null,
+      "dtype": "text",
+      "label": "로트번호",
+      "is_entity": false
+     },
+     {
+      "name": "제품",
+      "unit": null,
+      "dtype": "text",
+      "label": "제품",
+      "is_entity": true
+     },
+     {
+      "name": "치수",
+      "unit": "mm",
+      "dtype": "number",
+      "label": "치수(mm)",
+      "is_entity": false
+     },
+     {
+      "name": "무게",
+      "unit": "g",
+      "dtype": "number",
+      "label": "무게(g)",
+      "is_entity": false
+     },
+     {
+      "name": "외관",
+      "unit": null,
+      "dtype": "text",
+      "label": "외관",
+      "is_entity": false
+     },
+     {
+      "name": "판정",
+      "unit": null,
+      "dtype": "text",
+      "label": "판정",
+      "is_entity": false
+     }
+    ],
+    "title": "일일 검사 기록표"
+   },
+   "evidence": {
+    "rows": 3,
+    "samples": {
+     "외관": [
+      "양호",
+      "기스"
+     ],
+     "제품": [
+      "브라켓 A",
+      "브라켓 B",
+      "커버 C"
+     ],
+     "판정": [
+      "합격",
+      "불합격"
+     ],
+     "검사자": [
+      "강서준"
+     ],
+     "무게(g)": [
+      "119",
+      "120",
+      "121"
+     ],
+     "치수(mm)": [
+      "49.9",
+      "50.4",
+      "50.0"
+     ],
+     "로트번호": [
+      "L-A-1014",
+      "L-B-1014",
+      "L-C-1014"
+     ]
+    }
+   },
+   "status": "승인",
+   "source_input_id": 5,
+   "decided_at": "2026-10-25T08:07:23.235513+00:00",
+   "created_at": "2026-10-25T08:07:18.696945+00:00"
+  },
+  {
+   "id": 23,
+   "tenant_id": 3,
+   "kind": "지표",
+   "payload": {
+    "fn": "avg",
+    "kind": "kpi",
+    "prop": "치수",
+    "type": "일일 검사 기록",
+    "props": [],
+    "title": "치수 평균",
+    "reason": "치수는 숫자 칸이라 평균으로 전체 검사 추세의 중심값을 한눈에 볼 수 있습니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T08:10:04.114906+00:00"
+  },
+  {
+   "id": 24,
+   "tenant_id": 3,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "일일 검사 기록",
+    "props": [
+     "치수",
+     "무게"
+    ],
+    "title": "치수·무게 추이",
+    "reason": "두 숫자 칸을 함께 추이로 보면 날짜별 치수와 무게 변동을 비교할 수 있습니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T08:10:04.266256+00:00"
+  },
+  {
+   "id": 25,
+   "tenant_id": 3,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "일일 검사 기록",
+    "props": [],
+    "title": "불합격 건수",
+    "reason": "판정이 불합격인 기록 수를 세면 품질 문제 발생 정도를 바로 파악할 수 있습니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "판정",
+      "value": "불합격",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T08:10:04.419556+00:00"
+  },
+  {
+   "id": 26,
+   "tenant_id": 3,
+   "kind": "지표",
+   "payload": {
+    "fn": "latest",
+    "kind": "kpi",
+    "prop": "무게",
+    "type": "일일 검사 기록",
+    "props": [],
+    "title": "무게 최신값",
+    "reason": "무게의 가장 최근 값을 보여 주면 현재 생산 상태를 확인하기 쉽습니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T08:10:04.645+00:00"
+  },
+  {
+   "id": 27,
+   "tenant_id": 3,
+   "kind": "업무",
+   "payload": {
+    "type": "일일 검사 기록",
+    "scope": "recent7",
+    "title": "최근 7일 불합격 판정",
+    "reason": "불합격 판정은 바로 확인해야 하므로 최근 7일 기록 중 판정이 불합격인 건을 먼저 보여줍니다.",
+    "conditions": [
+     {
+      "op": "=",
+      "prop": "판정",
+      "value": "불합격",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T08:10:12.773909+00:00"
+  },
+  {
+   "id": 28,
+   "tenant_id": 3,
+   "kind": "업무",
+   "payload": {
+    "type": "일일 검사 기록",
+    "scope": "recent7",
+    "title": "기스 있는데 합격 판정",
+    "reason": "외관에 기스가 있는데 합격으로 판정된 기록은 판정 누락일 수 있어 최근 7일 안에서 먼저 확인합니다.",
+    "conditions": [
+     {
+      "op": "contains",
+      "prop": "외관",
+      "value": "기스",
+      "value_prop": null
+     },
+     {
+      "op": "=",
+      "prop": "판정",
+      "value": "합격",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T08:10:12.916236+00:00"
+  },
+  {
+   "id": 49,
+   "tenant_id": 3,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "제품",
+    "type": "일일 검사 기록",
+    "class": "제품",
+    "values": [
+     "커버 C",
+     "브라켓 B",
+     "브라켓 A"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T10:11:15.230047+00:00"
+  },
+  {
+   "id": 64,
+   "tenant_id": 3,
+   "kind": "업무",
+   "payload": {
+    "type": "일일 검사 기록",
+    "scope": "latest",
+    "title": "일일 검사 기록 2일 넘게 없음",
+    "reason": "제품마다 기록이 보통 1일 간격으로 들어와요. 그 두 배가 넘게 비면 알려 줘요.",
+    "conditions": [
+     {
+      "op": "older_than_days",
+      "prop": "날짜",
+      "value": "2",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": {
+    "rule": true
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T11:36:35.324413+00:00"
+  }
+ ],
+ "widgets": [],
+ "automations": [],
+ "eval_votes": []
+}

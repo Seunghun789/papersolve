@@ -1,0 +1,2384 @@
+{
+ "tenant": {
+  "id": 1,
+  "name": "시험 · 유통 재고"
+ },
+ "object_types": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "name": "재고 점검",
+   "created_at": "2026-10-25T08:05:04.57065+00:00",
+   "kind": "기록",
+   "parent_name": null
+  },
+  {
+   "id": 6,
+   "tenant_id": 1,
+   "name": "품목",
+   "created_at": "2026-10-25T10:11:54.69087+00:00",
+   "kind": "대상",
+   "parent_name": null
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "name": "거래처",
+   "created_at": "2026-10-25T10:12:14.982975+00:00",
+   "kind": "대상",
+   "parent_name": null
+  },
+  {
+   "id": 8,
+   "tenant_id": 1,
+   "name": "식품",
+   "created_at": "2026-10-25T10:12:30.53069+00:00",
+   "kind": "대상",
+   "parent_name": "품목"
+  },
+  {
+   "id": 13,
+   "tenant_id": 1,
+   "name": "사업장",
+   "created_at": "2026-10-29T14:19:47.546923+00:00",
+   "kind": "대상",
+   "parent_name": null
+  },
+  {
+   "id": 14,
+   "tenant_id": 1,
+   "name": "직원",
+   "created_at": "2026-10-29T14:19:54.640011+00:00",
+   "kind": "대상",
+   "parent_name": null
+  },
+  {
+   "id": 15,
+   "tenant_id": 1,
+   "name": "소모품",
+   "created_at": "2026-10-29T14:20:05.985651+00:00",
+   "kind": "대상",
+   "parent_name": "품목"
+  }
+ ],
+ "property_defs": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "상호",
+   "dtype": "choice",
+   "unit": null,
+   "is_entity": false,
+   "position": 0,
+   "created_at": "2026-10-25T08:05:04.798121+00:00",
+   "ref_class": "사업장",
+   "description": null
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "작성자",
+   "dtype": "choice",
+   "unit": null,
+   "is_entity": false,
+   "position": 1,
+   "created_at": "2026-10-25T08:05:05.410721+00:00",
+   "ref_class": "직원",
+   "description": null
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "품목",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": true,
+   "position": 2,
+   "created_at": "2026-10-25T08:05:05.957236+00:00",
+   "ref_class": "품목",
+   "description": null
+  },
+  {
+   "id": 5,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "현재 재고",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 4,
+   "created_at": "2026-10-25T08:05:07.212696+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 6,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "발주 요청",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 5,
+   "created_at": "2026-10-25T08:05:08.005059+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "거래처",
+   "dtype": "text",
+   "unit": null,
+   "is_entity": false,
+   "position": 6,
+   "created_at": "2026-10-25T08:05:08.689579+00:00",
+   "ref_class": "거래처",
+   "description": null
+  },
+  {
+   "id": 8,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "입고",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 7,
+   "created_at": "2026-10-25T08:05:22.806122+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 9,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "name": "상태",
+   "dtype": "choice",
+   "unit": null,
+   "is_entity": false,
+   "position": 8,
+   "created_at": "2026-10-25T08:05:24.179392+00:00",
+   "ref_class": null,
+   "description": null
+  },
+  {
+   "id": 39,
+   "tenant_id": 1,
+   "type_name": "품목",
+   "name": "최소 재고",
+   "dtype": "number",
+   "unit": null,
+   "is_entity": false,
+   "position": 0,
+   "created_at": "2026-10-25T10:12:22.438557+00:00",
+   "ref_class": null,
+   "description": null
+  }
+ ],
+ "alias_dict": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "상호",
+   "prop_name": "상호",
+   "created_at": "2026-10-25T08:05:04.949494+00:00"
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "작성자",
+   "prop_name": "작성자",
+   "created_at": "2026-10-25T08:05:05.570897+00:00"
+  },
+  {
+   "id": 5,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "품목",
+   "prop_name": "품목",
+   "created_at": "2026-10-25T08:05:06.190492+00:00"
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "최소 재고",
+   "prop_name": "@품목.최소 재고",
+   "created_at": "2026-10-25T08:05:06.92103+00:00"
+  },
+  {
+   "id": 9,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "현재 재고",
+   "prop_name": "현재 재고",
+   "created_at": "2026-10-25T08:05:07.496293+00:00"
+  },
+  {
+   "id": 11,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "발주 요청",
+   "prop_name": "발주 요청",
+   "created_at": "2026-10-25T08:05:08.217934+00:00"
+  },
+  {
+   "id": 13,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "거래처",
+   "prop_name": "거래처",
+   "created_at": "2026-10-25T08:05:08.93556+00:00"
+  },
+  {
+   "id": 15,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "입고",
+   "prop_name": "입고",
+   "created_at": "2026-10-25T08:05:22.947222+00:00"
+  },
+  {
+   "id": 17,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "alias": "상태",
+   "prop_name": "상태",
+   "created_at": "2026-10-25T08:05:24.337086+00:00"
+  }
+ ],
+ "link_types": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "from_ref": "품목.최소 재고",
+   "to_ref": "재고 점검.현재 재고",
+   "kind": "최소 기준",
+   "reason": "최소 재고는 현재 재고가 따라야 할 최소 기준 값이다.",
+   "created_at": "2026-10-25T08:05:26.970815+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "from_ref": "재고 점검.품목",
+   "to_ref": "품목.최소 재고",
+   "kind": "연결",
+   "reason": "최소 재고는 같은 품목에 대해 적은 값이다.",
+   "created_at": "2026-10-25T08:05:27.347507+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "from_ref": "재고 점검.품목",
+   "to_ref": "재고 점검.현재 재고",
+   "kind": "연결",
+   "reason": "현재 재고는 같은 품목에 대해 적은 값이다.",
+   "created_at": "2026-10-25T08:05:27.637073+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 10,
+   "tenant_id": 1,
+   "from_ref": "재고 점검.발주 요청",
+   "to_ref": "재고 점검.입고",
+   "kind": "함께 움직임",
+   "reason": "같이 적힌 40건에서 상관 0.37로 함께 움직여요. 발주 요청이 입고보다 큰 경우는 10%뿐이에요.",
+   "created_at": "2026-10-29T14:19:09.207541+00:00",
+   "name": null,
+   "attr_defs": []
+  },
+  {
+   "id": 11,
+   "tenant_id": 1,
+   "from_ref": "재고 점검.현재 재고",
+   "to_ref": "재고 점검.입고",
+   "kind": "함께 움직임",
+   "reason": "같이 적힌 40건에서 상관 0.24로 함께 움직여요. 현재 재고가 입고보다 작은 경우는 0%예요.",
+   "created_at": "2026-10-29T14:19:27.54252+00:00",
+   "name": null,
+   "attr_defs": []
+  }
+ ],
+ "entities": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "class_name": "소모품",
+   "name": "건전지 AA",
+   "attrs": {
+    "최소 재고": 20.0
+   },
+   "created_at": "2026-10-25T10:11:56.274189+00:00"
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "class_name": "소모품",
+   "name": "종이컵 1000매",
+   "attrs": {
+    "최소 재고": 50.0
+   },
+   "created_at": "2026-10-25T10:11:56.587133+00:00"
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "class_name": "식품",
+   "name": "라면 5입",
+   "attrs": {
+    "최소 재고": 30.0
+   },
+   "created_at": "2026-10-25T10:11:56.934312+00:00"
+  },
+  {
+   "id": 4,
+   "tenant_id": 1,
+   "class_name": "식품",
+   "name": "생수 500ml",
+   "attrs": {
+    "최소 재고": 40.0
+   },
+   "created_at": "2026-10-25T10:11:57.237762+00:00"
+  },
+  {
+   "id": 5,
+   "tenant_id": 1,
+   "class_name": "거래처",
+   "name": "미래전자",
+   "attrs": {},
+   "created_at": "2026-10-25T10:12:16.552917+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 1,
+   "class_name": "거래처",
+   "name": "한결식품",
+   "attrs": {},
+   "created_at": "2026-10-25T10:12:16.861359+00:00"
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "class_name": "거래처",
+   "name": "대한상회",
+   "attrs": {},
+   "created_at": "2026-10-25T10:12:17.169254+00:00"
+  },
+  {
+   "id": 30,
+   "tenant_id": 1,
+   "class_name": "사업장",
+   "name": "우리마트",
+   "attrs": {},
+   "created_at": "2026-10-29T14:19:48.927255+00:00"
+  },
+  {
+   "id": 31,
+   "tenant_id": 1,
+   "class_name": "직원",
+   "name": "윤 대표",
+   "attrs": {},
+   "created_at": "2026-10-29T14:19:56.01672+00:00"
+  }
+ ],
+ "entity_aliases": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "entity_id": 1,
+   "alias": "건전지 AA",
+   "created_at": "2026-10-25T10:11:56.429166+00:00"
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "entity_id": 2,
+   "alias": "종이컵 1000매",
+   "created_at": "2026-10-25T10:11:56.734606+00:00"
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "entity_id": 3,
+   "alias": "라면 5입",
+   "created_at": "2026-10-25T10:11:57.090711+00:00"
+  },
+  {
+   "id": 4,
+   "tenant_id": 1,
+   "entity_id": 4,
+   "alias": "생수 500ml",
+   "created_at": "2026-10-25T10:11:57.41125+00:00"
+  },
+  {
+   "id": 5,
+   "tenant_id": 1,
+   "entity_id": 5,
+   "alias": "미래전자",
+   "created_at": "2026-10-25T10:12:16.712173+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 1,
+   "entity_id": 6,
+   "alias": "한결식품",
+   "created_at": "2026-10-25T10:12:17.01382+00:00"
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "entity_id": 7,
+   "alias": "대한상회",
+   "created_at": "2026-10-25T10:12:17.324784+00:00"
+  },
+  {
+   "id": 30,
+   "tenant_id": 1,
+   "entity_id": 30,
+   "alias": "우리마트",
+   "created_at": "2026-10-29T14:19:49.073439+00:00"
+  },
+  {
+   "id": 31,
+   "tenant_id": 1,
+   "entity_id": 31,
+   "alias": "윤 대표",
+   "created_at": "2026-10-29T14:19:56.173543+00:00"
+  }
+ ],
+ "entity_links": [],
+ "source_inputs": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "channel": "사진",
+   "name": "2026-10-12.jpg",
+   "storage_path": "uploads/1-1.jpg",
+   "created_at": "2026-10-25T08:04:56.251004+00:00"
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "channel": "파일",
+   "name": "records.csv",
+   "storage_path": "uploads/1-2.csv",
+   "created_at": "2026-10-25T08:05:12.459619+00:00"
+  }
+ ],
+ "records": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상호": "우리마트",
+    "품목": "생수 500ml",
+    "작성자": "윤 대표",
+    "최소 재고": "40",
+    "현재 재고": "63"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/1-1.jpg",
+   "source_input_id": 1,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:03.967745+00:00"
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상호": "우리마트",
+    "품목": "라면 5입",
+    "작성자": "윤 대표",
+    "최소 재고": "30",
+    "현재 재고": "66"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/1-1.jpg",
+   "source_input_id": 1,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:03.967745+00:00"
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상호": "우리마트",
+    "품목": "종이컵 1000매",
+    "거래처": "대한상회",
+    "작성자": "윤 대표",
+    "발주 요청": "54",
+    "최소 재고": "50",
+    "현재 재고": "46"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/1-1.jpg",
+   "source_input_id": 1,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:03.967745+00:00"
+  },
+  {
+   "id": 4,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상호": "우리마트",
+    "품목": "건전지 AA",
+    "작성자": "윤 대표",
+    "최소 재고": "20",
+    "현재 재고": "80"
+   },
+   "uncertain": [],
+   "photo_path": "uploads/1-1.jpg",
+   "source_input_id": 1,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:03.967745+00:00"
+  },
+  {
+   "id": 5,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "63"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "66"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상태": "재고 부족",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "거래처": "대한상회",
+    "발주 요청": "54",
+    "최소 재고": "50",
+    "현재 재고": "46"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 8,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-12",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "80"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 9,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "55"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 10,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "62"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 11,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "상태": "정상",
+    "입고": "54",
+    "품목": "종이컵 1000매",
+    "거래처": "대한상회",
+    "발주 요청": "68",
+    "최소 재고": "50",
+    "현재 재고": "86"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 12,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-13",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "67"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 13,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "46"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 14,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "50"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 15,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "상태": "정상",
+    "입고": "68",
+    "품목": "종이컵 1000매",
+    "거래처": "대한상회",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "142"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 16,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-14",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "61"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 17,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "상태": "재고 부족",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "거래처": "대한상회",
+    "발주 요청": "45",
+    "최소 재고": "40",
+    "현재 재고": "35"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 18,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "38"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 19,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "135"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 20,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-15",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "57"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 21,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "상태": "정상",
+    "입고": "45",
+    "품목": "생수 500ml",
+    "거래처": "대한상회",
+    "발주 요청": "50",
+    "최소 재고": "40",
+    "현재 재고": "75"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 22,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "상태": "재고 부족",
+    "입고": "0",
+    "품목": "라면 5입",
+    "거래처": "한결식품",
+    "발주 요청": "31",
+    "최소 재고": "30",
+    "현재 재고": "29"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 23,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "130"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 24,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-16",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "49"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 25,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "상태": "정상",
+    "입고": "50",
+    "품목": "생수 500ml",
+    "거래처": "대한상회",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "114"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 26,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "상태": "정상",
+    "입고": "31",
+    "품목": "라면 5입",
+    "거래처": "한결식품",
+    "발주 요청": "45",
+    "최소 재고": "30",
+    "현재 재고": "46"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 27,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "122"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 28,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-17",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "40"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 29,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "109"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 30,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "상태": "정상",
+    "입고": "45",
+    "품목": "라면 5입",
+    "거래처": "한결식품",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "82"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 31,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "116"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 32,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-18",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "26"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 33,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "104"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 34,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "74"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 35,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "112"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 36,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-19",
+   "data": {
+    "상태": "재고 부족",
+    "입고": "0",
+    "품목": "건전지 AA",
+    "거래처": "미래전자",
+    "발주 요청": "22",
+    "최소 재고": "20",
+    "현재 재고": "18"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 37,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-20",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "91"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 38,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-20",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "62"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 39,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-20",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "109"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 40,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-20",
+   "data": {
+    "상태": "정상",
+    "입고": "22",
+    "품목": "건전지 AA",
+    "거래처": "미래전자",
+    "발주 요청": "28",
+    "최소 재고": "20",
+    "현재 재고": "34"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 41,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-21",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "생수 500ml",
+    "발주 요청": "0",
+    "최소 재고": "40",
+    "현재 재고": "84"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 42,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-21",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "라면 5입",
+    "발주 요청": "0",
+    "최소 재고": "30",
+    "현재 재고": "49"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 43,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-21",
+   "data": {
+    "상태": "정상",
+    "입고": "0",
+    "품목": "종이컵 1000매",
+    "발주 요청": "0",
+    "최소 재고": "50",
+    "현재 재고": "102"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  },
+  {
+   "id": 44,
+   "tenant_id": 1,
+   "type_name": "재고 점검",
+   "occurred_at": "2026-10-21",
+   "data": {
+    "상태": "정상",
+    "입고": "28",
+    "품목": "건전지 AA",
+    "거래처": "미래전자",
+    "발주 요청": "0",
+    "최소 재고": "20",
+    "현재 재고": "54"
+   },
+   "uncertain": [],
+   "photo_path": null,
+   "source_input_id": 2,
+   "status": "확정",
+   "created_at": "2026-10-25T08:05:22.126909+00:00"
+  }
+ ],
+ "proposals": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "kind": "종류",
+   "payload": {
+    "type": "재고 점검",
+    "links": [
+     {
+      "to": "현재 재고",
+      "from": "최소 재고",
+      "kind": "최소 기준",
+      "reason": "최소 재고는 현재 재고가 따라야 할 최소 기준 값이다."
+     },
+     {
+      "to": "최소 재고",
+      "from": "품목",
+      "kind": "연결",
+      "reason": "최소 재고는 같은 품목에 대해 적은 값이다."
+     },
+     {
+      "to": "현재 재고",
+      "from": "품목",
+      "kind": "연결",
+      "reason": "현재 재고는 같은 품목에 대해 적은 값이다."
+     }
+    ],
+    "props": [
+     {
+      "name": "상호",
+      "unit": null,
+      "dtype": "choice",
+      "label": "상호",
+      "is_entity": false
+     },
+     {
+      "name": "작성자",
+      "unit": null,
+      "dtype": "choice",
+      "label": "작성자",
+      "is_entity": false
+     },
+     {
+      "name": "품목",
+      "unit": null,
+      "dtype": "text",
+      "label": "품목",
+      "is_entity": true
+     },
+     {
+      "name": "최소 재고",
+      "unit": null,
+      "dtype": "number",
+      "label": "최소 재고",
+      "is_entity": false
+     },
+     {
+      "name": "현재 재고",
+      "unit": null,
+      "dtype": "number",
+      "label": "현재 재고",
+      "is_entity": false
+     },
+     {
+      "name": "발주 요청",
+      "unit": null,
+      "dtype": "number",
+      "label": "발주 요청",
+      "is_entity": false
+     },
+     {
+      "name": "거래처",
+      "unit": null,
+      "dtype": "text",
+      "label": "거래처",
+      "is_entity": false
+     }
+    ],
+    "title": "재고·발주 점검표"
+   },
+   "evidence": {
+    "rows": 4,
+    "samples": {
+     "상호": [
+      "우리마트"
+     ],
+     "품목": [
+      "생수 500ml",
+      "라면 5입",
+      "종이컵 1000매",
+      "건전지 AA"
+     ],
+     "거래처": [
+      "대한상회"
+     ],
+     "작성자": [
+      "윤 대표"
+     ],
+     "발주 요청": [
+      "54"
+     ],
+     "최소 재고": [
+      "40",
+      "30",
+      "50",
+      "20"
+     ],
+     "현재 재고": [
+      "63",
+      "66",
+      "46",
+      "80"
+     ]
+    }
+   },
+   "status": "승인",
+   "source_input_id": 1,
+   "decided_at": "2026-10-25T08:05:11.214802+00:00",
+   "created_at": "2026-10-25T08:05:03.820647+00:00"
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "재고 점검.현재 재고",
+    "from": "재고 점검.최소 재고",
+    "kind": "최소 기준",
+    "reason": "최소 재고는 현재 재고가 따라야 할 최소 기준 값이다."
+   },
+   "evidence": {
+    "counted": "같이 적힌 기록 0건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:05:27.004026+00:00",
+   "created_at": "2026-10-25T08:05:10.369409+00:00"
+  },
+  {
+   "id": 3,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "재고 점검.최소 재고",
+    "from": "재고 점검.품목",
+    "kind": "연결",
+    "reason": "최소 재고는 같은 품목에 대해 적은 값이다."
+   },
+   "evidence": {
+    "counted": "같이 적힌 기록 0건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:05:27.379437+00:00",
+   "created_at": "2026-10-25T08:05:10.793293+00:00"
+  },
+  {
+   "id": 4,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "재고 점검.현재 재고",
+    "from": "재고 점검.품목",
+    "kind": "연결",
+    "reason": "현재 재고는 같은 품목에 대해 적은 값이다."
+   },
+   "evidence": {
+    "counted": "같이 적힌 기록 0건"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:05:27.746151+00:00",
+   "created_at": "2026-10-25T08:05:11.181408+00:00"
+  },
+  {
+   "id": 5,
+   "tenant_id": 1,
+   "kind": "칸",
+   "payload": {
+    "name": "입고",
+    "type": "재고 점검",
+    "unit": null,
+    "dtype": "number",
+    "label": "입고",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "0",
+     "54",
+     "68",
+     "45"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 2,
+   "decided_at": "2026-10-25T08:05:23.261868+00:00",
+   "created_at": "2026-10-25T08:05:21.565819+00:00"
+  },
+  {
+   "id": 6,
+   "tenant_id": 1,
+   "kind": "칸",
+   "payload": {
+    "name": "상태",
+    "type": "재고 점검",
+    "unit": null,
+    "dtype": "choice",
+    "label": "상태",
+    "is_entity": false
+   },
+   "evidence": {
+    "samples": [
+     "정상",
+     "재고 부족"
+    ]
+   },
+   "status": "승인",
+   "source_input_id": 2,
+   "decided_at": "2026-10-25T08:05:24.604021+00:00",
+   "created_at": "2026-10-25T08:05:21.789222+00:00"
+  },
+  {
+   "id": 7,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [],
+    "title": "현재 재고 부족 건수",
+    "reason": "확정한 관계 '최소 재고 → 현재 재고'(최소 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": "<",
+      "prop": "현재 재고",
+      "value": null,
+      "value_prop": "최소 재고"
+     }
+    ]
+   },
+   "evidence": {
+    "from_link": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:05:30.805404+00:00",
+   "created_at": "2026-10-25T08:05:29.224483+00:00"
+  },
+  {
+   "id": 8,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [
+     "현재 재고",
+     "최소 재고"
+    ],
+    "title": "현재 재고와 최소 재고",
+    "reason": "확정한 관계 '최소 재고 → 현재 재고'(최소 기준)에서 만들었어요.",
+    "conditions": []
+   },
+   "evidence": {
+    "from_link": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:05:31.17365+00:00",
+   "created_at": "2026-10-25T08:05:29.432475+00:00"
+  },
+  {
+   "id": 9,
+   "tenant_id": 1,
+   "kind": "업무",
+   "payload": {
+    "type": "재고 점검",
+    "scope": "latest",
+    "title": "현재 재고 부족",
+    "reason": "확정한 관계 '최소 재고 → 현재 재고'(최소 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": "<",
+      "prop": "현재 재고",
+      "value": null,
+      "value_prop": "최소 재고"
+     }
+    ]
+   },
+   "evidence": {
+    "from_link": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T08:05:30.37176+00:00",
+   "created_at": "2026-10-25T08:05:29.962875+00:00"
+  },
+  {
+   "id": 47,
+   "tenant_id": 1,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "품목",
+    "type": "재고 점검",
+    "class": "품목",
+    "values": [
+     "건전지 AA",
+     "종이컵 1000매",
+     "라면 5입",
+     "생수 500ml"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:11:57.360517+00:00",
+   "created_at": "2026-10-25T10:10:58.324426+00:00"
+  },
+  {
+   "id": 51,
+   "tenant_id": 1,
+   "kind": "대상 속성",
+   "payload": {
+    "attr": "최소 재고",
+    "prop": "품목",
+    "type": "재고 점검",
+    "unit": null,
+    "class": "품목",
+    "dtype": "number",
+    "values": {
+     "라면 5입": 30.0,
+     "건전지 AA": 20.0,
+     "생수 500ml": 40.0,
+     "종이컵 1000매": 50.0
+    }
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:24.559938+00:00",
+   "created_at": "2026-10-25T10:11:59.505849+00:00"
+  },
+  {
+   "id": 52,
+   "tenant_id": 1,
+   "kind": "대상 속성",
+   "payload": {
+    "attr": "거래처",
+    "prop": "품목",
+    "type": "재고 점검",
+    "unit": null,
+    "class": "품목",
+    "dtype": "text",
+    "values": {
+     "라면 5입": "한결식품",
+     "건전지 AA": "미래전자",
+     "생수 500ml": "대한상회",
+     "종이컵 1000매": "대한상회"
+    }
+   },
+   "evidence": null,
+   "status": "거절",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:20.707691+00:00",
+   "created_at": "2026-10-25T10:11:59.657209+00:00"
+  },
+  {
+   "id": 53,
+   "tenant_id": 1,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "상호",
+    "type": "재고 점검",
+    "class": "사업장",
+    "values": [
+     "우리마트"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:19:49.10837+00:00",
+   "created_at": "2026-10-25T10:12:11.462397+00:00"
+  },
+  {
+   "id": 54,
+   "tenant_id": 1,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "작성자",
+    "type": "재고 점검",
+    "class": "직원",
+    "values": [
+     "윤 대표"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:19:56.209718+00:00",
+   "created_at": "2026-10-25T10:12:11.865408+00:00"
+  },
+  {
+   "id": 55,
+   "tenant_id": 1,
+   "kind": "대상 분류",
+   "payload": {
+    "prop": "거래처",
+    "type": "재고 점검",
+    "class": "거래처",
+    "values": [
+     "미래전자",
+     "한결식품",
+     "대한상회"
+    ]
+   },
+   "evidence": {
+    "user": false
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:17.27183+00:00",
+   "created_at": "2026-10-25T10:12:12.173159+00:00"
+  },
+  {
+   "id": 56,
+   "tenant_id": 1,
+   "kind": "상위 분류",
+   "payload": {
+    "class": "식품",
+    "parent": "품목",
+    "reason": "라면과 생수는 먹고 마시는 식품류로 성격이 같다.",
+    "members": [
+     "라면 5입",
+     "생수 500ml"
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:30.798191+00:00",
+   "created_at": "2026-10-25T10:12:12.556689+00:00"
+  },
+  {
+   "id": 57,
+   "tenant_id": 1,
+   "kind": "상위 분류",
+   "payload": {
+    "class": "소모품",
+    "parent": "품목",
+    "reason": "건전지와 종이컵은 사무·매장에서 소진되는 소모품이라는 점에서 성격이 같다.",
+    "members": [
+     "건전지 AA",
+     "종이컵 1000매"
+    ]
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:20:06.336754+00:00",
+   "created_at": "2026-10-25T10:12:12.702964+00:00"
+  },
+  {
+   "id": 58,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "거래처",
+    "from": "품목",
+    "kind": "연결",
+    "name": "거래처",
+    "reason": "'재고 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 4개 [('건전지 AA', '미래전자'), ('라면 5입', '한결식품'), ('생수 500ml', '대한상회')]"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:27.127351+00:00",
+   "created_at": "2026-10-25T10:12:19.323923+00:00"
+  },
+  {
+   "id": 59,
+   "tenant_id": 1,
+   "kind": "속성 값",
+   "payload": {
+    "new": 90.0,
+    "old": 40.0,
+    "attr": "최소 재고",
+    "class": "식품",
+    "entity": "생수 500ml",
+    "entity_id": 4
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:35.419596+00:00",
+   "created_at": "2026-10-25T10:12:33.511002+00:00"
+  },
+  {
+   "id": 60,
+   "tenant_id": 1,
+   "kind": "관계 속성",
+   "payload": {
+    "attr": "단가",
+    "link": "품목—거래처",
+    "dtype": "number",
+    "values": {
+     "라면 5입|한결식품": 400.0,
+     "건전지 AA|미래전자": 300.0,
+     "생수 500ml|대한상회": 500.0,
+     "종이컵 1000매|대한상회": 600.0
+    },
+    "link_id": 6
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-25T10:12:39.28188+00:00",
+   "created_at": "2026-10-25T10:12:37.154833+00:00"
+  },
+  {
+   "id": 63,
+   "tenant_id": 1,
+   "kind": "업무",
+   "payload": {
+    "type": "재고 점검",
+    "scope": "latest",
+    "title": "재고 점검 2일 넘게 없음",
+    "reason": "품목마다 기록이 보통 1일 간격으로 들어와요. 그 두 배가 넘게 비면 알려 줘요.",
+    "conditions": [
+     {
+      "op": "older_than_days",
+      "prop": "날짜",
+      "value": "2",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": {
+    "rule": true
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-25T11:36:19.472301+00:00"
+  },
+  {
+   "id": 81,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "재고 점검.입고",
+    "from": "재고 점검.발주 요청",
+    "kind": "함께 움직임",
+    "name": null,
+    "reason": "같이 적힌 40건에서 상관 0.37로 함께 움직여요. 발주 요청이 입고보다 큰 경우는 10%뿐이에요."
+   },
+   "evidence": {
+    "user": false,
+    "counted": "같이 적힌 40건, 상관 0.37, 발주 요청<입고 인 비율 10%"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:19:09.266262+00:00",
+   "created_at": "2026-10-29T12:20:55.753765+00:00"
+  },
+  {
+   "id": 82,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "재고 점검.발주 요청",
+    "from": "재고 점검.현재 재고",
+    "kind": "함께 움직임",
+    "name": null,
+    "reason": "같이 적힌 41건에서 상관 -0.32로 반대 방향으로 움직이는 편이에요. 현재 재고가 발주 요청보다 작은 경우는 12%예요."
+   },
+   "evidence": {
+    "user": false,
+    "counted": "같이 적힌 41건, 상관 -0.32, 현재 재고<발주 요청 인 비율 12%"
+   },
+   "status": "거절",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:19:20.53752+00:00",
+   "created_at": "2026-10-29T12:20:56.189968+00:00"
+  },
+  {
+   "id": 83,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "재고 점검.입고",
+    "from": "재고 점검.현재 재고",
+    "kind": "함께 움직임",
+    "name": null,
+    "reason": "같이 적힌 40건에서 상관 0.24로 함께 움직여요. 현재 재고가 입고보다 작은 경우는 0%예요."
+   },
+   "evidence": {
+    "user": false,
+    "counted": "같이 적힌 40건, 상관 0.24, 현재 재고<입고 인 비율 0%"
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:19:27.576751+00:00",
+   "created_at": "2026-10-29T12:20:56.769879+00:00"
+  },
+  {
+   "id": 84,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": "sum",
+    "kind": "kpi",
+    "prop": "발주 요청",
+    "type": "재고 점검",
+    "props": [],
+    "title": "누적 발주 요청",
+    "reason": "확정한 재고 점검.품목 → 재고 점검.현재 재고 연결과 품목.최소 재고 → 재고 점검.현재 재고 최소 기준을 바탕으로, 발주 요청 합계를 보면 재고 보충 필요량을 한눈에 파악할 수 있습니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T13:11:24.446182+00:00",
+   "created_at": "2026-10-29T13:11:13.354425+00:00"
+  },
+  {
+   "id": 85,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [
+     "입고",
+     "발주 요청"
+    ],
+    "title": "입고·발주 요청 추이",
+    "reason": "재고 점검 기록의 입고와 발주 요청 숫자 추이를 함께 보면 들어오는 양과 요청하는 양의 균형 변화를 확인할 수 있습니다.",
+    "conditions": []
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T13:11:13.616068+00:00"
+  },
+  {
+   "id": 86,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [],
+    "title": "최근 7일 점검 건수",
+    "reason": "날짜 칸 기준으로 최근 7일 안에 작성된 재고 점검 기록 수를 세어 점검 활동의 빈도를 보여줍니다.",
+    "conditions": [
+     {
+      "op": "last_days",
+      "prop": "날짜",
+      "value": "7",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T13:11:13.76899+00:00"
+  },
+  {
+   "id": 87,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": "sum",
+    "kind": "kpi",
+    "prop": "입고",
+    "type": "재고 점검",
+    "props": [],
+    "title": "최근 7일 입고 합계",
+    "reason": "재고 점검.품목 → 재고 점검.현재 재고 연결을 따라 움직이는 입고량을 최근 7일 범위로 합산해 최근 입고 흐름을 확인합니다.",
+    "conditions": [
+     {
+      "op": "last_days",
+      "prop": "날짜",
+      "value": "7",
+      "value_prop": null
+     }
+    ]
+   },
+   "evidence": null,
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T13:11:14.067539+00:00"
+  },
+  {
+   "id": 88,
+   "tenant_id": 1,
+   "kind": "칸 설정",
+   "payload": {
+    "op": "단위·설명",
+    "prop": "상호",
+    "type": "재고 점검",
+    "unit": "곳",
+    "old_unit": null,
+    "description": "거래처 상호"
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "거절",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T13:30:05.163537+00:00",
+   "created_at": "2026-10-29T13:30:04.077185+00:00"
+  },
+  {
+   "id": 90,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "품목",
+    "from": "사업장",
+    "kind": "연결",
+    "name": "품목",
+    "reason": "'재고 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 4개 [('우리마트', '건전지 AA'), ('우리마트', '라면 5입'), ('우리마트', '생수 500ml')]"
+   },
+   "status": "거절",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:20:10.224327+00:00",
+   "created_at": "2026-10-29T14:19:50.89722+00:00"
+  },
+  {
+   "id": 91,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "거래처",
+    "from": "사업장",
+    "kind": "연결",
+    "name": "거래처",
+    "reason": "'재고 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 1개 [('우리마트', '대한상회')]"
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T14:19:51.041409+00:00"
+  },
+  {
+   "id": 92,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "직원",
+    "from": "사업장",
+    "kind": "연결",
+    "name": "작성자",
+    "reason": "'재고 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 1개 [('우리마트', '윤 대표')]"
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T14:19:58.035809+00:00"
+  },
+  {
+   "id": 93,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "품목",
+    "from": "직원",
+    "kind": "연결",
+    "name": "품목",
+    "reason": "'재고 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 4개 [('윤 대표', '건전지 AA'), ('윤 대표', '라면 5입'), ('윤 대표', '생수 500ml')]"
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T14:19:58.166987+00:00"
+  },
+  {
+   "id": 94,
+   "tenant_id": 1,
+   "kind": "연결",
+   "payload": {
+    "to": "거래처",
+    "from": "직원",
+    "kind": "연결",
+    "name": "거래처",
+    "reason": "'재고 점검' 기록에 같이 나와요."
+   },
+   "evidence": {
+    "counted": "기록에 같이 나온 대상 쌍 1개 [('윤 대표', '대한상회')]"
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T14:19:58.307707+00:00"
+  },
+  {
+   "id": 95,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [
+     "발주 요청",
+     "입고"
+    ],
+    "title": "발주 요청와 입고 함께 보기",
+    "reason": "확정한 관계 '발주 요청 → 입고'(함께 움직임)에서 만들었어요.",
+    "conditions": []
+   },
+   "evidence": {
+    "rule": true
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T14:20:32.319876+00:00"
+  },
+  {
+   "id": 96,
+   "tenant_id": 1,
+   "kind": "지표",
+   "payload": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [
+     "현재 재고",
+     "입고"
+    ],
+    "title": "현재 재고와 입고 함께 보기",
+    "reason": "확정한 관계 '현재 재고 → 입고'(함께 움직임)에서 만들었어요.",
+    "conditions": []
+   },
+   "evidence": {
+    "rule": true
+   },
+   "status": "대기",
+   "source_input_id": null,
+   "decided_at": null,
+   "created_at": "2026-10-29T14:20:32.457684+00:00"
+  },
+  {
+   "id": 97,
+   "tenant_id": 1,
+   "kind": "칸 설정",
+   "payload": {
+    "op": "다른 이름",
+    "prop": "상호",
+    "type": "재고 점검",
+    "alias": "시험별칭",
+    "undone": 98
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:25:18.899529+00:00",
+   "created_at": "2026-10-29T14:25:18.489509+00:00"
+  },
+  {
+   "id": 98,
+   "tenant_id": 1,
+   "kind": "되돌리기",
+   "payload": {
+    "of": 97,
+    "was": {
+     "op": "다른 이름",
+     "prop": "상호",
+     "type": "재고 점검",
+     "alias": "시험별칭"
+    },
+    "kind": "칸 설정"
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:25:24.957956+00:00",
+   "created_at": "2026-10-29T14:25:22.111779+00:00"
+  },
+  {
+   "id": 99,
+   "tenant_id": 1,
+   "kind": "속성 값",
+   "payload": {
+    "new": 999,
+    "old": 20.0,
+    "attr": "최소 재고",
+    "class": "소모품",
+    "entity": "건전지 AA",
+    "undone": 100,
+    "entity_id": 1
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:25:40.927015+00:00",
+   "created_at": "2026-10-29T14:25:39.22228+00:00"
+  },
+  {
+   "id": 100,
+   "tenant_id": 1,
+   "kind": "되돌리기",
+   "payload": {
+    "of": 99,
+    "was": {
+     "new": 999,
+     "old": 20.0,
+     "attr": "최소 재고",
+     "class": "소모품",
+     "entity": "건전지 AA",
+     "entity_id": 1
+    },
+    "kind": "속성 값"
+   },
+   "evidence": {
+    "user": true
+   },
+   "status": "승인",
+   "source_input_id": null,
+   "decided_at": "2026-10-29T14:25:45.710234+00:00",
+   "created_at": "2026-10-29T14:25:42.587441+00:00"
+  }
+ ],
+ "widgets": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "spec": {
+    "fn": null,
+    "kind": "count_where",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [],
+    "title": "현재 재고 부족 건수",
+    "reason": "확정한 관계 '최소 재고 → 현재 재고'(최소 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": "<",
+      "prop": "현재 재고",
+      "value": null,
+      "value_prop": "품목.최소 재고"
+     }
+    ]
+   },
+   "status": "올림",
+   "created_at": "2026-10-25T08:05:30.769116+00:00"
+  },
+  {
+   "id": 2,
+   "tenant_id": 1,
+   "spec": {
+    "fn": null,
+    "kind": "trend",
+    "prop": null,
+    "type": "재고 점검",
+    "props": [
+     "현재 재고",
+     "품목.최소 재고"
+    ],
+    "title": "현재 재고와 최소 재고",
+    "reason": "확정한 관계 '최소 재고 → 현재 재고'(최소 기준)에서 만들었어요.",
+    "conditions": []
+   },
+   "status": "올림",
+   "created_at": "2026-10-25T08:05:31.140035+00:00"
+  },
+  {
+   "id": 11,
+   "tenant_id": 1,
+   "spec": {
+    "fn": "sum",
+    "kind": "kpi",
+    "prop": "발주 요청",
+    "type": "재고 점검",
+    "props": [],
+    "title": "누적 발주 요청",
+    "reason": "확정한 재고 점검.품목 → 재고 점검.현재 재고 연결과 품목.최소 재고 → 재고 점검.현재 재고 최소 기준을 바탕으로, 발주 요청 합계를 보면 재고 보충 필요량을 한눈에 파악할 수 있습니다.",
+    "conditions": []
+   },
+   "status": "올림",
+   "created_at": "2026-10-29T13:11:24.256891+00:00"
+  }
+ ],
+ "automations": [
+  {
+   "id": 1,
+   "tenant_id": 1,
+   "spec": {
+    "prop": null,
+    "type": "재고 점검",
+    "props": [],
+    "scope": "latest",
+    "title": "현재 재고 부족",
+    "reason": "확정한 관계 '최소 재고 → 현재 재고'(최소 기준)에서 만들었어요.",
+    "conditions": [
+     {
+      "op": "<",
+      "prop": "현재 재고",
+      "value": null,
+      "value_prop": "품목.최소 재고"
+     }
+    ]
+   },
+   "status": "켜짐",
+   "created_at": "2026-10-25T08:05:30.265203+00:00"
+  }
+ ],
+ "eval_votes": []
+}
