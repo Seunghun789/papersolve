@@ -21,7 +21,7 @@ from . import db, llm
 DATA = db.ROOT / "data"
 ENTRY = ["종류", "칸", "같은 칸", "애매한 값"]       # 답하기 전에는 기록이 확정되지 않는 제안
 ENTITY = ["대상 분류", "대상", "같은 대상", "대상 속성", "속성 값", "상위 분류", "관계 속성"]
-CHECK = ENTRY + ENTITY + ["연결"]                   # 확인 화면에서 묻는 것
+CHECK = ENTRY + ENTITY + ["연결", "워크스페이스 설정"]   # 확인 화면에서 묻는 것
 DTYPE_KO = {"number": "숫자", "text": "글", "date": "날짜", "choice": "고르는 값"}
 EMPTY = ("", "-", "—", "nan", "None")
 
@@ -310,7 +310,7 @@ def stats_text(K):
 
 def pending(t, kinds):
     quoted = ",".join(f'"{k}"' for k in kinds)
-    return t.get("proposals", select="id,kind,payload,evidence,source_input_id,status", status="eq.대기",
+    return t.get("proposals", select="id,kind,payload,evidence,source_input_id,status,created_by", status="eq.대기",
                  kind=f"in.({quoted})", order="id")
 
 
@@ -380,7 +380,7 @@ def stage(t, model, sid, title, rows, unsure, days, photos):
     dtypes = {l: infer_dtype([r.get(l) for r in rows]) for l in labels}
     columns = "\n".join(f"- {l}: {DTYPE_KO[dtypes[l]]}, 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
     waiting = {q["payload"]["type"]: q for q in pending(t, ["종류"])}
-    plan = llm.propose_schema(t, model, title, columns, schema_text(K), list(waiting))
+    plan = llm.propose_schema(t, model, title, columns, schema_text(K), list(waiting), space_text(t))
     T = plan["type_name"].strip() or title
     if T in K["classes"]:
         T = f"{T} 기록"
@@ -1047,6 +1047,44 @@ def backtest(K, spec, days=30):
     return sorted(int(i) for i in ids)
 
 
+PERIODS = {"오늘": ("어제", "D"), "이번 주": ("지난주", "D"), "이번 달": ("지난달", "W"), "올해": ("작년", "M")}
+
+
+def period_range(name, today=None):
+    """보는 기간과 같은 길이 바로 앞 기간: (시작, 끝, 앞 시작, 앞 끝). 이번 주는 오늘까지 7일."""
+    today = today or date.today()
+    if name == "오늘":
+        return today, today, today - timedelta(days=1), today - timedelta(days=1)
+    if name == "이번 달":
+        start = today.replace(day=1)
+        prev_end = start - timedelta(days=1)
+        return start, today, prev_end.replace(day=1), prev_end.replace(day=min(today.day, prev_end.day))
+    if name == "올해":
+        start = today.replace(month=1, day=1)
+        return start, today, start.replace(year=start.year - 1), today.replace(year=today.year - 1, day=min(today.day, 28))
+    return today - timedelta(days=6), today, today - timedelta(days=13), today - timedelta(days=7)
+
+
+def in_period(K, start, end):
+    """그 기간 안의 기록만 남긴 지식. 앞 기간 값은 그날까지의 기록으로 다시 센다."""
+    return {**K, "records": [r for r in K["records"] if start.isoformat() <= r["occurred_at"] <= end.isoformat()]}
+
+
+def period_values(K, spec, name):
+    """(이 기간 값, 앞 기간 값, 이 기간 근거 기록). kpi·count_where 만 값이 있다."""
+    a, b, pa, pb = period_range(name)
+    now_v, ev = run_widget(in_period(K, a, b), spec, b)
+    if spec.get("kind") not in ("kpi", "count_where"):
+        return now_v, None, ev
+    return now_v, run_widget(in_period(K, pa, pb), spec, pb)[0], ev
+
+
+def last_date(K, T):
+    """그 기록 종류의 마지막 기록 날짜(확정한 기록 중 가장 늦은 날). 없으면 None."""
+    days = [r["occurred_at"] for r in K["records"] if r["type_name"] == T]
+    return max(days) if days else None
+
+
 def week_change(K, spec):
     """지표의 이번 값과 일주일 전 값(그날까지의 기록으로 다시 센 값). kpi·count_where 만."""
     if spec.get("kind") not in ("kpi", "count_where"):
@@ -1215,7 +1253,7 @@ def known_titles(t, kind, table):
 def sync_rules(t, K):
     """확정한 관계와 기록 간격에서 규칙으로 나온 지표·업무를 아직 제안하지 않았으면 제안으로 올린다."""
     widgets, autos = from_links(K)
-    autos += from_gaps(K)
+    autos += from_gaps(K) + from_schedules(K)
     for kind, table, specs in (("지표", "widgets", widgets), ("업무", "automations", autos)):
         taken = known_titles(t, kind, table)
         for s in specs:
@@ -1331,7 +1369,11 @@ def match(df, conds, today=None):
     today = today or date.today()
     for c in conds or []:
         col, op, value = df[c["prop"]], c["op"], c.get("value")
-        if op in ("within_days", "is_today", "last_days", "older_than_days"):
+        if op in ("missed_weekday", "missed_monthday"):
+            due = last_due(op, int(to_number(value) or 0), today)
+            days = col.map(lambda v: to_date(v, today.year))
+            hit = days.map(lambda d: d is not None and d < due < today)  # 예정일이 지났는데(오늘은 아직 아님) 그날 뒤 기록이 없다
+        elif op in ("within_days", "is_today", "last_days", "older_than_days"):
             days = col.map(lambda v: to_date(v, today.year))
             n = int(to_number(value) or 0)
             if op == "is_today":
@@ -1354,6 +1396,53 @@ def match(df, conds, today=None):
                        "=": left == right, "!=": left != right}[op]
         mask &= pd.Series(hit, index=df.index).fillna(False).astype(bool)
     return df[mask]
+
+
+def last_due(op, n, today):
+    """오늘 또는 그 전의 가장 최근 예정일. 주: n=요일(0=월). 달: n=날짜(달에 없으면 말일)."""
+    if op == "missed_weekday":
+        return today - timedelta(days=(today.weekday() - n) % 7)
+    y, m = today.year, today.month
+    for _ in range(2):
+        end = (date(y + m // 12, m % 12 + 1, 1) - timedelta(days=1)).day
+        d = date(y, m, min(n, end))
+        if d <= today:
+            return d
+        y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+    return d
+
+
+WEEKDAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+
+
+def schedule_text(op, n):
+    return f"매주 {WEEKDAYS[n]}" if op == "missed_weekday" else ("매달 말일" if n >= 31 else f"매달 {n}일")
+
+
+def from_schedules(K):
+    """대상마다 기록 날짜가 요일이나 날짜에 묶여 있으면 '예정일' 업무 후보를 만든다. Claude 를 부르지 않는다.
+    최근 10번 중 8번 넘게 같은 요일(또는 같은 날짜)이면 규칙으로 본다."""
+    autos = []
+    for T in K["types"]:
+        ent = entity(K, T)
+        if not ent:
+            continue
+        days = [date.fromisoformat(d) for _, g in frame(K, T).groupby(ent) for d in sorted(set(g["날짜"]))[-10:] if d]
+        if len(days) < 4:
+            continue
+        for op, key in (("missed_weekday", lambda d: d.weekday()), ("missed_monthday", lambda d: d.day)):
+            counts = pd.Series([key(d) for d in days]).value_counts()
+            n, hit = int(counts.index[0]), int(counts.iloc[0])
+            if op == "missed_monthday" and len({(d.year, d.month) for d in days}) < 3:
+                continue
+            if hit / len(days) >= 0.8:
+                text = schedule_text(op, n)
+                autos.append({"title": f"{T} {text} 예정일 지남", "type": T, "scope": "latest",
+                              "conditions": [{"prop": "날짜", "op": op, "value": str(n), "value_prop": None}],
+                              "reason": f"{ent}마다 기록이 {text}에 들어와요. 예정일이 지났는데 기록이 없으면 알려 줘요.",
+                              "schedule": {"text": text, "hit": hit, "of": len(days)}})
+                break
+    return autos
 
 
 def scoped(K, T, df, scope, today=None):
@@ -1466,7 +1555,7 @@ def view_cols(K, T):
 
 def view_rows(K, spec):
     """말로 만든 보기에 넣을 줄(조건에 맞는 기록). 날짜 칸은 ISO 로 바꾸고, 적힌 글은 '칸(원문)'에 둔다."""
-    df = match(frame(K, spec["type"]), spec.get("conditions"))
+    df = unsorted(K, spec["type"], match(frame(K, spec["type"]), spec.get("conditions")))
     for n in prop_names(K, spec["type"], "date"):
         df[f"{n}(원문)"] = df[n]
         df[n] = df[n].map(to_iso)
@@ -1509,11 +1598,42 @@ def _scan(o, used, made):
             _scan(x, used, made)
 
 
-def trend(K, T, df, props):
-    """날짜별 추이. 칸이 하나고 대상 칸이 있으면 대상마다 선 하나."""
+UNSORTED = "분류 안 됨"
+
+
+def unsorted(K, T, df):
+    """대상 칸이 비었거나 등록하지 않은 표기인 줄은 대상 칸을 '분류 안 됨'으로, 분류가 없는 줄은 '칸.분류'를 '분류 안 됨'으로."""
+    df = df.copy()
     ent = entity(K, T)
+    if ent and ent in df:
+        blank = df[ent].map(lambda v: not filled(v))
+        if f"{ent}.분류" in df:
+            blank |= df[f"{ent}.분류"].isna()
+        df[ent] = df[ent].astype(object)
+        df.loc[blank, ent] = UNSORTED
+    for c in [c for c in df if c.endswith(".분류")]:
+        df[c] = df[c].astype(object).fillna(UNSORTED)
+    return df
+
+
+def unsorted_count(K, T, df, col):
+    """col 로 나눠 셀 때 '분류 안 됨'으로 빠지는 줄 수."""
+    if col not in df:
+        return 0
+    return int((unsorted(K, T, df)[col] == UNSORTED).sum())
+
+
+def trend(K, T, df, props, unit="D"):
+    """날짜별 추이(unit: D 일, W 주, M 달로 묶는다). 칸이 하나고 대상 칸이 있으면 대상마다 선 하나,
+    대상 칸이 비었거나 등록하지 않은 표기는 '분류 안 됨' 선 하나로."""
+    ent = entity(K, T)
+    df = unsorted(K, T, df)
+    if unit != "D" and len(df):
+        day = pd.to_datetime(df["날짜"])
+        df = df.assign(날짜=(day.dt.to_period(unit).dt.start_time.dt.date.astype(str)))
     if len(props) == 1 and ent and df[ent].nunique() > 1:
-        return df.pivot_table(index="날짜", columns=ent, values=props[0], aggfunc="mean").sort_index()
+        out = df.pivot_table(index="날짜", columns=ent, values=props[0], aggfunc="mean").sort_index()
+        return out[[c for c in out if c != UNSORTED] + [c for c in out if c == UNSORTED]]
     return df.groupby("날짜")[props].mean().sort_index()
 
 
@@ -1589,6 +1709,27 @@ def raw(K):
         R["alias"].update({(T, l): l for l in labels})
     return R
 
+def saved_result(K, name):
+    """켜 둔 자동화·올린 지표를 이름으로 부른다. K["_saved"] 는 화면이 넣어 준 켜 둔 자동화·올린 지표 목록."""
+    saved = K.get("_saved") or {"automations": [], "widgets": []}
+    if not name:
+        return {"켜 둔 자동화": [a["title"] for a in saved["automations"]], "올린 지표": [w["title"] for w in saved["widgets"]]}, []
+    for a in saved["automations"]:
+        if name in a["title"] or a["title"] in name:
+            hits = run_automation(K, a)
+            ent = entity(K, a["type"])
+            return {"켜 둔 자동화": a["title"], "걸린 건수": len(hits),
+                    "걸린 대상": list(hits[ent].astype(str).head(20)) if ent and len(hits) else []}, \
+                [f"r{i}" for i in hits["_id"].head(20)] if len(hits) else []
+    for w in saved["widgets"]:
+        if name in w["title"] or w["title"] in name:
+            value, ev = run_widget(K, w)
+            v = None if isinstance(value, pd.DataFrame) else value
+            return {"올린 지표": w["title"], "값": v, "근거 줄 수": len(ev)}, [f"r{i}" for i in ev["_id"].head(20)] if len(ev) else []
+    raise ValueError(f"'{name}' 이름의 켜 둔 자동화나 올린 지표가 없어요. 목록: "
+                     f"{[a['title'] for a in saved['automations']] + [w['title'] for w in saved['widgets']]}")
+
+
 def run_tool(K, name, inp):
     """Claude 가 부른 조회 도구를 실행한다. (결과, 근거 id들: 기록은 'r12', 대상은 'e5')."""
     if name == "schema":
@@ -1599,6 +1740,8 @@ def run_tool(K, name, inp):
                 "관계": [{"from": l["from_ref"], "to": l["to_ref"], "kind": l["kind"], "이름": l.get("name"),
                         "관계 정보": [d["name"] for d in l.get("attr_defs") or []]} for l in K["links"]],
                 "기록 수": {T: len(frame(K, T)) for T in K["types"]}}, []
+    if name == "saved":
+        return saved_result(K, inp.get("name") or "")
     T = inp["type"]
     df = frame(K, T)
     for c in inp.get("where") or []:
@@ -1625,7 +1768,10 @@ def run_tool(K, name, inp):
         if group and group not in prop_names(K, T):
             raise ValueError(f"'{group}' 칸이 없어요. 칸: {prop_names(K, T)}")
         result = {str(k): calc(v) for k, v in df.groupby(group)} if group else calc(df)
-        return {"결과": result, "센 줄 수": len(df)}, [f"{tag}{i}" for i in df[key].head(20)]
+        out = {"결과": result, "센 줄 수": len(df)}
+        if group and (left := (df[group].isna() | df[group].map(lambda v: not filled(v))).sum()):
+            out["분류 안 된 줄"] = int(left)  # 화면에 "분류 안 된 기록 N줄은 세지 않았어요"
+        return out, [f"{tag}{i}" for i in df[key].head(20)]
     raise ValueError(f"없는 도구예요: {name}")
 
 
@@ -1642,3 +1788,70 @@ def records_by_id(K, ids):
         if e := K["entities"].get(i):
             out.append({"종류": f"대상 · {e['class_name']}", "이름": e["name"], **e["attrs"], "_photo": None, "_id": i})
     return out
+
+
+# ---- 조직과 워크스페이스 설정 ----
+# 조직(orgs)은 워크스페이스를 묶는 위 단위다: 이름·업종·대표 제품·웹사이트·사진. 워크스페이스(tenants)는 이름과 무엇을 기록하나요.
+ORG_FIELDS = {"org": "name", "industry": "industry", "product": "product"}   # 카드 칸 → orgs 열
+SPACE_FIELDS = ["org", "industry", "product", "title", "about"]             # 첫 종이에서 제안하는 칸
+
+
+def space_row(t):
+    """워크스페이스와 그 조직. org 는 orgs 한 줄(없으면 빈 dict)."""
+    row = (db.get("tenants", select="id,title,about,created_at,org_id,orgs(id,name,industry,product,website,photo_path)",
+                  id=f"eq.{t.id}") or [{}])[0]
+    return {**row, "org": row.get("orgs") or {}}
+
+
+def space_text(t):
+    """읽기·제안 때 AI에게 넘기는 조직·워크스페이스 설명. 비어 있으면 빈 글자."""
+    if type(t) is not db.Tenant:  # 활용 사례(Demo)는 DB에 설명이 없다
+        return ""
+    r = space_row(t)
+    o = r["org"]
+    parts = [f"{k} {v}" for k, v in (("조직", o.get("name")), ("업종", o.get("industry")), ("대표 제품·서비스", o.get("product")),
+                                      ("기록하는 것", r.get("about"))) if v]
+    return ", ".join(parts)
+
+
+def suggest_space(t, model):
+    """첫 종이를 읽으면 워크스페이스 설정을 한 번 제안한다. 조직 이름이 이미 있으면 조직 칸은 묻지 않는다."""
+    r = space_row(t)
+    if asked(t, "워크스페이스 설정") or r.get("title"):
+        return
+    first = pending(t, ["종류"])
+    K = load(t)
+    if first:
+        T, cols = first[0]["payload"]["type"], "\n".join(f"- {p['name']}" for p in first[0]["payload"]["props"])
+    elif K["types"]:
+        T, cols = K["types"][0], "\n".join(f"- {n}" for n in prop_names(K, K["types"][0]))
+    else:
+        return
+    try:
+        s = llm.suggest_workspace(t, model, T, cols)
+    except Exception:  # 제안을 못 받아도 이름만은 묻는다
+        s = {"title": T}
+    fields = SPACE_FIELDS if not r["org"].get("name") else ["title", "about"]
+    propose(t, "워크스페이스 설정", {f: (s.get(f) or "").strip() for f in fields} | {"fallback": T})
+
+
+def user_space_title(t, title, old):
+    """워크스페이스 정보에서 고친 이름: 바로 바꾸지 않고 카드로 올린다."""
+    return propose(t, "워크스페이스 설정", {"title": title, "old": old}, {"user": True})
+
+
+def answer_space(t, q, ok, values=None):
+    """[맞아요]: 고친 값으로 조직과 워크스페이스에 저장. [해당 없음]: 워크스페이스 이름만 첫 기록 종류로 둔다."""
+    t.allow("widgets")  # 워크스페이스 설정도 카드에 답하는 일
+    P = q["payload"]
+    src = values if values is not None else P
+    if ok:
+        ws = {f: src.get(f) or None for f in ("title", "about") if f in src}
+        org = {col: src.get(f) or None for f, col in ORG_FIELDS.items() if f in src}
+    else:
+        ws, org = ({} if P.get("old") is not None else {"title": P.get("fallback") or P.get("title")}), {}
+    if ws:
+        db.call("PATCH", "tenants", {"id": f"eq.{t.id}"}, ws)
+    if org and (oid := space_row(t).get("org_id")):
+        db.call("PATCH", "orgs", {"id": f"eq.{oid}"}, org)
+    done(t, q, "승인" if ok else "거절", **(values or {}))

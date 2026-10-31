@@ -14,7 +14,8 @@ MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"]
 # 모델 → (입력, 출력) 100만 토큰당 달러. 공식 가격표 기준, 바뀌면 여기만 고친다.
 PRICE = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00), "claude-haiku-5-5": (0.10, 0.50)}
 LINK_KINDS = ["연결", "함께 움직임", "최소 기준", "최대 기준", "의존", "영향", "대체"]
-OPS = [">", "<", ">=", "<=", "=", "!=", "contains", "within_days", "is_today", "last_days", "older_than_days"]
+OPS = [">", "<", ">=", "<=", "=", "!=", "contains", "within_days", "is_today", "last_days", "older_than_days",
+       "missed_weekday", "missed_monthday"]
 FNS = ["count", "sum", "avg", "min", "max", "latest"]
 SCOPES = ["latest", "recent7", "all"]
 
@@ -99,9 +100,10 @@ SCHEMA = obj(type_name=S, props=array(obj(label=S, name=S, unit=nullable(S), is_
                                           similar_to=nullable(S))), links=array(LINK))
 
 
-def propose_schema(t, model, title, columns, known, pending_types):
+def propose_schema(t, model, title, columns, known, pending_types, space=""):
     prompt = (
         "손으로 적은 기록을 표로 정리하려 합니다. 이 기록을 담을 '종류'와 '칸'을 제안해 주세요.\n"
+        + (f"이 워크스페이스(사용자가 확정한 설명, 이름 짓기에만 참고): {space}\n" if space else "") +
         f"기록 이름: {title}\n"
         f"읽은 칸(값의 종류는 서비스가 값을 보고 정했습니다):\n{columns}\n"
         f"이미 확정된 종류와 칸:\n{known or '(아직 없음)'}\n"
@@ -119,6 +121,21 @@ def propose_schema(t, model, title, columns, known, pending_types):
         "- 값을 지어내거나 계산하지 마세요."
     )
     return ask_json(t, model, prompt, SCHEMA, prompt)
+
+
+def suggest_workspace(t, model, type_name, columns):
+    """첫 종이로 워크스페이스 이름·업종·대표 제품·기록하는 것을 제안한다. 사용자가 고쳐 [맞아요]로 확정한다."""
+    prompt = (
+        "사용자가 처음 올린 손글씨 기록입니다. 이 기록을 쌓을 워크스페이스의 설명을 제안해 주세요.\n"
+        f"기록 종류: {type_name}\n읽은 칸:\n{columns}\n"
+        "- org: 이 워크스페이스를 묶는 조직(회사·가게·팀) 이름. 기록에 적혀 있을 때만, 아니면 빈 글자.\n"
+        "- title: 워크스페이스 이름. 하는 일 단위로 짧게(예: '1공장 설비 점검', '매장 재고 점검').\n"
+        "- industry: 업종(예: 제조, 유통, 부동산 중개). 기록만으로 알 수 없으면 빈 글자.\n"
+        "- product: 대표 제품 또는 서비스. 알 수 없으면 빈 글자.\n"
+        "- about: 이 워크스페이스에 무엇을 기록하는지 한 문장(예: '매일 설비 온도와 합격 여부를 점검해요').\n"
+        "- 기록에 없는 것을 지어내지 마세요."
+    )
+    return ask_json(t, model, prompt, obj(org=S, title=S, industry=S, product=S, about=S), prompt)
 
 
 # ---- 대상 층: 같은 대상 찾기, 대상 칸·하위 분류 제안 ----
@@ -181,7 +198,8 @@ def auto_schema(types):
 
 COND_RULES = (f"- conditions 의 op: {OPS}. 다른 칸과 비교하면 value 대신 value_prop. 기록 날짜는 '날짜' 칸이다. "
               "날짜 칸은 within_days(오늘부터 value 일 안)·is_today·last_days(오늘까지 지난 value 일 안, 이번 주는 7)·"
-              "older_than_days(value 일 넘게 지남).\n")
+              "older_than_days(value 일 넘게 지남). 정해진 날에 기록이 없으면 '날짜' 칸에 missed_weekday(value 는 요일 0=월~6=일) "
+              "또는 missed_monthday(value 는 매달 며칠, 31은 말일).\n")
 WIDGET_RULES = (
     "- record_type 은 지표를 만들 기록 종류. kind: kpi(숫자 칸 prop 하나를 fn 으로), trend(props 의 숫자 칸 추이), "
     "count_where(conditions 에 맞는 기록 수). 칸 이름은 그 종류의 칸 이름 그대로.\n" + COND_RULES +
@@ -190,7 +208,8 @@ WIDGET_RULES = (
 AUTO_RULES = (
     "- record_type 은 규칙을 걸 기록 종류. 칸 이름은 그 종류의 칸 이름 그대로.\n" + COND_RULES +
     "- scope: latest(대상마다 가장 최근 기록), recent7(최근 7일), all(전체). "
-    "'N일 동안 기록이 없는 대상'은 scope latest + 날짜 older_than_days N.\n"
+    "'N일 동안 기록이 없는 대상'은 scope latest + 날짜 older_than_days N. "
+    "'매주 월요일 점검 챙겨줘'는 scope latest + 날짜 missed_weekday 0.\n"
     "- title 은 홈 카드 제목(예: '재고 부족', '이번 주 미팅'). reason 은 한 문장."
 )
 
@@ -293,6 +312,11 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"type": S, "fn": {"type": "string", "enum": FNS}, "prop": S,
                                                       "where": array(TOOL_COND), "group_by": S},
                       "required": ["type", "fn"]}},
+    {"name": "saved",
+     "description": "사용자가 켜 둔 자동화와 대시보드에 올린 지표를 이름으로 부른다. name 을 비우면 목록을 돌려준다. "
+                    "질문이 켜 둔 자동화나 올린 지표를 가리키면(예: '재고 부족에 걸린 거') find_records 대신 이것을 쓴다. "
+                    "결과의 걸린 건수·대상·값은 홈과 대시보드에 보이는 값과 같다.",
+     "input_schema": {"type": "object", "properties": {"name": S}}},
 ]
 
 
@@ -300,7 +324,8 @@ def answer(t, model, question, run_tool, max_turns=6):
     """질문 → Claude 가 조회 도구만 불러 근거를 찾고 답한다. (답, 근거 기록 id들)을 돌려준다."""
     system = (
         "당신은 papersolve 의 기록 도우미입니다. 사용자가 손으로 적은 기록이 표로 쌓여 있습니다.\n"
-        "- 먼저 schema 로 어떤 기록 종류·대상 분류·칸이 있는지 보고, find_records·aggregate 로 찾아 그 결과로만 답하세요.\n"
+        "- 먼저 schema 로 어떤 기록 종류·대상 분류·칸이 있는지 보고, find_records·aggregate 로 찾아 그 결과로만 답하세요. "
+        "켜 둔 자동화나 올린 지표를 묻는 질문이면 saved 를 쓰세요.\n"
         "- 건수·합계·평균 같은 숫자는 도구 결과만 쓰고 직접 계산하지 마세요.\n"
         "- 찾은 기록이 없으면 '기록에 없어요'라고 답하세요. 모르는 것은 모른다고 쓰세요.\n"
         f"- 한국어로 2~4문장. 근거가 된 기록의 날짜나 대상 이름을 함께 쓰세요. 오늘은 {date.today().isoformat()}입니다."

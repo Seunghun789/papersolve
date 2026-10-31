@@ -26,3 +26,6 @@ research_notes/
 
 # DB를 통째로 내보낸 더미 계정. 활용 사례로 쓰는 1~4번만 올린다
 dummy/db/6-*.json
+
+# Google 로그인 키
+.streamlit/secrets.toml

@@ -1,4 +1,4 @@
-"""Supabase REST 호출. 계정(tenant)마다 Tenant 로 묶어 읽고 쓴다."""
+"""Supabase REST 호출. 워크스페이스(tenant)마다 Tenant 로 묶어 읽고 쓴다."""
 import os
 from pathlib import Path
 
@@ -37,22 +37,53 @@ def new_tenant(name):
     return post("tenants", {"name": name})[0]
 
 
-class Tenant:
-    """한 계정의 표만 읽고 쓴다. 모든 줄에 tenant_id 를 붙인다."""
+# 역할마다 쓸 수 있는 것. 카드에 답하는 것(정의 표·자동화·지표를 바꾸는 것)은 주인과 확인하는 사람만 한다.
+ANSWER = ("주인", "확인하는 사람")
+DEFINE = {"object_types", "property_defs", "alias_dict", "link_types", "entities", "entity_aliases", "entity_links",
+          "automations", "widgets"}
+FEED = {"source_inputs", "records", "proposals"}  # 종이를 올리고 직접 적는 데 쓰는 표
 
-    def __init__(self, tid):
-        self.id = tid
+
+class NotAllowed(PermissionError):
+    pass
+
+
+class Tenant:
+    """한 워크스페이스의 표만 읽고 쓴다. 모든 줄에 tenant_id 를 붙인다.
+    user·role: 지금 쓰는 사람과 그 역할. role 이 없으면(주인이 없는 워크스페이스) 막지 않는다."""
+
+    def __init__(self, tid, user=None, role=None):
+        self.id, self.user, self.role = tid, user, role
+
+    def allow(self, table, body=None, params=None):
+        if self.role in (None, *ANSWER):
+            return
+        if self.role == "보는 사람" and table in DEFINE | FEED:
+            raise NotAllowed("보는 사람은 기록을 바꾸지 않아요. 확인하는 사람이 답해요.")
+        if table in DEFINE:
+            raise NotAllowed("확인하는 사람이 답해요.")
+        if table == "proposals" and body and "status" in body:  # 올리는 사람은 읽기 애매한 칸만 고친다
+            kinds = {q["kind"] for q in get("proposals", tenant_id=f"eq.{self.id}", select="kind", **(params or {}))}
+            if kinds - {"애매한 값"}:
+                raise NotAllowed("확인하는 사람이 답해요.")
 
     def get(self, table, **params):
         return get(table, tenant_id=f"eq.{self.id}", **params)
 
     def post(self, table, body, **params):
         rows = body if isinstance(body, list) else [body]
-        out = post(table, [{**r, "tenant_id": self.id} for r in rows], **params)
+        for r in rows:
+            self.allow(table, r)
+        mark = {"created_by": self.user} if self.user and table in ("proposals", "source_inputs") else {}
+        out = post(table, [{**mark, **r, "tenant_id": self.id} for r in rows], **params)
         return out if isinstance(body, list) else out[0]
 
     def patch(self, table, body, **params):
+        self.allow(table, body, params)
+        if table == "proposals" and "status" in body and self.user:
+            body = {**body, "decided_by": self.user}
         call("PATCH", table, {"tenant_id": f"eq.{self.id}", **params}, body)
 
     def delete(self, table, **params):
+        self.allow(table)
         call("DELETE", table, {"tenant_id": f"eq.{self.id}", **params})

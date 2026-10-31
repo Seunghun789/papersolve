@@ -1,12 +1,66 @@
 -- papersolve DB 스키마 (메인 PRD v3.1 §7.4의 프로토타입 부분집합).
 -- 사업장마다 표를 만들지 않는다. 표는 모든 계정이 같고, 계정별 차이는 정의 표의 행과 records.data(JSONB)로 담는다.
--- 계정은 tenant_id 로 나눈다. 서버가 .env 의 SUPABASE_SECRET_KEY 로 접근하므로 RLS 는 켜 두고 규칙은 만들지 않는다.
+-- 워크스페이스는 tenant_id 로 나눈다. 로그인한 사람의 접근은 앱이 memberships 로 확인한다. 서버가 .env 의 SUPABASE_SECRET_KEY 로 접근하므로 RLS 는 켜 두고 규칙은 만들지 않는다.
 -- 새 DB 에서는 SQL Editor 에서 이 파일을 통째로 한 번 실행한다.
 
 -- 계정
-create table public.tenants (
+create table public.orgs (                  -- 조직: 워크스페이스를 묶는 위 단위(회사·가게·팀)
   id bigint generated always as identity primary key,
-  name text not null unique,
+  name text,
+  industry text,                             -- 업종 (AI가 읽을 때 참고만 한다)
+  product text,                              -- 대표 제품 또는 서비스
+  website text,
+  photo_path text,                           -- data/ 아래 조직 프로필 사진
+  created_at timestamptz not null default now()
+);
+
+create table public.tenants (               -- 워크스페이스
+  id bigint generated always as identity primary key,
+  name text not null unique,                 -- 내부 이름
+  title text,                                -- 사람이 보는 워크스페이스 이름
+  about text,                                -- 무엇을 기록하나요
+  org_id bigint references public.orgs(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- 사람과 워크스페이스
+create table public.users (                  -- 사람. 지금은 브라우저(provider 'browser', sub 는 쿠키 번호). provider + sub 가 한 사람
+  id bigint generated always as identity primary key,
+  provider text not null check (provider in ('browser', 'google', 'kakao')),
+  sub text not null,
+  name text,
+  email text,
+  phone text,
+  created_at timestamptz not null default now(),
+  unique (provider, sub)
+);
+
+create table public.org_members (            -- 조직 구성원. 조직 주인은 조직의 모든 워크스페이스에서 주인
+  org_id bigint not null references public.orgs(id) on delete cascade,
+  user_id bigint not null references public.users(id) on delete cascade,
+  role text not null check (role in ('주인', '구성원')),
+  created_at timestamptz not null default now(),
+  primary key (org_id, user_id)
+);
+create unique index org_members_one_owner on public.org_members (org_id) where role = '주인';
+
+create table public.memberships (            -- 누가 어느 워크스페이스에 어떤 역할로 있나
+  tenant_id bigint not null references public.tenants(id) on delete cascade,
+  user_id bigint not null references public.users(id) on delete cascade,
+  role text not null check (role in ('주인', '확인하는 사람', '올리는 사람', '보는 사람')),
+  last_opened_at timestamptz,
+  created_at timestamptz not null default now(),
+  primary key (tenant_id, user_id)
+);
+create unique index memberships_one_owner on public.memberships (tenant_id) where role = '주인';
+
+create table public.invites (                -- 초대 링크. 7일 뒤 만료
+  token text primary key,
+  tenant_id bigint not null references public.tenants(id) on delete cascade,
+  role text not null check (role in ('확인하는 사람', '올리는 사람', '보는 사람')),
+  created_by bigint not null references public.users(id),
+  expires_at timestamptz not null default now() + interval '7 days',
+  used_by bigint references public.users(id),
   created_at timestamptz not null default now()
 );
 
@@ -97,6 +151,7 @@ create table public.source_inputs (          -- 올린 사진이나 파일 1개,
   channel text not null check (channel in ('사진', '파일', '직접 입력')),
   name text,
   storage_path text,
+  created_by bigint references public.users(id),
   created_at timestamptz not null default now()
 );
 
@@ -119,11 +174,13 @@ create table public.proposals (
   id bigint generated always as identity primary key,
   tenant_id bigint not null references public.tenants(id) on delete cascade,
   kind text not null check (kind in ('종류', '칸', '같은 칸', '애매한 값', '연결', '지표', '업무',
-                                     '대상 분류', '대상', '같은 대상', '대상 속성', '속성 값', '상위 분류', '관계 속성', '칸 설정', '되돌리기')),
+                                     '대상 분류', '대상', '같은 대상', '대상 속성', '속성 값', '상위 분류', '관계 속성', '칸 설정', '되돌리기', '워크스페이스 설정')),
   payload jsonb not null,
   evidence jsonb,
   status text not null default '대기' check (status in ('대기', '승인', '고침', '거절')),
   source_input_id bigint references public.source_inputs(id) on delete cascade,
+  created_by bigint references public.users(id),
+  decided_by bigint references public.users(id),
   decided_at timestamptz,
   created_at timestamptz not null default now()
 );

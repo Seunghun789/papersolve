@@ -2,6 +2,8 @@
 import copy
 import datetime
 import json
+import os
+import secrets
 import time
 from datetime import date
 
@@ -30,6 +32,32 @@ st.markdown("""<style>
 .st-key-cv_on0 {border: 2px solid #0F766E !important;}
 /* 메뉴: 단계 이름 아래 왼쪽 정렬 버튼, 고른 메뉴는 메뉴 폭 전체를 칠한다 */
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: 2px;}
+[data-testid="stPopoverBody"]:has(.st-key-ws_menu) {padding: 10px 10px 8px; min-width: 260px; max-width: 280px;}
+.st-key-ws_menu, .st-key-ws_menu [data-testid="stVerticalBlock"] {gap: 2px !important;}
+.st-key-ws_menu [data-testid="stHorizontalBlock"] {align-items: center;}
+.st-key-ws_menu [data-testid="stTextInput"] {margin-bottom: 4px;}
+.st-key-ws_menu [data-testid="stTextInput"] input {font-size: 13px; padding-top: 6px; padding-bottom: 6px;}
+.st-key-ws_menu [class*="st-key-space_"] button, .st-key-ws_menu [class*="st-key-manage_"] button, .st-key-ws_menu .st-key-all_spaces button {justify-content: flex-start; padding: 5px 6px; min-height: 0;}
+.st-key-ws_menu [class*="st-key-space_"] button > div, .st-key-ws_menu [class*="st-key-manage_"] button > div, .st-key-ws_menu .st-key-all_spaces button > div,
+.st-key-ws_menu [class*="st-key-space_"] button p, .st-key-ws_menu [class*="st-key-manage_"] button p, .st-key-ws_menu .st-key-all_spaces button p {justify-content: flex-start; text-align: left; width: 100%; font-size: 14px;}
+.st-key-ws_menu .st-key-all_spaces button p {color: #6B7280; font-size: 13px;}
+.st-key-ws_menu .st-key-new_space {margin-top: 4px;}
+.st-key-ws_menu .st-key-new_space button {border-radius: 10px; min-height: 34px; padding: 4px 8px;}
+.st-key-ws_menu .st-key-new_space button p {font-size: 13px;}
+.st-key-ws_menu hr {margin: 8px 0 4px;}
+.st-key-ws_menu [data-testid="stMarkdown"] {min-height: 0; overflow: visible;}
+.st-key-ws_menu [data-testid="stHorizontalBlock"] {gap: 0; min-height: 0;}
+.st-key-ws_menu [data-testid="stElementContainer"], .st-key-ws_menu [data-testid="stButton"] {margin: 0; min-height: 0;}
+.st-key-ws_menu button[kind="tertiary"] {height: 32px;}
+.st-key-ws_menu [data-testid="stMarkdownContainer"] p {margin: 0;}
+.st-key-ws_menu [class*="st-key-space_"] button > div {gap: 8px;}
+.st-key-ws_menu [class*="st-key-space_"] button [data-testid="stMarkdownContainer"] {flex: 1;}
+.ps-ws-org {color: #9CA3AF; font-size: 12px; line-height: 18px; padding: 6px 6px 0;}
+.ps-ws-head {color: #9CA3AF; font-size: 12px; line-height: 18px; margin-top: 6px; padding: 10px 6px 2px; border-top: 1px solid #E4E4E7;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button {justify-content: space-between; padding: 8px 12px; border-radius: 12px; min-height: 44px;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button > div {justify-content: space-between; width: 100%;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button p {font-size: 15px; font-weight: 600; text-align: left;}
+section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 12px; min-height: 44px;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; padding: 7px 12px;
   border-radius: 8px; width: 100%;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button > div,
@@ -81,7 +109,7 @@ PAGES = ["홈", "올리기", "확인", "묻기", "지식그래프", "대상", "�
 CAPTION = {"종류": "새 기록 종류", "칸": "새 칸", "같은 칸": "같은 칸", "애매한 값": "읽기 애매한 칸",
            "연결": "관계 제안", "지표": "추천 지표", "업무": "반복 업무 제안", "대상 분류": "대상 등록",
            "대상": "새 대상", "같은 대상": "같은 대상", "대상 속성": "대상 정보", "속성 값": "대상 정보 값",
-           "상위 분류": "분류 묶기", "관계 속성": "관계 정보", "칸 설정": "칸 설정", "되돌리기": "되돌리기"}
+           "상위 분류": "분류 묶기", "관계 속성": "관계 정보", "칸 설정": "칸 설정", "되돌리기": "되돌리기", "워크스페이스 설정": "워크스페이스 설정"}
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -91,12 +119,16 @@ def knowledge(tid):
 
 def know(t):
     """활용 사례는 세션마다 따로 바뀌므로 캐시하지 않는다."""
-    return engine.load(t) if isinstance(t, Demo) else know(t) if t else {"types": []}
+    return engine.load(t) if isinstance(t, Demo) else knowledge(t.id) if t else {"types": []}
 
 
 def act(fn, *args, done=None):
     """버튼에서 지식을 바꾸는 일을 하고, 화면이 새 지식을 읽게 한다. done: 누른 뒤 잠깐 띄울 알림."""
-    fn(*args)
+    try:
+        fn(*args)
+    except db.NotAllowed as e:
+        st.toast(str(e))
+        return
     knowledge.clear()
     if done:
         st.toast(done)
@@ -323,7 +355,12 @@ def line(df, alt):
 
 
 def fmtv(v):
-    return fmt(v) if engine.to_number(v) is not None else (str(v) if engine.filled(v) else "없음")
+    if not engine.filled(v):
+        return "없음"
+    try:
+        return fmt(v)
+    except (TypeError, ValueError):  # '74℃ 이하'처럼 숫자와 글이 섞인 값은 적힌 그대로
+        return str(v)
 
 
 def link_sentence(P):
@@ -389,6 +426,9 @@ def later(q):
 
 def buttons(q, no, yes, extra=None, note="", wait=False):
     """note: [예]를 누른 뒤 덧붙일 한 줄. wait: [나중에]를 둔다(이번 접속 동안 카드를 맨 뒤로)."""
+    if not answerable(q):
+        st.caption("확인하는 사람이 답해요.")
+        return
     user = bool((q.get("evidence") or {}).get("user"))
     undo = q["kind"] in engine.UNDOABLE and q["payload"].get("op") != "칸 더하기"
     yes_done = "반영했어요. 확인 화면의 '최근 반영한 것'에서 되돌릴 수 있어요." if undo else "반영했어요."
@@ -467,6 +507,37 @@ def recent(t, K):
     st.caption("관계는 [끊기], 지표는 [내리기], 자동화는 [끄기]로 빼요.")
 
 
+SPACE_LABELS = {"org": "조직 이름", "industry": "업종", "product": "대표 제품 또는 서비스", "title": "워크스페이스 이름",
+                "about": "무엇을 기록하나요"}
+
+
+def answer_space(t, q, ok):
+    """워크스페이스 설정 카드: 칸에 고친 값과 내 이름을 함께 반영한다."""
+    values = {f: st.session_state.get(f"sp{q['id']}{f}", "").strip() for f in engine.SPACE_FIELDS
+              if f in q["payload"]} if ok else None
+    engine.answer_space(t, q, ok, values)
+    if ok and t.user and (name := st.session_state.get(f"sp{q['id']}me", "").strip()):
+        db.call("PATCH", "users", {"id": f"eq.{t.user}"}, {"name": name})
+        person_name.clear()
+
+
+def space_card(t, q, ok):
+    P = q["payload"]
+    if P.get("old") is not None:  # 워크스페이스 정보에서 고친 이름
+        st.write(f"**워크스페이스 이름을 '{P['old'] or '이름 없음'}'에서 '{P['title']}'(으)로 바꿀까요?**")
+        st.caption("사이드바 워크스페이스 메뉴와 목록에 이 이름으로 보여요.")
+        buttons(q, ("아니요", (engine.answer_space, t, q, False)), (ok("맞아요"), (engine.answer_space, t, q, True)))
+        return
+    st.write("**이 워크스페이스를 이렇게 정리할까요?**")
+    st.caption("첫 종이를 보고 AI가 채웠어요. 틀린 곳은 고치고 [맞아요]를 눌러 주세요. 다음 종이를 읽을 때 참고해요.")
+    for f in [f for f in engine.SPACE_FIELDS if f in P]:  # 조직 이름이 이미 있으면 워크스페이스 칸만
+        st.text_input(SPACE_LABELS[f], value=P.get(f) or "", key=f"sp{q['id']}{f}", disabled=not answerable(q))
+    if t.user and not (db.get("users", select="name", id=f"eq.{t.user}") or [{}])[0].get("name"):
+        st.text_input("내 이름", key=f"sp{q['id']}me", placeholder="구성원 표와 카드에 보이는 이름")
+    st.caption(f"해당 없으면 [해당 없음]을 눌러요. 이름은 '{P.get('fallback') or P['title']}'(으)로 두고, 나머지는 워크스페이스 정보에서 나중에 채울 수 있어요.")
+    buttons(q, ("해당 없음", (answer_space, t, q, False)), ("맞아요", (answer_space, t, q, True)))
+
+
 def card(t, K, q, label=True):
     """label: 카드 맨 위 종류 이름표. 같은 이름의 소제목 아래에서는 빼서 겹치지 않게 한다."""
     P, kind = q["payload"], q["kind"]
@@ -477,7 +548,11 @@ def card(t, K, q, label=True):
         name = {"칸 더하기": "새 칸", "다른 이름": "같은 칸"}.get(P.get("op"), CAPTION[kind]) if kind == "칸 설정" else CAPTION[kind]
         if label or user:
             st.caption(name + (" (직접 고친 것)" if user else ""))
-        if kind == "종류":
+        if q.get("created_by"):
+            st.caption(f"올린 사람: {person_name(q['created_by'])}")
+        if kind == "워크스페이스 설정":
+            space_card(t, q, ok)
+        elif kind == "종류":
             st.write(f"**이 기록을 '{P['type']}'(으)로 정리할까요?**")
             unsure = {u["payload"]["label"] for u in engine.pending(t, ["애매한 값"])
                       if u["source_input_id"] == q["source_input_id"]}
@@ -525,17 +600,21 @@ def card(t, K, q, label=True):
             value, rows = engine.run_widget(K, P)
             now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] in ("trend", "view") else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
             st.caption(f"{asked_for(ev)}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} {now_}.")
-            if change := engine.week_change(K, P):
-                st.caption(f"일주일 전 값 {fmt(change[1])} → 지금 {fmt(change[0])}")
+            if P["kind"] in ("kpi", "count_where"):
+                now_v, prev, _ = engine.period_values(K, P, period())
+                st.caption(f"{engine.PERIODS[period()][0]} {fmt(prev)} → {period()} {fmt(now_v)}")
             buttons(q, ("아니요", (engine.answer_widget, t, q, False)), ("올리기", (engine.answer_widget, t, q, True)))
         elif kind == "업무":
             gap = any(c["op"] == "older_than_days" for c in P["conditions"])
             if gap:
                 st.caption("빠진 기록: 대상마다 기록이 들어오던 간격에서 찾았어요")
+            if sched := P.get("schedule"):
+                st.caption(f"예정일: {sched['text']} · 최근 {sched['of']}번 중 {sched['hit']}번이 이날 기록이에요")
             st.write(f"**'{P['title']}'를 자동으로 할까요?**")
             st.caption(f"{asked_for(ev)}{P['type']}: {' 그리고 '.join(cond_text(c) for c in P['conditions'])} · {P.get('reason') or ''}")
             trial(K, P, f"t{q['id']}")
             buttons(q, ("아니요", (engine.answer_automation, t, q, False)), ("켜기", (engine.answer_automation, t, q, True)))
+            st.caption(OFF_NOTE)
         elif kind == "대상 분류":
             vals = P.get("values") or []
             st.write(f"**'{P['prop']}' 칸의 값을 '{P['class']}' 대상으로 등록할까요?**")
@@ -629,7 +708,52 @@ def title(text, t=None, fn=None):
 MODEL_KO = {"claude-haiku-5-5": "빠르게 (Haiku)", "claude-sonnet-5-5": "보통 (Sonnet)", "claude-opus-5-5": "꼼꼼하게 (Opus)"}
 CARD_H = 170  # 오늘 먼저 볼 것 카드는 모두 같은 높이
 HOME_MAX = 2  # 오늘 먼저 볼 것에 띄우는 걸린 자동화 카드 수(확인 카드와 합쳐 세 장)
+OFF_NOTE = "켜면 홈 '오늘 먼저 볼 것'에 보여요. 알림을 보내거나 기록을 바꾸지는 않아요."
+WHY_MAX = 2  # 홈 카드에서 왜 · 안 보면 · 다음을 보이는 걸린 대상 수
 FOLLOW_MAX = 2  # 카드마다 이어서 볼 것 수
+
+
+def period():
+    """홈과 대시보드가 함께 쓰는 보는 기간. 처음은 이번 주."""
+    return st.session_state.get("_period", "이번 주")
+
+
+def period_bar(key):
+    """위쪽 [오늘]·[이번 주]·[이번 달]·[올해]. 고른 기간은 홈과 대시보드에 함께 쓰인다."""
+    st.segmented_control("보는 기간", list(engine.PERIODS), default=period(), key=key, label_visibility="collapsed",
+                         on_change=lambda: st.session_state.update(_period=st.session_state.get(key) or period()))
+
+
+def until(K, T):
+    """'N월 N일 기록까지': 그 기록 종류의 마지막 기록 날짜."""
+    d = engine.last_date(K, T)
+    return f"{int(d[5:7])}월 {int(d[8:10])}일 기록까지" if d else "아직 기록 없음"
+
+
+def why_line(spec, row):
+    """걸린 대상 한 줄의 '왜': 규칙의 칸과 그 값, 기준(값이나 다른 칸). 값은 기록에서 그대로 꺼낸다."""
+    parts = []
+    for c in spec["conditions"]:
+        if c["op"] in ("missed_weekday", "missed_monthday"):
+            due = engine.last_due(c["op"], int(c["value"]), date.today())
+            parts.append(f"예정일 {due.month}월 {due.day}일 · 마지막 기록 {fmt_day(row['날짜'])}")
+        elif c["op"] == "older_than_days":
+            parts.append(f"마지막 기록 {fmt_day(row['날짜'])} · 기준 {c['value']}일")
+        elif c.get("value_prop"):
+            parts.append(f"{c['prop']} {fmtv(row.get(c['prop']))} · {c['value_prop']} {fmtv(row.get(c['value_prop']))}")
+        else:
+            parts.append(f"{c['prop']} {fmtv(row.get(c['prop']))} · 기준 {c['op']} {c.get('value')}")
+    return " / ".join(parts)
+
+
+def fmt_day(d):
+    return f"{int(str(d)[5:7])}월 {int(str(d)[8:10])}일" if d and len(str(d)) >= 10 else str(d)
+
+
+def ask_about(name):
+    """'다음: 묻기로 가기' — 그 대상에 대한 질문을 채운 묻기를 연다."""
+    st.session_state.qtext = f"{name} 최근 기록 보여줘"
+    st.session_state._goto = "묻기"
 
 
 def home(t, K):
@@ -638,6 +762,7 @@ def home(t, K):
         empty()
         return
     st.header("오늘 먼저 볼 것")
+    period_bar("period_home")
     autos = t.get("automations", select="id,spec", status="eq.켜짐", order="id")
     runs = [(a, engine.run_automation(K, a["spec"])) for a in autos]
     hit = sorted([r for r in runs if len(r[1])], key=lambda r: -len(r[1]))
@@ -654,14 +779,22 @@ def home(t, K):
     shown = hit[:HOME_MAX]  # 걸린 것이 많은 순서로 몇 장만. 걸린 카드는 닫지 않는다
     for i, (a, hits) in enumerate(shown):
         ent = engine.entity(K, a["spec"]["type"])
-        late = any(c["op"] == "older_than_days" for c in a["spec"]["conditions"])
+        follow = engine.follow(K, a["spec"], hits)[:FOLLOW_MAX]
         with cols[i % 3], st.container(border=True, height=CARD_H):
             st.metric(a["spec"]["title"], f"{len(hits)}건")
-            names = ", ".join(f"{r[ent]}{' (마지막 ' + r['날짜'][5:].replace('-', '/') + ')' if late else ''}"
-                              for _, r in hits.head(4).iterrows()) if ent else ""
-            st.caption(f"{names} · 근거 {len(hits)}줄" if names else f"근거 {len(hits)}줄")
-            for n, why in engine.follow(K, a["spec"], hits)[:FOLLOW_MAX]:
-                st.caption(f"이어서 볼 것: {n} ({why})")
+            st.caption(f"근거 {len(hits)}줄 · {until(K, a['spec']['type'])}")
+            for j, (_, r) in enumerate(hits.head(WHY_MAX).iterrows()):  # 걸린 대상마다 왜 · 안 보면 · 다음
+                name = r[ent] if ent else fmt_day(r["날짜"])
+                st.markdown(f"**{name}**")
+                st.caption(f"왜: {why_line(a['spec'], r)}")
+                if follow:
+                    st.caption("안 보면: " + ", ".join(f"{n} ({why})" for n, why in follow))
+                nxt = st.container(horizontal=True)
+                with nxt.popover("원본 사진", type="tertiary"):
+                    show_photo(r["_photo"] if isinstance(r["_photo"], str) else None)
+                nxt.button("묻기로 가기", key=f"askgo{a['id']}_{j}", type="tertiary", on_click=ask_about, args=(name,))
+            if len(hits) > WHY_MAX:
+                st.caption(f"그 밖에 {len(hits) - WHY_MAX}건은 근거에서 봐요.")
     if len(hit) > len(shown) or quiet:
         more = len(hit) - len(shown)
         with st.expander(" · ".join(([f"더 걸린 자동화 {more}개"] if more else []) + ([f"걸린 것이 없는 자동화 {len(quiet)}개"] if quiet else []))):
@@ -680,10 +813,12 @@ def home(t, K):
         with tab:
             df = engine.frame(K, T)
             nums = engine.prop_names(K, T, "number")
-            if nums and len(df):  # 추이를 먼저 크게, 표는 그 아래
-                st.caption(f"{nums[0]} 추이")
-                line(engine.trend(K, T, df, [nums[0]]), f"{T} {nums[0]} 추이")
-            st.caption(f"{len(df)}줄")
+            a_, b_, _, _ = engine.period_range(period())
+            seen = df[(df["날짜"] >= a_.isoformat()) & (df["날짜"] <= b_.isoformat())]
+            if nums and len(seen):  # 추이를 먼저 크게(보는 기간만), 표는 그 아래
+                st.caption(f"{nums[0]} 추이 · {period()}")
+                line(engine.trend(K, T, seen, [nums[0]], engine.PERIODS[period()][1]), f"{T} {nums[0]} 추이")
+            st.caption(f"{len(df)}줄 · {until(K, T)}")
             pick_table(df, f"home{T}", {p["name"]: p["description"] for p in K["props"][T] if p.get("description")})
 
 
@@ -716,6 +851,9 @@ def week(t, K):
 
 def upload(t, K):
     st.header("올리기")
+    if t and t.role == "보는 사람":
+        st.info("보는 사람은 종이를 올리거나 적지 않아요. 홈·대시보드·묻기에서 기록을 볼 수 있어요.")
+        return
     if not K["types"]:
         empty()
         return
@@ -811,6 +949,8 @@ def check(t, K):
         st.button("홈으로", on_click=go, args=("홈",))
         return
     st.warning("원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.", title="AI가 읽고 제안한 것만 물어요")
+    for q in [q for q in qs if q["kind"] == "워크스페이스 설정"]:  # 첫 종이를 읽으면 워크스페이스 설정부터
+        card(t, K, q)
     entry = [q for q in qs if q["kind"] in engine.ENTRY]
     if entry:
         sid = entry[0]["source_input_id"]
@@ -850,7 +990,11 @@ FN_KO = {"count": "줄 수", "sum": "합계", "avg": "평균", "min": "가장 �
 def understood(calls):
     """AI가 부른 조회 도구의 입력을 쉬운 말로: '기록 종류 설비 점검 · 진동 > 7 · 진동 가장 큰 값 · 설비별'."""
     out = []
-    for name, inp in calls:
+    for name, inp, *_ in calls:
+        if name == "saved":
+            if inp.get("name"):
+                out.append(f"켜 둔 자동화·올린 지표: {inp['name']}")
+            continue
         if name == "schema" or not inp.get("type"):
             continue
         parts = [inp["type"]]
@@ -907,18 +1051,25 @@ def ask(t, K):
         calls, calls_before = [], []
 
         def tool(KK, log):
-            return lambda n, i: (log.append((n, i)), engine.run_tool(KK, n, i))[1]
+            def run(n, i):
+                out = engine.run_tool(KK, n, i)
+                log.append((n, i, out[0]))
+                return out
+            return run
+        saved = {"automations": [a["spec"] for a in t.get("automations", select="spec", status="eq.켜짐")],
+                 "widgets": [w["spec"] for w in t.get("widgets", select="spec", status="eq.올림")]}
         with st.spinner("기록을 찾는 중이에요..."):
             try:
                 R = engine.raw(K)
                 before = llm.answer(t, model, q, tool(R, calls_before)) if compare else None
-                text, ids = llm.answer(t, model, q, tool(K, calls))
+                text, ids = llm.answer(t, model, q, tool({**K, "_saved": saved}, calls))
             except ERRORS as e:
                 fail("답하지 못했어요", e)
                 return
         st.session_state.first_done = True
         st.session_state.last = {"q": q, "text": text, "ids": ids, "before": before, "how": understood(calls),
-                                 "how_before": understood(calls_before), "checked": verified(t, q)}
+                                 "how_before": understood(calls_before), "checked": verified(t, q),
+                                 "left": sum(out.get("분류 안 된 줄", 0) for _, _, out in calls if isinstance(out, dict))}
     last = st.session_state.get("last")
     if not last:
         return
@@ -931,6 +1082,8 @@ def ask(t, K):
             for h in last.get("how") or []:
                 st.caption(f"이렇게 찾았어요: {h}")
             st.write(last["text"])
+            if last.get("left"):
+                st.caption(f"분류 안 된 기록 {last['left']}줄은 세지 않았어요.")
             if last.get("checked") and last["checked"].strip() != last["text"].strip():
                 st.caption(f"전에 맞다고 고른 답: {last['checked']}")
         evidence(K, last["ids"], "evidence")
@@ -1312,20 +1465,27 @@ def grid(items, draw):
 
 
 def widget(K, spec, key, remove=None):
-    value, ev = engine.run_widget(K, spec)
+    """지표 카드. 말로 만든 보기 말고는 보는 기간의 값과 같은 길이 앞 기간의 값을 함께 보인다."""
+    if spec["kind"] == "view":
+        value, ev = engine.run_widget(K, spec)
+        prev = None
+    else:
+        value, prev, ev = engine.period_values(K, spec, period())
     with st.container(border=True, height="stretch"):  # 같은 줄 카드는 높이를 맞춘다
         st.caption(spec["title"])
         if spec["kind"] == "view":
             draw_view(K, spec, f"view{key}")
         elif spec["kind"] == "trend":
-            if len(value):
-                line(value, spec["title"])
+            if len(ev):
+                line(engine.trend(K, spec["type"], ev, spec["props"], engine.PERIODS[period()][1]), spec["title"])
             else:
-                st.caption("아직 그릴 기록이 없어요.")
+                st.caption(f"{period()}에는 그릴 기록이 없어요.")
         else:
             st.metric(spec["title"], fmt(value), label_visibility="collapsed")
+            st.caption(f"{period()} · {engine.PERIODS[period()][0]} {fmt(prev)}")
             cond = " 그리고 ".join(cond_text(c) for c in spec.get("conditions") or [])
             st.caption(f"{spec['type']}{' · ' + cond if cond else ''}")
+        st.caption(until(K, spec["type"]))
         st.space("stretch")  # 근거 기록과 [내리기]는 카드 맨 아래에
         with st.expander(f"근거 기록 {len(ev)}줄"):
             if len(ev):
@@ -1344,7 +1504,13 @@ def draw_view(K, spec, key):
 def adopt(t, kind, m):
     """대화에서 만든 초안을 [올리기]·[켜기]로 확정한다. 다른 제안과 같은 확인 기록(proposals)을 지난다."""
     q = engine.propose(t, kind, m["spec"], {"request": m["request"]})
-    (engine.answer_widget if kind == "지표" else engine.answer_automation)(t, q, True)
+    try:
+        (engine.answer_widget if kind == "지표" else engine.answer_automation)(t, q, True)
+    except db.NotAllowed:  # 올리는 사람: 카드로 남겨 확인하는 사람이 답한다
+        m["done"] = True
+        knowledge.clear()
+        st.toast("카드로 올렸어요. 확인하는 사람이 답해요.")
+        return
     m["done"] = True
     knowledge.clear()
     st.toast("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
@@ -1372,6 +1538,8 @@ def build_chat(t, K, kind):
                 st.caption("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
             else:
                 st.button(yes, key=f"{key}b{i}", type="primary", on_click=adopt, args=(t, kind, m))
+                if kind == "업무":
+                    st.caption(OFF_NOTE)
         example = "예: 일일 합격률 추이를 선 그래프로 / 미팅 예약 달력" if kind == "지표" else "예: 진동이 7을 넘으면 먼저 볼 것에 올려 줘"
         last = next((m for m in reversed(msgs) if m.get("spec")), None)
         if kind == "지표" and last and not last.get("done"):
@@ -1397,6 +1565,7 @@ def dashboard(t, K):
         empty()
         return
     engine.sync_rules(t, K)
+    period_bar("period_dash")
     build_chat(t, K, "지표")
     for q in engine.pending(t, ["지표"]):
         card(t, K, q)
@@ -1745,7 +1914,7 @@ def enter():
 
 
 def landing():
-    """계정이 없는 첫 방문: 랜딩(무슨 서비스인지) → [바로 써 보기]로 올리기, [로그인]은 로그인 화면(모양만)."""
+    """워크스페이스가 없는 첫 방문: 랜딩(무슨 서비스인지) → [바로 써 보기]로 올리기, [로그인]은 로그인 화면(모양만)."""
     st.html(LANDING_CSS)
     if st.session_state.get("landing") == "login":
         st.html(LOGIN)
@@ -1783,26 +1952,436 @@ def landing():
                 '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>맞는지만 확인하면 챙길 일과 답이 따라와요.</p></div>',
                 unsafe_allow_html=True)
     st.button("바로 써 보기  →", key="go", type="primary", on_click=enter)
-    st.markdown('<div class="ps-note">가입 없이 시작해요 · 로그인은 준비 중</div>'
+    st.markdown('<div class="ps-note">가입 없이 시작해요</div>'
                 f'<div class="ps-cards">{step_cards()}</div>'
                 '<div class="ps-loop"><span>④에서 다시 ① 종이로 · 올릴수록 묻는 건 줄고, 답은 정확해져요</span></div>'
                 '<div class="ps-glows"><div class="ps-glow ps-g1"></div><div class="ps-glow ps-g2"></div></div>', unsafe_allow_html=True)
     st.stop()
 
 
-# ---- 계정과 메뉴 ----
-# 계정 고르기는 없다. 계정은 주소의 ?a=번호 로 이어지고, 처음 종이를 올릴 때 새로 생긴다.
+# ---- 사람, 워크스페이스와 메뉴 ----
+# 로그인은 아직 없다. 사람은 이 브라우저다: 처음 오면 쿠키(ps_person)에 무작위 번호를 두고 users 에 넣는다.
+# 워크스페이스는 주소의 ?a=번호 로 이어진다. 구성원(memberships)이 있는 워크스페이스는 그 구성원만 연다.
+# 다른 브라우저(다른 사람)는 초대 링크(?invite=)로 들어온다.
 
-def account():
+ROLES = ["주인", "확인하는 사람", "올리는 사람", "보는 사람"]
+
+
+def me():
+    """이 브라우저 사람의 users.id. 쿠키가 아직 없으면 None(쿠키를 만들고 한 번 다시 연다)."""
+    sub = st.context.cookies.get("ps_person")
+    if not isinstance(sub, str) or not sub:  # 쿠키가 없거나(처음 연 브라우저) 글이 아니면 아직 사람이 없다
+        return None
+    if st.session_state.get("_me_sub") != sub:
+        row = db.post("users", {"provider": "browser", "sub": sub}, on_conflict="provider,sub")[0]
+        st.session_state._me, st.session_state._me_sub = row["id"], sub
+    return st.session_state._me
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def person_name(uid):
+    rows = db.get("users", select="name", id=f"eq.{uid}")
+    return (rows[0]["name"] if rows else None) or f"이름 없음 {uid}"
+
+
+def my_spaces(uid):
+    """내가 들어간 워크스페이스. 마지막에 연 것부터. 조직 번호와 이름을 함께."""
+    rows = db.get("memberships", select="tenant_id,role,tenants(title,org_id,orgs(name))", user_id=f"eq.{uid}",
+                  order="last_opened_at.desc.nullslast")
+    out = []
+    for r in rows:
+        t_ = r.get("tenants") or {}
+        out.append({"id": r["tenant_id"], "role": r["role"], "title": t_.get("title"), "org_id": t_.get("org_id"),
+                    "org": (t_.get("orgs") or {}).get("name")})
+    return out
+
+
+def space_title(x):
+    return x.get("title") or f"워크스페이스 {x['id']}"
+
+
+def org_title(o):
+    return (o or {}).get("name") or "이름 없는 조직"
+
+
+def org_of(tid):
+    """워크스페이스의 조직 한 줄. 조직이 없으면(예전 워크스페이스) 빈 dict."""
+    row = (db.get("tenants", select="org_id,orgs(id,name,industry,product,website,photo_path)", id=f"eq.{tid}") or [{}])[0]
+    return row.get("orgs") or {}
+
+
+def org_role(oid, uid):
+    rows = db.get("org_members", select="role", org_id=f"eq.{oid}", user_id=f"eq.{uid}") if oid and uid else []
+    return rows[0]["role"] if rows else None
+
+
+def account(uid):
+    """주소의 워크스페이스 번호와 내 역할. 구성원이 있는 워크스페이스는 구성원과 조직 주인에게만 연다
+    (역할 None 은 주인이 없는 워크스페이스). 주소에 번호가 없으면 마지막에 연 내 워크스페이스."""
     a = st.query_params.get("a", "")
-    return int(a) if a.isdigit() and db.get("tenants", select="id", id=f"eq.{a}") else None
+    if not a.isdigit():
+        if uid and (mine := my_spaces(uid)):
+            st.query_params["a"] = str(mine[0]["id"])
+            return mine[0]["id"], mine[0]["role"]
+        return None, None
+    row = db.get("tenants", select="id,org_id", id=f"eq.{a}")
+    if not row:
+        return None, None
+    members = db.get("memberships", select="user_id,role", tenant_id=f"eq.{a}")
+    mine = next((m for m in members if m["user_id"] == uid), None)
+    if members and not mine:
+        if org_role(row[0]["org_id"], uid) == "주인":  # 조직 주인은 조직의 모든 워크스페이스에서 주인
+            db.post("memberships", {"tenant_id": int(a), "user_id": uid, "role": "주인", "last_opened_at": "now()"},
+                    on_conflict="tenant_id,user_id")
+            return int(a), "주인"
+        st.session_state._denied = True
+        return None, None
+    if mine:
+        db.call("PATCH", "memberships", {"tenant_id": f"eq.{a}", "user_id": f"eq.{uid}"}, {"last_opened_at": "now()"})
+    return int(a), mine and mine["role"]
 
 
-def new_account():
-    tid = db.new_tenant(f"계정 {time.time_ns()}")["id"]  # 이름은 화면에 보이지 않는다. 겹치지만 않게
+def new_account(org_id=None):
+    """워크스페이스를 만든다. 조직을 주지 않으면 새 조직도 만든다(처음 [읽기 시작])."""
+    uid = me()
+    if not org_id:
+        org_id = db.post("orgs", {"name": None})[0]["id"]
+        if uid:
+            db.post("org_members", {"org_id": org_id, "user_id": uid, "role": "주인"})
+    tid = db.post("tenants", {"name": f"계정 {time.time_ns()}", "org_id": org_id})[0]["id"]  # 내부 이름은 화면에 보이지 않는다
+    if uid:
+        db.post("memberships", {"tenant_id": tid, "user_id": uid, "role": "주인", "last_opened_at": "now()"})
     st.query_params["a"] = str(tid)
     st.session_state.first = True  # 이번 접속에서 처음 온 사람: 첫 바퀴 띠를 보인다
-    return db.Tenant(tid)
+    return db.Tenant(tid, uid, "주인" if uid else None)
+
+
+def new_space(org_id=None):
+    """[워크스페이스 생성]: 지금 조직 안에 빈 워크스페이스를 만들고 올리기에서 시작한다."""
+    new_account(org_id)
+    st.session_state.page = "올리기"
+    st.session_state.pop("first", None)
+
+
+def switch_space(sid):
+    st.query_params["a"] = str(sid)
+    st.session_state.page = "홈"
+
+
+def claim(tid, uid, yes):
+    """주인이 없는 워크스페이스의 주인이 될지 답한다. 조직이 없으면 조직도 만든다."""
+    if yes:
+        oid = (db.get("tenants", select="org_id", id=f"eq.{tid}") or [{}])[0].get("org_id")
+        if not oid:
+            oid = db.post("orgs", {"name": None})[0]["id"]
+            db.call("PATCH", "tenants", {"id": f"eq.{tid}"}, {"org_id": oid})
+        if not org_role(oid, uid):
+            db.post("org_members", {"org_id": oid, "user_id": uid, "role": "주인" if not db.get(
+                "org_members", select="user_id", org_id=f"eq.{oid}", role="eq.주인") else "구성원"})
+        db.post("memberships", {"tenant_id": tid, "user_id": uid, "role": "주인", "last_opened_at": "now()"})
+    st.session_state.setdefault("_claim_no", set()).add(tid)
+
+
+def answerable(q):
+    """지금 사람이 이 카드에 답할 수 있나. 올리는 사람은 읽기 애매한 칸만 고친다."""
+    role = tenant.role if tenant else None
+    return role in (None, *db.ANSWER) or (role == "올리는 사람" and q["kind"] == "애매한 값")
+
+
+def join(inv, uid):
+    """초대 링크의 [참여하기]: 조직 구성원이 되고, 링크의 워크스페이스에 그 역할로 들어간다."""
+    if name := st.session_state.get("join_name", "").strip():
+        db.call("PATCH", "users", {"id": f"eq.{uid}"}, {"name": name})
+        person_name.clear()
+    oid = (db.get("tenants", select="org_id", id=f"eq.{inv['tenant_id']}") or [{}])[0].get("org_id")
+    if oid and not org_role(oid, uid):
+        db.post("org_members", {"org_id": oid, "user_id": uid, "role": "구성원"})
+    if not db.get("memberships", select="user_id", tenant_id=f"eq.{inv['tenant_id']}", user_id=f"eq.{uid}"):
+        db.post("memberships", {"tenant_id": inv["tenant_id"], "user_id": uid, "role": inv["role"], "last_opened_at": "now()"})
+    db.call("PATCH", "invites", {"token": f"eq.{inv['token']}"}, {"used_by": uid})
+    del st.query_params["invite"]
+    st.query_params["a"] = str(inv["tenant_id"])
+    st.session_state.page = "홈"
+
+
+def invite_page(token, uid):
+    """초대 링크로 연 화면: 어느 조직의 어느 워크스페이스에 어떤 역할로 들어가는지 보이고 [참여하기]."""
+    st.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
+    inv = db.get("invites", token=f"eq.{token}", expires_at=f"gt.{datetime.datetime.now(datetime.timezone.utc).isoformat()}")
+    if not inv:
+        st.warning("초대한 사람에게 새 링크를 받아 주세요.", title="초대 링크가 만료됐거나 없어요")
+        st.stop()
+    inv = inv[0]
+    ws = db.get("tenants", select="id,title", id=f"eq.{inv['tenant_id']}")[0]
+    with st.container(border=True):
+        st.write(f"**{org_title(org_of(inv['tenant_id']))}**")
+        st.write(f"**'{space_title(ws)}' 워크스페이스에 '{inv['role']}'(으)로 참여할까요?**")
+        st.caption({"확인하는 사람": "종이를 올리고, 확인 카드에 답해요.",
+                    "올리는 사람": "종이를 올리고 직접 적어요. 확인 카드는 확인하는 사람이 답해요.",
+                    "보는 사람": "홈·대시보드·묻기에서 기록을 봐요."}[inv["role"]])
+        if not (db.get("users", select="name", id=f"eq.{uid}") or [{}])[0].get("name"):
+            st.text_input("내 이름", key="join_name", placeholder="구성원 표와 카드에 보이는 이름")
+        st.button("참여하기", type="primary", on_click=join, args=(inv, uid))
+    st.stop()
+
+
+def save_my_name(uid):
+    db.call("PATCH", "users", {"id": f"eq.{uid}"}, {f: st.session_state.get(f"my_{f}", "").strip() or None
+                                                    for f in ("name", "email", "phone")})
+    person_name.clear()
+    st.toast("저장했어요.")
+
+
+def set_role(tid, member):
+    """조직 주인이 워크스페이스마다 구성원의 역할을 정한다. '없음'이면 그 워크스페이스에서 뺀다."""
+    role_ = st.session_state[f"role_{tid}_{member}"]
+    if role_ == "없음":
+        db.call("DELETE", "memberships", {"tenant_id": f"eq.{tid}", "user_id": f"eq.{member}"})
+    else:
+        db.post("memberships", {"tenant_id": tid, "user_id": member, "role": role_}, on_conflict="tenant_id,user_id")
+    st.toast("역할을 바꿨어요.")
+
+
+def kick(oid, member):
+    """조직에서 내보내면 조직의 모든 워크스페이스에서도 빠진다."""
+    for w in db.get("tenants", select="id", org_id=f"eq.{oid}"):
+        db.call("DELETE", "memberships", {"tenant_id": f"eq.{w['id']}", "user_id": f"eq.{member}"})
+    db.call("DELETE", "org_members", {"org_id": f"eq.{oid}", "user_id": f"eq.{member}"})
+    st.toast("내보냈어요.")
+
+
+def hand_over(oid, uid):
+    """조직 주인을 넘긴다. 받는 사람은 모든 워크스페이스의 주인이 되고, 나는 확인하는 사람이 된다."""
+    to = st.session_state.get("owner_to")
+    if not to:
+        return
+    db.call("PATCH", "org_members", {"org_id": f"eq.{oid}", "user_id": f"eq.{uid}"}, {"role": "구성원"})
+    db.call("PATCH", "org_members", {"org_id": f"eq.{oid}", "user_id": f"eq.{to}"}, {"role": "주인"})
+    for w in db.get("tenants", select="id", org_id=f"eq.{oid}"):
+        db.call("PATCH", "memberships", {"tenant_id": f"eq.{w['id']}", "user_id": f"eq.{uid}"}, {"role": "확인하는 사람"})
+        db.post("memberships", {"tenant_id": w["id"], "user_id": to, "role": "주인"}, on_conflict="tenant_id,user_id")
+    st.toast("주인을 넘겼어요. 이제 확인하는 사람이에요.")
+
+
+def make_invite(uid):
+    token = secrets.token_urlsafe(16)
+    db.post("invites", {"token": token, "tenant_id": st.session_state.invite_space, "role": st.session_state.invite_role,
+                        "created_by": uid})
+    st.session_state.invite_link = st.context.url.split("?")[0] + f"?invite={token}"
+
+
+def drop_space(tid):
+    db.call("DELETE", "tenants", {"id": f"eq.{tid}"})
+    del st.query_params["a"]
+    st.session_state.page = "홈"
+    st.toast("워크스페이스를 지웠어요.")
+
+
+def propose_title(t, old):
+    new = st.session_state.space_title.strip()
+    if new and new != old:
+        engine.user_space_title(t, new, old)
+        st.toast("카드로 올렸어요. 확인에서 [적용]을 눌러야 바뀌어요.")
+
+
+MANAGE = ["조직 정보", "워크스페이스 정보", "구성원 관리", "권한 관리"]  # 워크스페이스 메뉴의 "조직 관리" 아래
+RIGHTS = [  # 권한 관리 표: 워크스페이스 역할마다 할 수 있는 것. 역할은 넷으로 정해져 있다
+    ("종이 올리기·직접 적기", "O", "O", "O", ""),
+    ("읽기 애매한 칸 고치기", "O", "O", "O", ""),
+    ("확인 카드에 답하기([맞아요]·[등록]·[적용])", "O", "O", "", ""),
+    ("자동화 [켜기]·지표 [올리기]", "O", "O", "", ""),
+    ("대상·지식그래프에서 [바꾼 것 올리기]", "O", "O", "O", ""),
+    ("홈·대시보드·묻기·원본 사진 보기", "O", "O", "O", "O"),
+    ("워크스페이스 이름·설명 바꾸기", "O", "O", "", ""),
+    ("조직 정보 바꾸기, 워크스페이스 생성", "O", "", "", ""),
+    ("구성원 초대·역할 바꾸기·내보내기", "O", "", "", ""),
+    ("주인 넘기기·워크스페이스 지우기", "O", "", "", ""),
+]
+
+
+def save_org(oid):
+    """조직 정보(이름·업종·대표 제품·웹사이트·사진): 지식 구조가 아니라 설명이라 바로 저장한다."""
+    body = {f: st.session_state.get(f"org_{f}", "").strip() or None for f in ("name", "industry", "product", "website")}
+    if photo := st.session_state.get("org_photo"):
+        path = f"uploads/org_{oid}{os.path.splitext(photo.name)[1].lower()}"
+        (engine.DATA / "uploads").mkdir(exist_ok=True)
+        (engine.DATA / path).write_bytes(photo.getvalue())
+        body["photo_path"] = path
+    db.call("PATCH", "orgs", {"id": f"eq.{oid}"}, body)
+    st.toast("저장했어요.")
+
+
+def org_info(t, uid):
+    """조직 정보: 사진·이름·업종·대표 제품·웹사이트. 조직 주인만 바꾼다."""
+    st.header("조직 정보")
+    o = org_of(t.id)
+    if not o:
+        st.caption("이 워크스페이스는 아직 조직이 없어요. 주인이 되면 조직이 생겨요.")
+        return
+    can = org_role(o["id"], uid) == "주인" or t.role is None
+    with st.container(border=True):
+        top, btn = st.columns([4, 1], vertical_alignment="center")
+        top.subheader("조직 정보")
+        if can:
+            btn.button("변경사항 저장하기", key="org_save", type="primary", on_click=save_org, args=(o["id"],), width="stretch")
+        st.caption("조직 프로필 사진")
+        if o.get("photo_path") and (engine.DATA / o["photo_path"]).exists():
+            st.image(str(engine.DATA / o["photo_path"]), width=96)
+        if can:
+            st.file_uploader("조직 프로필 사진", type=["jpg", "jpeg", "png", "webp"], key="org_photo", label_visibility="collapsed",
+                             help="JPG, PNG, WEBP 파일을 10MB까지 올릴 수 있어요.")
+        for f, label, ph in (("name", "조직 이름", "예: 우리정밀"), ("industry", "업종", "예: 제조"),
+                             ("product", "대표 제품 또는 서비스", "예: 자동차 부품"), ("website", "웹사이트", "https://")):
+            st.text_input(label, value=o.get(f) or "", key=f"org_{f}", placeholder=ph, disabled=not can)
+        st.caption("조직 안 모든 워크스페이스에서 AI가 종이를 읽고 칸 이름을 지을 때 참고해요. 비워 둬도 돼요.")
+
+
+def save_space(t):
+    """워크스페이스의 무엇을 기록하나요: 설명이라 바로 저장한다."""
+    t.allow("widgets")
+    db.call("PATCH", "tenants", {"id": f"eq.{t.id}"}, {"about": st.session_state.get("space_about", "").strip() or None})
+    st.toast("저장했어요.")
+
+
+def space_info(t, uid):
+    """워크스페이스 정보: 이름(바꾸면 카드로), 무엇을 기록하나요, 쌓인 것. 주인은 워크스페이스를 지울 수 있다."""
+    st.header("워크스페이스 정보")
+    row = engine.space_row(t)
+    Kx = knowledge(t.id)
+    can = t.role in (None, *db.ANSWER)
+    with st.container(border=True):
+        top, btn = st.columns([4, 1], vertical_alignment="center")
+        top.subheader("워크스페이스 정보")
+        if can:
+            btn.button("변경사항 저장하기", key="space_save", type="primary", on_click=save_space, args=(t,), width="stretch")
+        st.caption(f"조직: {org_title(row['org'])}")
+        name_col, up_col = st.columns([4, 1], vertical_alignment="bottom")
+        name_col.text_input("워크스페이스 이름", value=row.get("title") or "", key="space_title", disabled=not can,
+                            placeholder="예: 1공장 설비 점검")
+        if can:
+            up_col.button("바꾼 것 올리기", key="title_up", on_click=propose_title, args=(t, row.get("title")), width="stretch")
+        st.caption("바꾼 이름은 카드로 올라가고, 확인에서 [적용]을 눌러야 바뀌어요.")
+        st.text_input("무엇을 기록하나요", value=row.get("about") or "", key="space_about", disabled=not can,
+                      placeholder="예: 매일 설비 온도와 합격 여부를 점검해요")
+        a, b, c = st.columns(3)
+        a.metric("만든 날", row["created_at"][:10])
+        b.metric("기록 종류", f"{len(Kx['types'])}개")
+        c.metric("구성원", f"{len(db.get('memberships', select='user_id', tenant_id=f'eq.{t.id}'))}명")
+    if t.role == "주인":
+        with st.expander("워크스페이스 지우기"):
+            name = space_title(row)
+            st.caption(f"기록과 지식이 모두 지워지고 되돌릴 수 없어요. 지우려면 '{name}'을(를) 그대로 적어 주세요.")
+            typed = st.text_input("워크스페이스 이름 적기", key="drop_name", label_visibility="collapsed")
+            st.button("워크스페이스 지우기", key="drop", disabled=typed != name, on_click=drop_space, args=(t.id,))
+
+
+def members_page(t, uid):
+    """구성원 관리: 조직 구성원 표(이름·이메일, 워크스페이스마다 역할), 초대 링크, 내보내기, 주인 넘기기."""
+    st.header("구성원 관리")
+    o = org_of(t.id)
+    if not o:
+        st.caption("이 워크스페이스는 아직 주인이 없어요. 누구나 주소로 열 수 있어요.")
+        return
+    owner = org_role(o["id"], uid) == "주인"
+    spaces = db.get("tenants", select="id,title", org_id=f"eq.{o['id']}", order="id")
+    people = db.get("org_members", select="user_id,role,users(name,email)", org_id=f"eq.{o['id']}", order="created_at")
+    roles = {(m["tenant_id"], m["user_id"]): m["role"]
+             for m in db.get("memberships", select="tenant_id,user_id,role", tenant_id=f"in.({','.join(str(w['id']) for w in spaces)})")}
+    links = db.get("invites", select="token,role,expires_at,tenant_id", tenant_id=f"in.({','.join(str(w['id']) for w in spaces)})",
+                   expires_at=f"gt.{datetime.datetime.now(datetime.timezone.utc).isoformat()}", order="created_at.desc")
+    st.caption(f"{org_title(o)}의 구성원이에요. 조직에 한 번 초대하고, 워크스페이스마다 역할을 정해요.")
+    if owner:
+        _, btn = st.columns([4, 1])
+        with btn.popover("구성원 초대하기", type="primary", width="stretch"):
+            st.selectbox("워크스페이스", [w["id"] for w in spaces], index=[w["id"] for w in spaces].index(t.id),
+                         format_func=lambda i: space_title(next(w for w in spaces if w["id"] == i)), key="invite_space")
+            st.selectbox("역할", ROLES[1:], key="invite_role")
+            st.button("초대", type="primary", on_click=make_invite, args=(uid,), width="stretch")
+            if link := st.session_state.get("invite_link"):
+                st.code(link, language=None)
+                st.caption("이 링크를 보내 주세요. 7일 뒤 만료돼요.")
+    tab_m, tab_l = st.tabs([f"구성원 ({len(people)})", f"초대 링크 ({len(links)})"])
+    with tab_m:
+        widths = [2, 2] + [2] * len(spaces) + [1]
+        for col, h in zip(st.columns(widths), ["이름", "이메일", *[space_title(w) for w in spaces], ""]):
+            col.caption(h)
+        for m in people:
+            u = m.get("users") or {}
+            who = u.get("name") or f"이름 없음 {m['user_id']}"
+            cols = st.columns(widths, vertical_alignment="center")
+            cols[0].write(who + ("  · 나" if m["user_id"] == uid else "") + ("  · 주인" if m["role"] == "주인" else ""))
+            cols[1].write(u.get("email") or "-")
+            for col, w in zip(cols[2:-1], spaces):
+                now_ = roles.get((w["id"], m["user_id"]), "없음")
+                if owner and m["role"] != "주인":
+                    opts = ["없음", *ROLES[1:]]
+                    col.selectbox("역할", opts, index=opts.index(now_) if now_ in opts else 0, key=f"role_{w['id']}_{m['user_id']}",
+                                  label_visibility="collapsed", on_change=set_role, args=(w["id"], m["user_id"]))
+                else:
+                    col.write(now_)
+            if owner and m["role"] != "주인":
+                with cols[-1].popover("내보내기"):
+                    st.caption(f"{who}을(를) 내보내면 이 조직의 모든 워크스페이스에서 빠져요.")
+                    st.button("내보내기", key=f"kick_{m['user_id']}", type="primary", on_click=kick, args=(o["id"], m["user_id"]))
+        if owner and len(people) > 1:
+            others = {m["user_id"]: (m.get("users") or {}).get("name") or f"이름 없음 {m['user_id']}"
+                      for m in people if m["user_id"] != uid}
+            with st.popover("주인 넘기기"):
+                st.selectbox("받을 사람", list(others), format_func=others.get, key="owner_to")
+                st.caption("넘기면 받는 사람이 모든 워크스페이스의 주인이 되고, 나는 확인하는 사람이 돼요.")
+                st.button("주인 넘기기", key="owner_go", type="primary", on_click=hand_over, args=(o["id"], uid))
+    with tab_l:
+        if not links:
+            st.caption("아직 쓸 수 있는 초대 링크가 없어요." + (" [구성원 초대하기]로 만들어요." if owner else ""))
+        base = st.context.url.split("?")[0]
+        for l in links:
+            with st.container(border=True):
+                ws = next((w for w in spaces if w["id"] == l["tenant_id"]), {"id": l["tenant_id"]})
+                st.caption(f"{space_title(ws)} · {l['role']} · {l['expires_at'][:10]}까지")
+                st.code(f"{base}?invite={l['token']}", language=None)
+
+
+def rights_page(t):
+    """권한 관리: 워크스페이스 역할 넷이 할 수 있는 것. 역할은 고정이고, 구성원의 역할은 구성원 관리에서 바꾼다."""
+    st.header("권한 관리")
+    st.caption("조직 주인은 모든 워크스페이스의 주인이에요. 다른 구성원은 워크스페이스마다 역할을 하나 가져요. "
+               "역할은 넷으로 정해져 있고, 구성원 관리에서 바꿔요.")
+    st.dataframe(pd.DataFrame(RIGHTS, columns=["할 수 있는 것", *ROLES]), hide_index=True, width="stretch",
+                 alt="역할마다 할 수 있는 것")
+    if t.role:
+        st.caption(f"나는 이 워크스페이스의 {t.role}이에요.")
+
+
+def my_account(uid):
+    """내 계정: 구성원 표와 카드에 보이는 이름·이메일·휴대폰. 로그인은 준비 중이라 이 브라우저가 나다."""
+    st.header("내 계정")
+    with st.container(border=True):
+        top, btn = st.columns([4, 1], vertical_alignment="center")
+        top.subheader("계정 정보")
+        btn.button("저장", key="name_save", type="primary", on_click=save_my_name, args=(uid,), width="stretch")
+        me_ = (db.get("users", select="name,email,phone", id=f"eq.{uid}") or [{}])[0]
+        st.text_input("이름", value=me_.get("name") or "", key="my_name", placeholder="구성원 표와 카드에 보이는 이름")
+        st.text_input("이메일", value=me_.get("email") or "", key="my_email", placeholder="name@example.com")
+        st.text_input("휴대폰 번호", value=me_.get("phone") or "", key="my_phone", placeholder="01000000000")
+        st.caption("로그인은 준비 중이에요. 지금은 이 브라우저가 나예요. 다른 브라우저에서 이어 쓰려면 주인에게 초대 링크를 받아 주세요.")
+
+
+def all_spaces(uid):
+    """[모두 보기]: 조직마다 내 워크스페이스의 걸린 건수와 확인할 것 수. 워크스페이스끼리 합쳐 세지는 않는다."""
+    st.header("모두 보기")
+    spaces = my_spaces(uid)
+    for oid in dict.fromkeys(x["org_id"] for x in spaces):
+        st.subheader(org_title({"name": next(x["org"] for x in spaces if x["org_id"] == oid)}))
+        for x in [x for x in spaces if x["org_id"] == oid]:
+            sp = db.Tenant(x["id"])
+            Kx = knowledge(x["id"])
+            hits = sum(len(engine.run_automation(Kx, a["spec"])) for a in sp.get("automations", select="spec", status="eq.켜짐"))
+            wait = len(engine.pending(sp, engine.CHECK))
+            with st.container(border=True):
+                left, a, b = st.columns([3, 1, 1], vertical_alignment="center")
+                left.button(space_title(x), key=f"all_{x['id']}", type="tertiary", on_click=switch_space, args=(x["id"],))
+                a.metric("걸린 것", f"{hits}건")
+                b.metric("확인할 것", f"{wait}개")
 
 
 def pick(p):
@@ -1815,20 +2394,54 @@ if "_goto" in st.session_state:
     st.session_state.page = st.session_state.pop("_goto")
 
 demo = st.session_state.get("demo")
-tid = demo or account()
-tenant = Demo(tid) if demo else db.Tenant(tid) if tid else None
+uid = None if demo else me()
+if uid and st.query_params.get("invite"):
+    invite_page(st.query_params["invite"], uid)  # 초대 링크로 온 사람
+tid, role = (demo, None) if demo else account(uid)
+tenant = Demo(tid) if demo else db.Tenant(tid, uid, role) if tid else None
+if tenant and not demo and role in (None, *db.ANSWER) and tenant.get("source_inputs", select="id", limit=1):
+    engine.suggest_space(tenant, llm.MODELS[0])
 K = know(tenant)
 waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
 if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
     st.session_state.page = "홈" if K["types"] else "올리기"
 with st.sidebar:
     st.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
+    if uid:  # 로고 아래 워크스페이스 고르기: 이름 칸과 [+], 펼치면 검색·조직별 목록·생성·조직 관리
+        spaces = my_spaces(uid)
+        here = next((x for x in spaces if x["id"] == tid), None)
+        here_org = here["org_id"] if here else None
+        pick_col, plus_col = st.columns([5, 1.2], gap="small", vertical_alignment="center")
+        with pick_col.popover(space_title(here) if here else "워크스페이스 고르기", width="stretch"), st.container(key="ws_menu"):
+            find = st.text_input("나의 워크스페이스 검색", key="space_find", placeholder="나의 워크스페이스 검색",
+                                 icon=":material/search:", label_visibility="collapsed")
+            for oid in dict.fromkeys(x["org_id"] for x in spaces):
+                group = [x for x in spaces if x["org_id"] == oid and (not find or find in space_title(x) or find in (x["org"] or ""))]
+                if not group:
+                    continue
+                st.html(f'<div class="ps-ws-org">{org_title({"name": group[0]["org"]})}</div>')
+                for x in group:
+                    st.button(space_title(x), key=f"space_{x['id']}", type="tertiary", on_click=switch_space, args=(x["id"],),
+                              icon=":material/check_circle:" if x["id"] == tid else None, icon_position="right", width="stretch")
+            st.button("워크스페이스 생성", key="new_space", icon=":material/add:", on_click=new_space, args=(here_org,), width="stretch")
+            if len(spaces) > 1:
+                st.button("모두 보기", key="all_spaces", type="tertiary", on_click=pick, args=("모두 보기",), width="stretch")
+            if tid and not demo:
+                st.html(f'<div class="ps-ws-head">{org_title({"name": here["org"]}) if here else "이 조직"} 관리</div>')
+                for p in MANAGE:
+                    st.button(p, key=f"manage_{p}", type="tertiary", on_click=pick, args=(p,), width="stretch")
+        plus_col.button("", key="new_space_plus", icon=":material/add:", help="워크스페이스 생성", on_click=new_space,
+                        args=(here_org,), width="stretch")
     for head, items in GROUPS:
         if head:
             st.caption(head)
         for p in items:
             st.button(f"{p}  {waiting}" if p == "확인" and waiting else p, key=f"{'navon' if p == st.session_state.page else 'nav'}_{p}", type="tertiary",
                       on_click=pick, args=(p,), width="stretch")
+    if uid:  # 맨 아래: 지금 사람과 역할, 내 계정
+        st.divider()
+        st.button(f"{person_name(uid)}{' · ' + role if role else ''}", key="my_account", type="tertiary",
+                  on_click=pick, args=("내 계정",), width="stretch")
 
 if n := st.session_state.pop("_close_sidebar", 0):
     # 좁은 화면(휴대폰)에서 메뉴를 고르면 사이드바를 접는다. 넓은 화면은 그대로 둔다. n(고른 시각)은 매번 새로 실행되게 붙인다
@@ -1846,8 +2459,27 @@ if not demo and st.session_state.get("_remembered") != (tid, st.query_params.get
     st.session_state._remembered = (tid, st.query_params.get("a"))
     st.container(key="remember").iframe(f"<script>const w = window.parent; {remember.replace('localStorage', 'w.localStorage')}</script>", height=1)
 
-if not tid and not st.session_state.get("entered"):
-    landing()  # 계정이 없는 첫 방문은 랜딩부터
+if not demo and not uid and not st.session_state.get("_person_js"):
+    # 이 브라우저를 사람으로: 쿠키가 없으면 무작위 번호를 두고 한 번 다시 연다(쿠키는 접속할 때만 읽힌다)
+    st.session_state._person_js = True
+    st.container(key="person").iframe(
+        "<script>const w = window.parent; if (!w.document.cookie.includes('ps_person=') && !w.sessionStorage.getItem('ps_person_try')) {"
+        " w.sessionStorage.setItem('ps_person_try', '1');"
+        " w.document.cookie = 'ps_person=' + w.crypto.randomUUID() + '; path=/; max-age=31536000; samesite=lax';"
+        " w.location.reload(); }</script>", height=1)
+if st.session_state.pop("_denied", False):
+    st.toast("이 워크스페이스는 초대받은 사람만 열 수 있어요.")
+if not tid and not st.session_state.get("entered") and not (uid and my_spaces(uid)):
+    landing()  # 워크스페이스가 없는 첫 방문은 랜딩부터
+if uid and tid and not demo and tid not in st.session_state.get("_claim_no", set()) \
+        and not db.get("memberships", select="user_id", tenant_id=f"eq.{tid}"):
+    # 로그인 전에 이 브라우저에서 만든 워크스페이스: 내 계정으로 옮길지 묻는다
+    with st.container(border=True):
+        st.markdown("**이 워크스페이스의 주인이 될까요?**")
+        st.caption("주인이 되면 구성원을 초대하고 역할을 정할 수 있어요. 주인이 생기면 초대받은 사람만 이 워크스페이스를 열어요.")
+        no, yes, _ = st.columns([1, 1, 4])
+        no.button("아니요", key="claim_no", on_click=claim, args=(tid, uid, False), width="stretch")
+        yes.button("맞아요", key="claim_yes", type="primary", on_click=claim, args=(tid, uid, True), width="stretch")
 if demo:  # 활용 사례: 화면 위에 어떤 사례인지와 내 계정으로 가는 버튼
     note, mine = st.columns([5, 1], vertical_alignment="center")
     note.info(f"활용 사례 · {next(n for c, n, _ in CASES if c == demo)} · 눌러 보며 써 보세요. 이 창을 닫으면 처음으로 돌아가요.")
@@ -1876,9 +2508,23 @@ if page == "올리기" and demo:
     write_form(tenant, K)
 elif page == "올리기":
     upload(tenant, K)
+elif page == "모두 보기" and uid:
+    all_spaces(uid)
+elif page == "내 계정" and uid:
+    my_account(uid)
 elif not tenant:
     st.header(TITLE.get(page, page))
     empty()
+elif page == "조직 정보":
+    org_info(tenant, uid)
+elif page == "워크스페이스 정보":
+    space_info(tenant, uid)
+elif page == "구성원 관리":
+    members_page(tenant, uid)
+elif page == "권한 관리":
+    rights_page(tenant)
+elif page == "모두 보기":
+    all_spaces(uid)
 elif page == "홈":
     home(tenant, K)
 else:
