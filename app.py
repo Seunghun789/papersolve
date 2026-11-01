@@ -1801,7 +1801,7 @@ section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], hea
 @keyframes ps-flow {0% {transform: translate(-25vw, 15vh) scale(.85); opacity: 0} 25% {opacity: .7} 75% {opacity: .7}
   100% {transform: translate(25vw, -10vh) scale(1.1); opacity: 0}}
 @media (prefers-reduced-motion: reduce) {.ps-glow {animation: none;}}
-.ps-hero h1 {font-size: clamp(2.4rem, 4.2vw, 62px) !important; line-height: 1.22 !important; font-weight: 600 !important; letter-spacing: -0.02em; margin: 150px 0 30px; padding: 0;}
+.ps-hero h1 {font-size: clamp(2.4rem, 4.2vw, 62px) !important; line-height: 1.22 !important; font-weight: 600 !important; letter-spacing: -0.02em; margin: 90px 0 30px; padding: 0;}
 .ps-hero [data-testid="stHeaderActionElements"], .ps-hero h1 a {display: none;}
 .ps-hero p {font-size: 17px; line-height: 1.6; margin-bottom: 64px;}
 .ps-note {font-size: 0.8rem; margin-top: 0.5rem;}
