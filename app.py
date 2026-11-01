@@ -2027,6 +2027,8 @@ def account(uid):
     row = db.get("tenants", select="id,org_id", id=f"eq.{a}")
     if not row:
         return None, None
+    if int(a) in DUMMY:  # 활용 사례 워크스페이스(1~4)는 누구나 열고, 주인을 두지 않는다
+        return int(a), None
     members = db.get("memberships", select="user_id,role", tenant_id=f"eq.{a}")
     mine = next((m for m in members if m["user_id"] == uid), None)
     if members and not mine:
@@ -2471,7 +2473,7 @@ if st.session_state.pop("_denied", False):
     st.toast("이 워크스페이스는 초대받은 사람만 열 수 있어요.")
 if not tid and not st.session_state.get("entered") and not (uid and my_spaces(uid)):
     landing()  # 워크스페이스가 없는 첫 방문은 랜딩부터
-if uid and tid and not demo and tid not in st.session_state.get("_claim_no", set()) \
+if uid and tid and not demo and tid not in DUMMY and tid not in st.session_state.get("_claim_no", set()) \
         and not db.get("memberships", select="user_id", tenant_id=f"eq.{tid}"):
     # 로그인 전에 이 브라우저에서 만든 워크스페이스: 내 계정으로 옮길지 묻는다
     with st.container(border=True):
