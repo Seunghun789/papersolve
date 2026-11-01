@@ -178,7 +178,7 @@ STEPS = [("① 종이", "올리기"), ("② 확인", "확인"), ("③ 내 기록
 GROUPS = [(None, ["홈"]), ("① 종이", ["올리기"]), ("② 확인", ["확인", "대상", "지식그래프"]),
           ("③ 내 기록", ["대시보드", "자동화"]), ("④ 묻기", ["묻기"])]  # 사이드바 메뉴 묶음. 홈은 따로
 SIDE_STEPS = {"확인": ":material/notifications:", "올리기": ":material/upload_file:", "자동화": ":material/autorenew:",
-         "묻기": ":material/chat_bubble:", "대시보드": ":material/dashboard:"}  # 사이드바 위 아이콘 줄
+         "묻기": ":material/chat_bubble:", "대시보드": ":material/bar_chart:"}  # 사이드바 위 아이콘 줄
 PART = {"올리기": (0, ""), "확인": (1, "칸"), "대상": (1, "대상"), "지식그래프": (1, "관계"),
         "대시보드": (2, "지표"), "자동화": (2, "챙길 일"), "묻기": (3, "")}  # 메뉴가 네 단계 중 어디인지
 NOTE = {
@@ -2495,8 +2495,8 @@ if not demo and not uid and not st.session_state.get("_person_js"):
         " w.location.reload(); }</script>", height=1)
 if st.session_state.pop("_denied", False):
     st.toast("이 워크스페이스는 초대받은 사람만 열 수 있어요.")
-if not tid and not st.session_state.get("entered") and not (uid and my_spaces(uid)):
-    landing()  # 워크스페이스가 없는 첫 방문은 랜딩부터
+if not st.session_state.get("entered") and not st.query_params.get("invite"):
+    landing()  # 새로 열면 늘 랜딩부터. 초대 링크로 온 사람만 바로 들어간다
 if uid and tid and not demo and tid not in DUMMY and tid not in st.session_state.get("_claim_no", set()) \
         and not db.get("memberships", select="user_id", tenant_id=f"eq.{tid}"):
     # 로그인 전에 이 브라우저에서 만든 워크스페이스: 내 계정으로 옮길지 묻는다
