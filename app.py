@@ -56,7 +56,22 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: 2px;}
 .ps-ws-head {color: #9CA3AF; font-size: 12px; line-height: 18px; margin-top: 6px; padding: 10px 6px 2px; border-top: 1px solid #E4E4E7;}
 section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button {justify-content: space-between; padding: 8px 12px; border-radius: 12px; min-height: 44px;}
 section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button > div {justify-content: space-between; width: 100%;}
-section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button p {font-size: 15px; font-weight: 600; text-align: left;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button p {font-size: 15px; font-weight: 400; text-align: left; color: #111827;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] button > div > div:first-child {flex: 1; justify-content: flex-start;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button, section[data-testid="stSidebar"] .st-key-new_space_plus button {height: 44px; min-height: 44px; border: 1px solid #E4E4E7; border-radius: 12px; background: #FFFFFF; box-shadow: none;}
+section[data-testid="stSidebar"] [class*="st-key-step"] button {flex-direction: column; height: 62px; min-height: 0; padding: 6px 0; border-radius: 10px; gap: 2px;}
+section[data-testid="stSidebar"] [class*="st-key-step"] button > div > span {display: flex; flex-direction: column; align-items: center; gap: 4px;}
+section[data-testid="stSidebar"] [class*="st-key-step"] button span[data-testid="stIconMaterial"] {font-size: 24px; color: #374151;}
+section[data-testid="stSidebar"] [class*="st-key-step"] button p {font-size: 11.5px; color: #6B7280; letter-spacing: -0.03em; white-space: nowrap; overflow: visible;}
+section[data-testid="stSidebar"] [class*="st-key-step"] [data-testid="stMarkdownContainer"] {overflow: visible;}
+section[data-testid="stSidebar"] [class*="st-key-stepon_"] button {background: #E0ECFB;}
+section[data-testid="stSidebar"] [class*="st-key-stepon_"] button span[data-testid="stIconMaterial"] {color: #2563EB;}
+section[data-testid="stSidebar"] [class*="st-key-stepon_"] button p {color: #111827; font-weight: 600;}
+section[data-testid="stSidebar"] .st-key-new_space_plus button {padding: 0; width: 44px;}
+section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-new_space_plus), section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {flex-wrap: nowrap;}
+section[data-testid="stSidebar"] [data-testid="stColumn"]:has(.st-key-new_space_plus) {flex: 0 0 44px !important; min-width: 44px; width: 44px;}
+section[data-testid="stSidebar"] [data-testid="stColumn"]:has([data-testid="stPopover"]) {flex: 1 1 0 !important; width: auto;}
+section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {margin-top: 6px; gap: 0;}
 section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 12px; min-height: 44px;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; padding: 7px 12px;
   border-radius: 8px; width: 100%;}
@@ -86,6 +101,9 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14p
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapsedControl"] {display: none !important;}
 section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px !important; transform: none !important;}
+/* 사이드바 맨 위 빈 칸을 줄여 로고를 위로 올린다 */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {height: 2.25rem; padding-top: 0.5rem; padding-bottom: 0;}
+section[data-testid="stSidebar"] .ps-logo {padding-top: 0;}
 }
 .block-container {padding-top: 32px; max-width: 1080px;}
 /* 글자 단계 24 · 20 · 16, 소제목 위는 넉넉히 */
@@ -159,6 +177,8 @@ def go(page):
 STEPS = [("① 종이", "올리기"), ("② 확인", "확인"), ("③ 내 기록", "홈"), ("④ 묻기", "묻기")]
 GROUPS = [(None, ["홈"]), ("① 종이", ["올리기"]), ("② 확인", ["확인", "대상", "지식그래프"]),
           ("③ 내 기록", ["대시보드", "자동화"]), ("④ 묻기", ["묻기"])]  # 사이드바 메뉴 묶음. 홈은 따로
+SIDE_STEPS = {"확인": ":material/notifications:", "올리기": ":material/upload_file:", "자동화": ":material/autorenew:",
+         "묻기": ":material/chat_bubble:", "대시보드": ":material/dashboard:"}  # 사이드바 위 아이콘 줄
 PART = {"올리기": (0, ""), "확인": (1, "칸"), "대상": (1, "대상"), "지식그래프": (1, "관계"),
         "대시보드": (2, "지표"), "자동화": (2, "챙길 일"), "묻기": (3, "")}  # 메뉴가 네 단계 중 어디인지
 NOTE = {
@@ -2413,7 +2433,7 @@ with st.sidebar:
         spaces = my_spaces(uid)
         here = next((x for x in spaces if x["id"] == tid), None)
         here_org = here["org_id"] if here else None
-        pick_col, plus_col = st.columns([5, 1.2], gap="small", vertical_alignment="center")
+        pick_col, plus_col = st.columns([5, 1.25], gap="small", vertical_alignment="center")
         with pick_col.popover(space_title(here) if here else "워크스페이스 고르기", width="stretch"), st.container(key="ws_menu"):
             find = st.text_input("나의 워크스페이스 검색", key="space_find", placeholder="나의 워크스페이스 검색",
                                  icon=":material/search:", label_visibility="collapsed")
@@ -2434,6 +2454,10 @@ with st.sidebar:
                     st.button(p, key=f"manage_{p}", type="tertiary", on_click=pick, args=(p,), width="stretch")
         plus_col.button("", key="new_space_plus", icon=":material/add:", help="워크스페이스 생성", on_click=new_space,
                         args=(here_org,), width="stretch")
+    steps = st.columns(len(SIDE_STEPS), gap=None)  # 아이콘 줄: 누르면 그 메뉴로, 지금 메뉴는 바탕색
+    for col, (p, icon) in zip(steps, SIDE_STEPS.items()):
+        col.button(p, key=f"{'stepon' if p == st.session_state.page else 'step'}_{p}", icon=icon, type="tertiary",
+                   on_click=pick, args=(p,), width="stretch")
     for head, items in GROUPS:
         if head:
             st.caption(head)
