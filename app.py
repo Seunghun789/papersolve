@@ -177,8 +177,8 @@ def go(page):
 STEPS = [("① 종이", "올리기"), ("② 확인", "확인"), ("③ 내 기록", "홈"), ("④ 묻기", "묻기")]
 GROUPS = [(None, ["홈"]), ("① 종이", ["올리기"]), ("② 확인", ["확인", "대상", "지식그래프"]),
           ("③ 내 기록", ["대시보드", "자동화"]), ("④ 묻기", ["묻기"])]  # 사이드바 메뉴 묶음. 홈은 따로
-SIDE_STEPS = {"확인": ":material/notifications:", "올리기": ":material/upload_file:", "자동화": ":material/autorenew:",
-         "묻기": ":material/chat_bubble:", "대시보드": ":material/bar_chart:"}  # 사이드바 위 아이콘 줄
+SIDE_STEPS = {"올리기": ":material/upload_file:", "확인": ":material/notifications:", "대시보드": ":material/bar_chart:",
+         "자동화": ":material/autorenew:", "묻기": ":material/chat_bubble:"}  # 사이드바 위 아이콘 줄. 순서는 GROUPS 와 같다
 PART = {"올리기": (0, ""), "확인": (1, "칸"), "대상": (1, "대상"), "지식그래프": (1, "관계"),
         "대시보드": (2, "지표"), "자동화": (2, "챙길 일"), "묻기": (3, "")}  # 메뉴가 네 단계 중 어디인지
 NOTE = {
