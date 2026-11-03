@@ -332,7 +332,7 @@ def now():
 def save_source(t, channel, name, content):
     src = t.post("source_inputs", {"channel": channel, "name": name})
     path = f"uploads/{t.id}-{src['id']}{Path(name).suffix.lower() or '.bin'}"
-    (DATA / "uploads").mkdir(exist_ok=True)
+    (DATA / "uploads").mkdir(parents=True, exist_ok=True)
     (DATA / path).write_bytes(content)
     t.patch("source_inputs", {"storage_path": path}, id=f"eq.{src['id']}")
     return src["id"], path
