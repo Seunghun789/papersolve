@@ -1,5 +1,6 @@
 [server]
 enableStaticServing = true  # static/fonts 의 글꼴 파일을 앱이 직접 제공한다
+fileWatcherType = "none"  # Streamlit Cloud 는 파일 감시 한도가 차서 경고만 쌓인다. 코드를 바꾸면 서버를 다시 켠다
 
 [browser]
 gatherUsageStats = false  # Streamlit 사용 통계를 보내지 않는다

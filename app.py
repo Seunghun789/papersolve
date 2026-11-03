@@ -55,11 +55,11 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: 2px;}
 .st-key-ws_menu [class*="st-key-space_"] button [data-testid="stMarkdownContainer"] {flex: 1;}
 .ps-ws-org {color: #9CA3AF; font-size: 12px; line-height: 18px; padding: 6px 6px 0;}
 .ps-ws-head {color: #9CA3AF; font-size: 12px; line-height: 18px; margin-top: 6px; padding: 10px 6px 2px; border-top: 1px solid #E4E4E7;}
-section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button {justify-content: space-between; padding: 8px 12px; border-radius: 12px; min-height: 44px;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button {justify-content: space-between; padding: 6px 10px; border-radius: 10px; min-height: 40px;}
 section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button > div {justify-content: space-between; width: 100%;}
-section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button p {font-size: 15px; font-weight: 400; text-align: left; color: #111827;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button p {font-size: 14px; font-weight: 400; text-align: left; color: #111827;}
 section[data-testid="stSidebar"] [data-testid="stPopover"] button > div > div:first-child {flex: 1; justify-content: flex-start;}
-section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button, section[data-testid="stSidebar"] .st-key-new_space_plus button {height: 44px; min-height: 44px; border: 1px solid #E4E4E7; border-radius: 12px; background: #FFFFFF; box-shadow: none;}
+section[data-testid="stSidebar"] [data-testid="stPopover"] > div > button, section[data-testid="stSidebar"] .st-key-new_space_plus button {height: 40px; min-height: 40px; border: 1px solid #E4E4E7; border-radius: 10px; background: #FFFFFF; box-shadow: none;}
 section[data-testid="stSidebar"] [class*="st-key-step"] button {flex-direction: column; height: 62px; min-height: 0; padding: 6px 0; border-radius: 10px; gap: 2px;}
 section[data-testid="stSidebar"] [class*="st-key-step"] button > div > span {display: flex; flex-direction: column; align-items: center; gap: 4px;}
 section[data-testid="stSidebar"] [class*="st-key-step"] button span[data-testid="stIconMaterial"] {font-size: 24px; color: #374151;}
@@ -68,12 +68,12 @@ section[data-testid="stSidebar"] [class*="st-key-step"] [data-testid="stMarkdown
 section[data-testid="stSidebar"] [class*="st-key-stepon_"] button {background: #E0ECFB;}
 section[data-testid="stSidebar"] [class*="st-key-stepon_"] button span[data-testid="stIconMaterial"] {color: #2563EB;}
 section[data-testid="stSidebar"] [class*="st-key-stepon_"] button p {color: #111827; font-weight: 600;}
-section[data-testid="stSidebar"] .st-key-new_space_plus button {padding: 0; width: 44px;}
+section[data-testid="stSidebar"] .st-key-new_space_plus button {padding: 0; width: 40px;}
 section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-new_space_plus), section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {flex-wrap: nowrap;}
-section[data-testid="stSidebar"] [data-testid="stColumn"]:has(.st-key-new_space_plus) {flex: 0 0 44px !important; min-width: 44px; width: 44px;}
-section[data-testid="stSidebar"] [data-testid="stColumn"]:has([data-testid="stPopover"]) {flex: 1 1 0 !important; width: auto;}
+section[data-testid="stSidebar"] [data-testid="stColumn"]:has(.st-key-new_space_plus) {flex: 0 0 40px !important; min-width: 40px; width: 40px;}
+section[data-testid="stSidebar"] [data-testid="stColumn"]:has([data-testid="stPopover"]) {flex: 1 1 0 !important; width: auto; min-width: 0;}  /* 줄어들 수 있어야 [+]가 사이드바 밖으로 밀리지 않는다 */
 section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {margin-top: 6px; gap: 0;}
-section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 12px; min-height: 44px;}
+section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 10px; min-height: 40px;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; padding: 7px 12px;
   border-radius: 8px; width: 100%;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button > div,
@@ -1967,7 +1967,7 @@ def landing():
     if st.session_state.get("landing") in ("login", "signup"):
         st.html(LOGIN)
         st.button("paper**solve**", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
-        left, right = st.columns(2, gap="xlarge")
+        left, right = st.columns(2, gap="xlarge", vertical_alignment="center")  # 오른쪽 네 카드를 왼쪽 글·입력 칸의 세로 가운데에
         with left:
             st.markdown('<div class="ps-hero"><h1>손으로 적은 기록을 찍으면<br>표 · 챙길 일 · 답이 돼요</h1>'
                         '<p>점검표, 재고 장부, 메모를 사진으로 올리세요.<br>AI가 칸을 찾아 주고, 맞는지만 [맞아요]로 확인하면 돼요.</p></div>',
