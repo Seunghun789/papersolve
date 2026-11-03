@@ -8,3 +8,5 @@ pandas==3.1.0
 requests==2.34.2
 # Google 로그인(st.login)이 Google 과 로그인 절차를 주고받는다 — app.py
 Authlib==1.9.3
+# Google 로그인(st.login)이 Google 과 토큰을 주고받을 때 쓴다. Streamlit 로그인 기능에 Authlib 와 함께 필요하다 — app.py
+httpx==0.28.1
