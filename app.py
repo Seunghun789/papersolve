@@ -2232,7 +2232,6 @@ def save_org(oid):
     body = {f: st.session_state.get(f"org_{f}", "").strip() or None for f in ("name", "industry", "product", "website")}
     if photo := st.session_state.get("org_photo"):
         path = f"uploads/org_{oid}{os.path.splitext(photo.name)[1].lower()}"
-        (engine.DATA / "uploads").mkdir(parents=True, exist_ok=True)
         (engine.DATA / path).write_bytes(photo.getvalue())
         body["photo_path"] = path
     db.call("PATCH", "orgs", {"id": f"eq.{oid}"}, body)
