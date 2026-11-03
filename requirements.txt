@@ -6,3 +6,5 @@ anthropic==2.3.0
 pandas==3.1.0
 # Supabase에 기록을 넣고 꺼낸다(REST 호출) — core/db.py
 requests==2.34.2
+# Google 로그인(st.login)이 Google 과 로그인 절차를 주고받는다 — app.py
+Authlib==1.9.3

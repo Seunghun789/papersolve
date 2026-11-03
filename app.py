@@ -1976,9 +1976,14 @@ def landing():
             with mid:
                 auth_form()
                 st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
-                if st.button("Google로 계속하기", key="google", width="stretch") | st.button("카카오로 계속하기", key="kakao", width="stretch"):
-                    st.toast("Google · 카카오 로그인은 준비 중이에요. 지금은 이메일로 시작해요.")
-                st.markdown('<div class="ps-note">Google · 카카오 로그인은 준비 중이에요.</div>', unsafe_allow_html=True)
+                if st.button("Google로 계속하기", key="google", width="stretch"):
+                    if google_on():
+                        st.login("google")  # Google 로그인 창으로 갔다가 이 앱으로 돌아온다
+                    else:
+                        st.toast("Google 로그인은 아직 설정되지 않았어요. 지금은 이메일로 시작해요.")
+                if st.button("카카오로 계속하기", key="kakao", width="stretch"):
+                    st.toast("카카오 로그인은 준비 중이에요. 지금은 이메일이나 Google로 시작해요.")
+                st.markdown('<div class="ps-note">카카오 로그인은 준비 중이에요.</div>', unsafe_allow_html=True)
         with right:
             st.markdown(step_cards(), unsafe_allow_html=True)
         st.stop()
@@ -2014,12 +2019,27 @@ def landing():
 ROLES = ["주인", "확인하는 사람", "올리는 사람", "보는 사람"]
 
 
+def google_on():
+    """secrets 에 [auth.google] 이 있으면 Google 로그인을 쓴다. 없으면 버튼만 보이고 안내한다."""
+    try:
+        return "google" in st.secrets.get("auth", {})
+    except FileNotFoundError:
+        return False
+
+
 def me():
-    """로그인한 사람의 users.id. 이번 접속에서 로그인했으면 그 사람, 아니면 쿠키(ps_login)의 사람, 둘 다 없으면 None."""
+    """로그인한 사람의 users.id. 이번 접속에서 로그인했으면 그 사람, 다음은 Google 로그인, 다음은 쿠키(ps_login)의 사람.
+    셋 다 없으면 None."""
     if st.session_state.get("_out"):  # [로그아웃]한 접속은 쿠키가 남아 있어도 읽지 않는다
         return None
     if st.session_state.get("_me"):
         return st.session_state._me
+    if google_on() and st.user.is_logged_in:  # Google 로그인: provider 'google', sub 는 Google 의 사람 번호. 처음이면 가입
+        row = (db.get("users", select="id", provider="eq.google", sub=f"eq.{st.user.sub}")
+               or db.post("users", {"provider": "google", "sub": st.user.sub, "email": st.user.get("email"),
+                                    "name": st.user.get("name")}))[0]  # 이름은 처음 한 번만 Google 에서 가져온다
+        st.session_state.update(_me=row["id"], entered=True, landing=None)  # Google 에서 돌아오면 랜딩 없이 들어간다
+        return row["id"]
     token = st.context.cookies.get("ps_login")
     if isinstance(token, str) and token and (row := db.get("users", select="id", login_token=f"eq.{token}")):
         st.session_state._me = row[0]["id"]
@@ -2068,7 +2088,8 @@ def login():
 
 
 def logout():
-    st.session_state.update(_me=None, _out=True, _cookie="", entered=False, landing="login", page="홈")
+    st.session_state.update(_me=None, _out=True, _cookie="", entered=False, landing="login", page="홈",
+                            _google_out=google_on() and st.user.is_logged_in)
     st.query_params.clear()
 
 
@@ -2570,6 +2591,8 @@ if not demo and st.session_state.get("_remembered") != (tid, st.query_params.get
     st.session_state._remembered = (tid, st.query_params.get("a"))
     st.container(key="remember").iframe(f"<script>const w = window.parent; {remember.replace('localStorage', 'w.localStorage')}</script>", height=1)
 
+if st.session_state.pop("_google_out", False):
+    st.logout()  # Google 로그인도 끊는다
 if (token := st.session_state.pop("_cookie", None)) is not None:
     # 로그인하면 쿠키에 표를 두고, [로그아웃]하면 지운다. 다시 열어도 로그인이 이어진다
     age = 31536000 if token else 0
