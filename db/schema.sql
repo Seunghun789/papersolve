@@ -24,13 +24,16 @@ create table public.tenants (               -- 워크스페이스
 );
 
 -- 사람과 워크스페이스
-create table public.users (                  -- 사람. 지금은 브라우저(provider 'browser', sub 는 쿠키 번호). provider + sub 가 한 사람
+create table public.users (                  -- 사람. 회원가입은 provider 'email', sub 는 이메일. provider + sub 가 한 사람
   id bigint generated always as identity primary key,
-  provider text not null check (provider in ('browser', 'google', 'kakao')),
+  provider text not null check (provider in ('browser', 'email', 'google', 'kakao')),
   sub text not null,
   name text,
   email text,
   phone text,
+  password_hash text,                         -- 'pbkdf2$반복 수$소금$값'
+  login_token text unique,                    -- 로그인한 브라우저의 쿠키(ps_login) 값
+  is_master boolean not null default false,  -- 테스트용 관리자: 모든 워크스페이스를 주인으로 연다
   created_at timestamptz not null default now(),
   unique (provider, sub)
 );

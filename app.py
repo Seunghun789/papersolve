@@ -1,6 +1,7 @@
 """papersolve 웹 프로토타입. 화면만 담고, 규칙은 core/engine.py, Claude 호출은 core/llm.py 에 있다."""
 import copy
 import datetime
+import hashlib
 import json
 import os
 import secrets
@@ -1931,18 +1932,39 @@ def see_case(tid):
 
 
 def leave_case():
+    """[내 종이로 시작]: 로그인해 있으면 올리기로, 아니면 회원가입으로."""
     st.session_state.update(demo=None, page="올리기")
+    if not me():
+        st.session_state.update(entered=False, landing="signup")
 
 
 def enter():
-    st.session_state.entered = True
-    st.session_state.landing = None
+    """[바로 써 보기]: 로그인해 있으면 바로 들어가고, 아니면 회원가입으로."""
+    if me():
+        st.session_state.update(entered=True, landing=None)
+    else:
+        st.session_state.landing = "signup"
+
+
+def auth_form():
+    """회원가입(이메일 · 비밀번호 · 비밀번호 확인) 또는 로그인(이메일 · 비밀번호). 아래 글 버튼으로 서로 오간다."""
+    up = st.session_state.landing == "signup"
+    with st.form("auth", border=False):
+        st.text_input("이메일", key="su_email" if up else "li_email", placeholder="name@example.com")
+        st.text_input("비밀번호", type="password", key="su_pw" if up else "li_pw", placeholder="8자 이상" if up else "")
+        if up:
+            st.text_input("비밀번호 확인", type="password", key="su_pw2")
+        st.form_submit_button("회원가입" if up else "로그인", type="primary", on_click=signup if up else login, width="stretch")
+    if err := st.session_state.pop("_auth_err", None):
+        st.error(err)
+    st.button("이미 계정이 있어요 · 로그인" if up else "처음이에요 · 회원가입", key="auth_switch", type="tertiary", width="stretch",
+              on_click=lambda: st.session_state.update(landing="login" if up else "signup"))
 
 
 def landing():
     """워크스페이스가 없는 첫 방문: 랜딩(무슨 서비스인지) → [바로 써 보기]로 올리기, [로그인]은 로그인 화면(모양만)."""
     st.html(LANDING_CSS)
-    if st.session_state.get("landing") == "login":
+    if st.session_state.get("landing") in ("login", "signup"):
         st.html(LOGIN)
         st.button("paper**solve**", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
         left, right = st.columns(2, gap="xlarge")
@@ -1952,12 +1974,11 @@ def landing():
                         unsafe_allow_html=True)
             _, mid, _ = st.columns([1, 3, 1])
             with mid:
-                st.button("바로 써 보기", key="go", type="primary", on_click=enter, width="stretch")
-                st.markdown('<div class="ps-note">가입 없이 시작해요. 이 브라우저에 기록이 이어져요.</div>', unsafe_allow_html=True)
+                auth_form()
                 st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
                 if st.button("Google로 계속하기", key="google", width="stretch") | st.button("카카오로 계속하기", key="kakao", width="stretch"):
-                    st.toast("로그인은 준비 중이에요. 지금은 [바로 써 보기]로 시작해요.")
-                st.markdown('<div class="ps-note">로그인은 준비 중이에요. 지금은 [바로 써 보기]로 시작해요.</div>', unsafe_allow_html=True)
+                    st.toast("Google · 카카오 로그인은 준비 중이에요. 지금은 이메일로 시작해요.")
+                st.markdown('<div class="ps-note">Google · 카카오 로그인은 준비 중이에요.</div>', unsafe_allow_html=True)
         with right:
             st.markdown(step_cards(), unsafe_allow_html=True)
         st.stop()
@@ -1978,7 +1999,7 @@ def landing():
                 '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>맞는지만 확인하면 챙길 일과 답이 따라와요.</p></div>',
                 unsafe_allow_html=True)
     st.button("바로 써 보기  →", key="go", type="primary", on_click=enter)
-    st.markdown('<div class="ps-note">가입 없이 시작해요</div>'
+    st.markdown('<div class="ps-note">이메일로 1분이면 시작해요</div>'
                 f'<div class="ps-cards">{step_cards()}</div>'
                 '<div class="ps-loop"><span>④에서 다시 ① 종이로 · 올릴수록 묻는 건 줄고, 답은 정확해져요</span></div>'
                 '<div class="ps-glows"><div class="ps-glow ps-g1"></div><div class="ps-glow ps-g2"></div></div>', unsafe_allow_html=True)
@@ -1986,7 +2007,7 @@ def landing():
 
 
 # ---- 사람, 워크스페이스와 메뉴 ----
-# 로그인은 아직 없다. 사람은 이 브라우저다: 처음 오면 쿠키(ps_person)에 무작위 번호를 두고 users 에 넣는다.
+# 사람은 회원가입한 계정이다(이메일 + 비밀번호). 로그인하면 쿠키(ps_login)에 무작위 표를 두고 users.login_token 에 적는다.
 # 워크스페이스는 주소의 ?a=번호 로 이어진다. 구성원(memberships)이 있는 워크스페이스는 그 구성원만 연다.
 # 다른 브라우저(다른 사람)는 초대 링크(?invite=)로 들어온다.
 
@@ -1994,14 +2015,61 @@ ROLES = ["주인", "확인하는 사람", "올리는 사람", "보는 사람"]
 
 
 def me():
-    """이 브라우저 사람의 users.id. 쿠키가 아직 없으면 None(쿠키를 만들고 한 번 다시 연다)."""
-    sub = st.context.cookies.get("ps_person")
-    if not isinstance(sub, str) or not sub:  # 쿠키가 없거나(처음 연 브라우저) 글이 아니면 아직 사람이 없다
+    """로그인한 사람의 users.id. 이번 접속에서 로그인했으면 그 사람, 아니면 쿠키(ps_login)의 사람, 둘 다 없으면 None."""
+    if st.session_state.get("_out"):  # [로그아웃]한 접속은 쿠키가 남아 있어도 읽지 않는다
         return None
-    if st.session_state.get("_me_sub") != sub:
-        row = db.post("users", {"provider": "browser", "sub": sub}, on_conflict="provider,sub")[0]
-        st.session_state._me, st.session_state._me_sub = row["id"], sub
-    return st.session_state._me
+    if st.session_state.get("_me"):
+        return st.session_state._me
+    token = st.context.cookies.get("ps_login")
+    if isinstance(token, str) and token and (row := db.get("users", select="id", login_token=f"eq.{token}")):
+        st.session_state._me = row[0]["id"]
+    return st.session_state.get("_me")
+
+
+def hash_pw(pw, salt=None, n=200_000):
+    salt = salt or secrets.token_hex(16)
+    return f"pbkdf2${n}${salt}${hashlib.pbkdf2_hmac('sha256', pw.encode(), salt.encode(), n).hex()}"
+
+
+def pw_ok(pw, stored):
+    _, n, salt, _ = (stored or "x$0$x$x").split("$")
+    return bool(stored) and secrets.compare_digest(hash_pw(pw, salt, int(n)), stored)
+
+
+def sign_in(uid):
+    """로그인: 새 표를 적고 쿠키에 둔다. 쿠키는 다음 접속부터 읽히니 이번 접속은 session_state 로 잇는다."""
+    token = secrets.token_urlsafe(32)
+    db.call("PATCH", "users", {"id": f"eq.{uid}"}, {"login_token": token})
+    st.session_state.update(_me=uid, _out=False, _cookie=token, entered=True, landing=None)
+
+
+def signup():
+    email, pw, pw2 = (st.session_state.get(k, "").strip() for k in ("su_email", "su_pw", "su_pw2"))
+    if "@" not in email or "." not in email.split("@")[-1]:
+        st.session_state._auth_err = "이메일을 확인해 주세요."
+    elif len(pw) < 8:
+        st.session_state._auth_err = "비밀번호는 8자 이상으로 적어 주세요."
+    elif pw != pw2:
+        st.session_state._auth_err = "비밀번호 두 칸이 서로 달라요."
+    elif db.get("users", select="id", provider="eq.email", sub=f"eq.{email.lower()}"):
+        st.session_state._auth_err = "이미 가입한 이메일이에요. [로그인]으로 들어와 주세요."
+    else:
+        row = db.post("users", {"provider": "email", "sub": email.lower(), "email": email, "password_hash": hash_pw(pw)})[0]
+        sign_in(row["id"])
+
+
+def login():
+    email, pw = st.session_state.get("li_email", "").strip().lower(), st.session_state.get("li_pw", "")
+    row = db.get("users", select="id,password_hash", provider="eq.email", sub=f"eq.{email}")
+    if row and pw_ok(pw, row[0]["password_hash"]):
+        sign_in(row[0]["id"])
+    else:
+        st.session_state._auth_err = "이메일이나 비밀번호가 맞지 않아요."
+
+
+def logout():
+    st.session_state.update(_me=None, _out=True, _cookie="", entered=False, landing="login", page="홈")
+    st.query_params.clear()
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -2010,8 +2078,18 @@ def person_name(uid):
     return (rows[0]["name"] if rows else None) or f"이름 없음 {uid}"
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def is_master(uid):
+    """테스트용 관리자(users.is_master): 모든 워크스페이스를 주인으로 연다. 구성원 기록은 남기지 않는다."""
+    return bool(uid) and bool(db.get("users", select="id", id=f"eq.{uid}", is_master="is.true"))
+
+
 def my_spaces(uid):
-    """내가 들어간 워크스페이스. 마지막에 연 것부터. 조직 번호와 이름을 함께."""
+    """내가 들어간 워크스페이스. 마지막에 연 것부터. 조직 번호와 이름을 함께. 관리자는 활용 사례를 뺀 모든 워크스페이스."""
+    if is_master(uid):
+        rows = db.get("tenants", select="id,title,org_id,orgs(name)", order="id.desc")
+        return [{"id": r["id"], "role": "주인", "title": r.get("title"), "org_id": r.get("org_id"),
+                 "org": (r.get("orgs") or {}).get("name")} for r in rows if r["id"] not in DUMMY]
     rows = db.get("memberships", select="tenant_id,role,tenants(title,org_id,orgs(name))", user_id=f"eq.{uid}",
                   order="last_opened_at.desc.nullslast")
     out = []
@@ -2055,6 +2133,8 @@ def account(uid):
         return None, None
     if int(a) in DUMMY:  # 활용 사례 워크스페이스(1~4)는 누구나 열고, 주인을 두지 않는다
         return int(a), None
+    if is_master(uid):
+        return int(a), "주인"
     members = db.get("memberships", select="user_id,role", tenant_id=f"eq.{a}")
     mine = next((m for m in members if m["user_id"] == uid), None)
     if members and not mine:
@@ -2155,7 +2235,7 @@ def invite_page(token, uid):
 
 def save_my_name(uid):
     db.call("PATCH", "users", {"id": f"eq.{uid}"}, {f: st.session_state.get(f"my_{f}", "").strip() or None
-                                                    for f in ("name", "email", "phone")})
+                                                    for f in ("name", "phone")})
     person_name.clear()
     st.toast("저장했어요.")
 
@@ -2245,7 +2325,7 @@ def org_info(t, uid):
     if not o:
         st.caption("이 워크스페이스는 아직 조직이 없어요. 주인이 되면 조직이 생겨요.")
         return
-    can = org_role(o["id"], uid) == "주인" or t.role is None
+    can = org_role(o["id"], uid) == "주인" or t.role is None or is_master(uid)
     with st.container(border=True):
         top, btn = st.columns([4, 1], vertical_alignment="center")
         top.subheader("조직 정보")
@@ -2309,7 +2389,7 @@ def members_page(t, uid):
     if not o:
         st.caption("이 워크스페이스는 아직 주인이 없어요. 누구나 주소로 열 수 있어요.")
         return
-    owner = org_role(o["id"], uid) == "주인"
+    owner = org_role(o["id"], uid) == "주인" or is_master(uid)
     spaces = db.get("tenants", select="id,title", org_id=f"eq.{o['id']}", order="id")
     people = db.get("org_members", select="user_id,role,users(name,email)", org_id=f"eq.{o['id']}", order="created_at")
     roles = {(m["tenant_id"], m["user_id"]): m["role"]
@@ -2380,7 +2460,7 @@ def rights_page(t):
 
 
 def my_account(uid):
-    """내 계정: 구성원 표와 카드에 보이는 이름·이메일·휴대폰. 로그인은 준비 중이라 이 브라우저가 나다."""
+    """내 계정: 구성원 표와 카드에 보이는 이름·휴대폰, 로그인한 이메일, [로그아웃]."""
     st.header("내 계정")
     with st.container(border=True):
         top, btn = st.columns([4, 1], vertical_alignment="center")
@@ -2388,9 +2468,9 @@ def my_account(uid):
         btn.button("저장", key="name_save", type="primary", on_click=save_my_name, args=(uid,), width="stretch")
         me_ = (db.get("users", select="name,email,phone", id=f"eq.{uid}") or [{}])[0]
         st.text_input("이름", value=me_.get("name") or "", key="my_name", placeholder="구성원 표와 카드에 보이는 이름")
-        st.text_input("이메일", value=me_.get("email") or "", key="my_email", placeholder="name@example.com")
+        st.text_input("이메일", value=me_.get("email") or "", key="my_email", disabled=True, help="로그인에 쓰는 이메일이라 바꿀 수 없어요")
         st.text_input("휴대폰 번호", value=me_.get("phone") or "", key="my_phone", placeholder="01000000000")
-        st.caption("로그인은 준비 중이에요. 지금은 이 브라우저가 나예요. 다른 브라우저에서 이어 쓰려면 주인에게 초대 링크를 받아 주세요.")
+    st.button("로그아웃", key="logout", on_click=logout)
 
 
 def all_spaces(uid):
@@ -2490,19 +2570,19 @@ if not demo and st.session_state.get("_remembered") != (tid, st.query_params.get
     st.session_state._remembered = (tid, st.query_params.get("a"))
     st.container(key="remember").iframe(f"<script>const w = window.parent; {remember.replace('localStorage', 'w.localStorage')}</script>", height=1)
 
-if not demo and not uid and not st.session_state.get("_person_js"):
-    # 이 브라우저를 사람으로: 쿠키가 없으면 무작위 번호를 두고 한 번 다시 연다(쿠키는 접속할 때만 읽힌다)
-    st.session_state._person_js = True
-    st.container(key="person").iframe(
-        "<script>const w = window.parent; if (!w.document.cookie.includes('ps_person=') && !w.sessionStorage.getItem('ps_person_try')) {"
-        " w.sessionStorage.setItem('ps_person_try', '1');"
-        " w.document.cookie = 'ps_person=' + w.crypto.randomUUID() + '; path=/; max-age=31536000; samesite=lax';"
-        " w.location.reload(); }</script>", height=1)
+if (token := st.session_state.pop("_cookie", None)) is not None:
+    # 로그인하면 쿠키에 표를 두고, [로그아웃]하면 지운다. 다시 열어도 로그인이 이어진다
+    age = 31536000 if token else 0
+    st.container(key="login_cookie").iframe(
+        f"<script>window.parent.document.cookie = 'ps_login={token}; path=/; max-age={age}; samesite=lax';</script>", height=1)
 if st.session_state.pop("_denied", False):
     st.toast("이 워크스페이스는 초대받은 사람만 열 수 있어요.")
+if st.query_params.get("invite") and not uid and not demo:
+    st.session_state.setdefault("landing", "signup")  # 초대 링크로 왔는데 로그인 전이면 회원가입부터
+    landing()
 if not st.session_state.get("entered") and not st.query_params.get("invite"):
     landing()  # 새로 열면 늘 랜딩부터. 초대 링크로 온 사람만 바로 들어간다
-if uid and tid and not demo and tid not in DUMMY and tid not in st.session_state.get("_claim_no", set()) \
+if uid and tid and not demo and tid not in DUMMY and not is_master(uid) and tid not in st.session_state.get("_claim_no", set()) \
         and not db.get("memberships", select="user_id", tenant_id=f"eq.{tid}"):
     # 로그인 전에 이 브라우저에서 만든 워크스페이스: 내 계정으로 옮길지 묻는다
     with st.container(border=True):
