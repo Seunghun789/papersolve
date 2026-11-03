@@ -89,6 +89,11 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14p
 @media (min-width: 769px) {.st-key-cv_on0, [class*="st-key-cv_off"] {aspect-ratio: 1 / 1.9; min-height: 400px;}}
 @media (max-width: 768px) {.ps-arrow-big {transform: rotate(90deg); line-height: 1;}}
 .st-key-cv_on0 [data-testid="stFileUploaderDropzoneInstructions"]::after {content: "사진이나 CSV를 여기로 끌어 놓으세요";}
+/* 파일을 고른 뒤: 끌어 놓는 칸은 작게, 미리보기는 낮게, 칸은 내용만큼 늘어나 [읽기 시작]과 진행 글이 칸 안에 남는다 */
+.st-key-cv_on0:has(.st-key-cv_picked) {aspect-ratio: auto; height: auto;}
+.st-key-cv_picked [data-testid="stFileUploaderDropzone"] {min-height: 0; padding: 8px;}
+.st-key-cv_picked [data-testid="stFileUploaderDropzoneInstructions"] {display: none;}
+.st-key-cv_picked img {max-height: 180px; object-fit: contain;}
 .ps-logo {font-size: 26px; font-weight: 400; letter-spacing: -0.01em; padding: 0.5rem 0 1rem;}
 .ps-logo b {font-weight: 600;}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
@@ -927,10 +932,11 @@ def write_form(t, K):
 
 
 def read_file(t, key="up"):
-    f = st.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"], key=f"{key}file",
+    box = st.container(key="cv_picked") if key == "cv" and st.session_state.get(f"{key}file") else st.container()
+    f = box.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"], key=f"{key}file",
                          label_visibility="collapsed" if key == "cv" else "visible")
     if f and not f.name.lower().endswith(".csv"):
-        st.image(f, caption=f.name, alt="올린 사진")
+        box.image(f, caption=f.name, alt="올린 사진")
     model = llm.MODELS[0]  # 처음 화면(네 칸)은 기본 모델로 읽는다
     if key != "cv":
         with st.expander("모델 고르기"):
