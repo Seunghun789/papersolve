@@ -1968,7 +1968,7 @@ def landing():
             if col.button(name, key=f"nav_top_{name}", type="tertiary"):
                 st.toast(f"{name}는 준비 중이에요.")
         login.button("로그인", key="login", on_click=lambda: st.session_state.update(landing="login"), width="stretch")
-    st.markdown('<div class="ps-hero"><h1>종이 장부는 그대로,<br>정리는 AI가 할게요</h1>'
+    st.markdown('<div class="ps-hero"><h1>종이는 그대로,<br>정리는 AI가 할게요</h1>'
                 '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>맞는지만 확인하면 챙길 일과 답이 따라와요.</p></div>',
                 unsafe_allow_html=True)
     st.button("바로 써 보기  →", key="go", type="primary", on_click=enter)
