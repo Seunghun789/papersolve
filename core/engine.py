@@ -25,9 +25,13 @@ try:  # 올린 파일 폴더. 코드 폴더에 쓸 수 없는 서버(Streamlit C
 except OSError:
     DATA = Path(tempfile.gettempdir()) / "papersolve"
     (DATA / "uploads").mkdir(parents=True, exist_ok=True)
-ENTRY = ["종류", "칸", "같은 칸", "애매한 값"]       # 답하기 전에는 기록이 확정되지 않는 제안
+ENTRY = ["종류", "칸", "같은 칸", "애매한 값", "읽은 값"]       # 답하기 전에는 기록이 확정되지 않는 제안
 ENTITY = ["대상 분류", "대상", "같은 대상", "대상 속성", "속성 값", "상위 분류", "관계 속성"]
-CHECK = ENTRY + ENTITY + ["연결", "워크스페이스 설정"]   # 확인 화면에서 묻는 것
+CHECK = ENTRY + ENTITY + ["연결", "워크스페이스 설정", "맡기기"]   # 확인 화면에서 묻는 것
+TRUST = ("매번 묻기", "애매한 것만 묻기")  # 사진 종이를 AI에게 맡기는 정도. 처음은 매번 묻기
+TRUST_N = 5      # 고친 값 없이 [맞아요]로 확정한 같은 종류의 종이가 이만큼 이어지면 '맡기기' 카드를 올린다
+TRUST_DOWN = 2   # 맡긴 뒤 바로 반영한 종이를 사람이 이만큼 고치면 스스로 '매번 묻기'로 돌아간다
+UNDO_DAYS = 7    # 바로 반영한 종이를 되돌릴 수 있는 날 수
 DTYPE_KO = {"number": "숫자", "text": "글", "date": "날짜", "choice": "고르는 값"}
 EMPTY = ("", "-", "—", "nan", "None")
 
@@ -95,10 +99,11 @@ def infer_dtype(values):
 
 def load(t):
     """확정된 지식(종류·분류·칸·별칭·관계·대상)과 확정된 기록. 표 8개는 서로 기다릴 필요가 없어 한꺼번에 읽는다."""
-    reads = [("object_types", dict(select="name,kind,parent_name", order="id")),
+    reads = [("object_types", dict(select="name,kind,parent_name,trust", order="id")),
              ("alias_dict", dict(select="type_name,alias,prop_name")),
              ("link_types", dict(select="id,from_ref,to_ref,kind,reason,name,attr_defs", order="id")),
-             ("records", dict(select="id,type_name,occurred_at,data,photo_path", status="eq.확정", order="occurred_at.desc,id.desc")),
+             ("records", dict(select="id,type_name,occurred_at,data,photo_path,source_input_id", status="eq.확정",
+                              order="occurred_at.desc,id.desc")),
              ("entities", dict(select="id,class_name,name,attrs", order="id")),
              ("entity_links", dict(select="id,link_id,from_entity,to_entity,attrs")),
              ("property_defs", dict(select="type_name,name,dtype,unit,description,is_entity,ref_class,position", order="position,id")),
@@ -108,6 +113,7 @@ def load(t):
     K = {
         "types": [o["name"] for o in objs if o["kind"] == "기록"],
         "classes": {o["name"]: o["parent_name"] for o in objs if o["kind"] == "대상"},
+        "trust": {o["name"]: o.get("trust") or TRUST[0] for o in objs if o["kind"] == "기록"},
         "props": {},
         "alias": {(a["type_name"], a["alias"]): a["prop_name"] for a in aliases},
         "links": links,
@@ -422,19 +428,10 @@ def page_marked(path, page, solid, dashed, colors):
     """원본 한 쪽(PDF 는 1부터, 사진은 1) 그림에 적힌 곳을 그린다. solid: 고른 카드가 가리키는 곳(실선),
     dashed: 읽기 애매한 칸(점선). 상자는 locate 의 0~1000 기준. colors: solid·fill·dashed 색.
     돌려주는 것: page 쪽 그림(PNG), zoom 첫 실선 상자 둘레를 크게 자른 그림(PNG, 없으면 None), zoom_ratio 그 그림의 세로/가로, pages 쪽 수."""
-    from PIL import Image, ImageDraw, ImageOps
-    content = original(path)
-    if not content:
+    from PIL import Image, ImageDraw
+    img, pages = _page(path, page)
+    if img is None:
         return {"page": None, "zoom": None, "zoom_ratio": 0, "pages": 0}
-    if path.lower().endswith(".pdf"):
-        import pypdfium2
-        doc = pypdfium2.PdfDocument(content)
-        pages = len(doc)
-        img = doc[max(1, min(page, pages)) - 1].render(scale=2).to_pil()
-    else:
-        pages = 1
-        img = ImageOps.exif_transpose(Image.open(io.BytesIO(content)))  # AI가 본 사진과 같은 방향
-        img.thumbnail((2000, 2000))
     img = img.convert("RGBA")
     W, H = img.size
     pad, width = W * 0.006, max(3, round(W / 400))
@@ -455,6 +452,48 @@ def page_marked(path, page, solid, dashed, colors):
         top = max(0, min((y0 + y1 - ch) / 2, H - ch))
         zoom, ratio = _png(img.crop((round(left), round(top), round(left + cw), round(top + ch)))), ch / cw
     return {"page": _png(img), "zoom": zoom, "zoom_ratio": round(ratio, 3), "pages": pages}
+
+
+def _page(path, page):
+    """원본 한 쪽(PDF 는 1부터, 사진은 1)의 그림과 쪽 수. 원본이 없으면 (None, 0)."""
+    from PIL import Image, ImageOps
+    content = original(path)
+    if not content:
+        return None, 0
+    if path.lower().endswith(".pdf"):
+        import pypdfium2
+        doc = pypdfium2.PdfDocument(content)
+        return doc[max(1, min(page, len(doc))) - 1].render(scale=2).to_pil(), len(doc)
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(content)))  # AI가 본 사진과 같은 방향
+    img.thumbnail((2000, 2000))
+    return img, 1
+
+
+def page_image(path, page, width=1400):
+    """읽은 글자를 겹쳐 볼 바탕: 원본 한 쪽을 가로 width 까지 줄인 JPEG. 원본이 없으면 None."""
+    img, _ = _page(path, page)
+    if img is None:
+        return None
+    img = img.convert("RGB")
+    img.thumbnail((width, width * 4))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=82)
+    return out.getvalue()
+
+
+def snippet(path, page, b, height=96):
+    """원본 한 쪽에서 상자 b(0~1000) 둘레를 잘라 낸 손글씨 조각(PNG, 높이 height 의 두 배). 홈 카드가 숫자 옆에 붙인다."""
+    img, _ = _page(path, page)
+    if img is None or not b:
+        return None
+    W, H = img.size
+    x0, y0, x1, y1 = b[0] * W / 1000, b[1] * H / 1000, b[2] * W / 1000, b[3] * H / 1000
+    ch = (y1 - y0) * 1.8
+    cw = max((x1 - x0) * 2.2, ch * 2.4)  # 옆 칸 글씨가 조금 보이게
+    left, top = max(0, (x0 + x1 - cw) / 2), max(0, (y0 + y1 - ch) / 2)
+    crop = img.convert("RGB").crop((round(left), round(top), round(min(W, left + cw)), round(min(H, top + ch))))
+    crop.thumbnail((height * 2 * 4, height * 2))
+    return _png(crop)
 
 
 def _png(img):
@@ -489,13 +528,22 @@ def ingest_photo(t, model, name, photo):
     """사진 1장(또는 PDF 1개) → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안."""
     sheet = llm.extract(t, model, name, photo)
     sid, path = save_source(t, "사진", name, photo)
-    spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 글귀와 쪽, 그 자리의 상자를 보여 준다
-    for c in sheet["doc_fields"] + [c for row in sheet["rows"] for c in row["cells"]]:
-        if filled(c["value"]) and len(spans.setdefault(c["label"].strip(), [])) < 5:
-            b = box(c.get("box"))
-            spans[c["label"].strip()].append({"page": c["page"], "quote": c["quote"].strip(), "value": c["value"].strip(),
-                                              **({"box": b} if b else {})})
-    t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
+    spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 위에 읽은 값을 겹쳐 보이고, 고른 카드의 자리를 짚는다
+
+    def keep(c, rec):
+        """rec: 이 종이의 몇 번째 기록(종이 전체에 한 번 적힌 칸은 None). 애매한 칸은 AI가 본 다른 후보도 둔다."""
+        label, value = c["label"].strip(), c["value"].strip()
+        if len(spans.setdefault(label, [])) >= 40:
+            return
+        b, unsure = box(c.get("box")), bool(c["uncertain"])
+        cand = [x.strip() for x in c.get("candidates") or [] if filled(x) and x.strip() != value][:3] if unsure else []
+        spans[label].append({"page": c["page"], "quote": c["quote"].strip(), "value": value, **({"box": b} if b else {}),
+                             **({"rec": rec} if rec is not None else {}), **({"unsure": True} if unsure else {}),
+                             **({"cand": cand} if cand else {})})
+
+    for c in sheet["doc_fields"]:
+        if filled(c["value"]):
+            keep(c, None)
     day = (to_date(sheet["occurred_at"]) or date.today()).isoformat()
     doc = {c["label"].strip(): c["value"].strip() for c in sheet["doc_fields"] if filled(c["value"])}
     doc_unsure = [c["label"].strip() for c in sheet["doc_fields"] if c["uncertain"] and filled(c["value"])]
@@ -503,11 +551,14 @@ def ingest_photo(t, model, name, photo):
     for row in sheet["rows"]:
         cells = [c for c in row["cells"] if filled(c["value"])]
         if cells:
+            for c in cells:
+                keep(c, len(rows))
             rows.append({**doc, **{c["label"].strip(): c["value"].strip() for c in cells}})
             unsure.append(doc_unsure + [c["label"].strip() for c in cells if c["uncertain"]])
+    t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
     if not rows:
         raise RuntimeError("올린 종이에서 읽은 칸이 없어요.")
-    stage(t, model, sid, sheet["title"], rows, unsure, [day] * len(rows), [path] * len(rows))
+    stage(t, model, sid, sheet["title"], rows, unsure, [day] * len(rows), [path] * len(rows), paper=True, doc_unsure=doc_unsure)
     return sid
 
 
@@ -620,8 +671,11 @@ def thumbnail(path, width=192):
     return {"png": _png(img.convert("RGB")), "pages": pages, "found": True}
 
 
-def stage(t, model, sid, title, rows, unsure, days, photos):
-    """읽은 행들을 대기 기록으로 넣고, 확정 지식과 다른 부분만 제안으로 올린다."""
+def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_unsure=()):
+    """읽은 행들을 대기 기록으로 넣고, 확정 지식과 다른 부분만 제안으로 올린다.
+    paper: AI가 보고 읽은 사진·PDF. 이미 있는 종류의 종이는 맡기는 정도에 따라 '읽은 값' 카드로 한 번 묻거나(매번 묻기),
+    또렷한 값은 바로 반영하고 확정한 기준을 넘은 값만 묻는다(애매한 것만 묻기).
+    doc_unsure: 종이 전체에 한 번 적힌 애매한 칸. 기록마다 묻지 않고 카드 한 장으로 묻는다."""
     K = load(t)
     labels = list(dict.fromkeys(l for r in rows for l in r))
     dtypes = {l: infer_dtype([r.get(l) for r in rows]) for l in labels}
@@ -661,15 +715,30 @@ def stage(t, model, sid, title, rows, unsure, days, photos):
         for l in links:
             propose_link(t, K, f"{T}.{l['from']}", f"{T}.{l['to']}", l["kind"], l["reason"])
     elif T not in waiting:
-        propose(t, "종류", {"type": T, "title": title, "props": [_def(p) for p in props], "links": links},
+        propose(t, "종류", {"type": T, "title": title, "props": [_def(p) for p in props], "links": links, "paper": paper},
                 {"samples": samples, "rows": len(rows)}, sid)
 
     recs = t.post("records", [{"type_name": T, "occurred_at": d, "data": r, "uncertain": u, "photo_path": ph,
                                 "source_input_id": sid} for r, u, d, ph in zip(rows, unsure, days, photos)])
-    for rec in recs:
+    doc = set(doc_unsure)
+    for i, rec in enumerate(recs):
         for label in rec["uncertain"]:
-            propose(t, "애매한 값", {"record_id": rec["id"], "type": T, "label": label, "value": rec["data"].get(label)},
+            if label in doc and i:
+                continue
+            many = {"record_ids": [r["id"] for r in recs]} if label in doc and len(recs) > 1 else {}
+            propose(t, "애매한 값", {"record_id": rec["id"], "type": T, "label": label, "value": rec["data"].get(label), **many},
                     None, sid)
+    if paper and (T in K["types"] or T in waiting):
+        if T in K["types"] and K["trust"].get(T) == TRUST[1]:
+            autos = t.get("automations", select="spec", status="eq.켜짐")
+            for rec in recs:
+                for label, note in over_labels(K, T, rec["data"], autos).items():
+                    if label not in rec["uncertain"]:
+                        propose(t, "애매한 값", {"record_id": rec["id"], "type": T, "label": label,
+                                               "value": rec["data"].get(label), "over": note}, None, sid)
+            t.patch("source_inputs", {"auto": True}, id=f"eq.{sid}")
+        else:
+            propose(t, "읽은 값", {"type": T, "rows": len(recs)}, None, sid)
     if T in K["types"]:
         entity_checks(t, model, K, T, recs, sid)
     settle(t, sid)
@@ -737,6 +806,9 @@ def settle(t, sid):
                 status="eq.대기", type_name=f"eq.{T}")
     if waiting & types:
         suggest_entity_rules(t, load(t))
+        if (t.get("source_inputs", select="channel", id=f"eq.{sid}") or [{}])[0].get("channel") == "사진":
+            for T in waiting & types:
+                maybe_trust(t, T)
 
 
 def pending_of(t, sid):
@@ -747,7 +819,7 @@ def pending_of(t, sid):
 # ---- C 확인: 답 적용 ----
 
 def done(t, q, status, **payload):
-    body = {"status": status, "decided_at": now()}
+    body = {"status": status, "decided_at": now(), **({"decided_by": t.user} if getattr(t, "user", None) else {})}
     if payload:
         body["payload"] = {**q["payload"], **payload}
     t.patch("proposals", body, id=f"eq.{q['id']}")
@@ -817,12 +889,18 @@ def answer_same(t, q, same):
 
 
 def answer_value(t, q, value=None):
+    """value 가 없거나 읽은 값과 같으면 [네, 맞아요]. 종이 전체에 한 번 적힌 칸(record_ids)은 그 종이의 기록 모두를 고친다."""
     P = q["payload"]
-    rec = t.get("records", select="data,uncertain", id=f"eq.{P['record_id']}")[0]
-    body = {"uncertain": [u for u in rec["uncertain"] if u != P["label"]]}
-    if value is not None:
-        body["data"] = {**rec["data"], P["label"]: value}
-    t.patch("records", body, id=f"eq.{P['record_id']}")
+    if value is not None and str(value).strip() == str(P["value"] or "").strip():
+        value = None
+    for rid in P.get("record_ids") or [P["record_id"]]:
+        rec = (t.get("records", select="data,uncertain", id=f"eq.{rid}") or [None])[0]
+        if rec is None:
+            continue
+        body = {"uncertain": [u for u in rec["uncertain"] if u != P["label"]]}
+        if value is not None:
+            body["data"] = {**rec["data"], P["label"]: value}
+        t.patch("records", body, id=f"eq.{rid}")
     done(t, q, "고침" if value is not None else "승인", value=value if value is not None else P["value"])
 
 
@@ -850,6 +928,266 @@ def answer_automation(t, q, ok):
     if ok:
         t.post("automations", {"spec": q["payload"]})
     done(t, q, "승인" if ok else "거절")
+
+
+# ---- C 확인: 읽은 값 겹쳐 보기, 종이 한 장 확인, 맡기기 ----
+
+def breaches(K, T, data, autos=()):
+    """한 기록(읽은 이름 → 값)에서 확정한 기준을 넘은 칸: {칸 이름: 기준 글}. 기준은 확정한 최소·최대 기준 관계와,
+    켜 둔 자동화 중 숫자 비교만 있는 규칙이다. 업종 규칙은 없고, 사용자가 확정한 것만 쓴다."""
+    if T not in K["types"]:
+        return {}
+    one = {**K, "records": [{"id": 0, "type_name": T, "occurred_at": date.today().isoformat(), "data": data,
+                             "photo_path": None, "source_input_id": None}]}
+    df = frame(one, T)
+    rules = []  # (조건, 규칙 이름)
+    for l in K["links"]:
+        if l["kind"] in ("최소 기준", "최대 기준") and (cols := link_columns(K, l)) and cols[0] == T:
+            rules.append(([{"prop": cols[2], "op": "<" if l["kind"] == "최소 기준" else ">", "value": None, "value_prop": cols[1]}], None))
+    for a in autos:
+        conds = a["spec"].get("conditions") or []
+        if a["spec"].get("type") == T and conds and all(c["op"] in (">", "<", ">=", "<=") and c["prop"] != "날짜" for c in conds):
+            rules.append((conds, a["spec"].get("title")))
+    out = {}
+    for conds, title in rules:
+        c = conds[0]
+        try:
+            hit = len(match(df, conds))
+        except (KeyError, ValueError, TypeError):
+            continue
+        if hit and c["prop"] not in out:
+            ref = c.get("value_prop")
+            v = df[ref].iloc[0] if ref else c.get("value")
+            v = f"{v:g}" if isinstance(v, float) else v
+            out[c["prop"]] = f"{ref.rsplit('.', 1)[-1]} {v}" if ref and not title else f"'{title}' 기준 {c['op']} {v}"
+    return out
+
+
+def over_labels(K, T, data, autos=()):
+    """breaches 를 종이에서 읽은 이름으로: {읽은 이름: 기준 글}."""
+    hits = breaches(K, T, data, autos)
+    return {l: hits[p] for l in data if (p := K["alias"].get((T, l))) in hits}
+
+
+def paper_cells(t, K, sid, spans, autos=()):
+    """올린 종이 한 장에서 읽은 칸마다 지금 값과 상태: [{key, label, value, span, state, qid, note, rec}].
+    state: 또렷 · 애매(기다리는 '읽기 애매한 칸' 카드가 있다) · 넘음(확정한 기준을 넘었다). 값은 기록에서 꺼내 고친 값이 보인다."""
+    recs = t.get("records", select="id,type_name,data", source_input_id=f"eq.{sid}", order="id")
+    unsure = {}
+    for q in pending(t, ["애매한 값"]):
+        if q["source_input_id"] == sid:
+            for rid in q["payload"].get("record_ids") or [q["payload"]["record_id"]]:
+                unsure[(rid, q["payload"]["label"])] = q
+    over = {r["id"]: over_labels(K, r["type_name"], r["data"], autos) for r in recs}
+    out = []
+    for label, ss in spans.items():
+        for i, s in enumerate(ss):
+            if isinstance(s.get("rec"), int):
+                mine = recs[s["rec"]:s["rec"] + 1]
+            else:  # 종이 전체에 한 번 적힌 칸, 또는 rec 을 적기 전에 읽은 종이
+                mine = [r for r in recs if same_value(r["data"].get(label), s["value"])] or recs
+            q = next((unsure[(r["id"], label)] for r in mine if (r["id"], label) in unsure), None)
+            note = next((over[r["id"]][label] for r in mine if label in over[r["id"]]), None)
+            value = mine[0]["data"].get(label, s["value"]) if mine else s["value"]
+            note = note or (q and q["payload"].get("over"))  # 맡긴 종이에서 기준을 넘어 묻는 값은 빨강
+            out.append({"key": f"{label}#{i}", "label": label, "value": value, "span": s, "qid": q["id"] if q else None,
+                        "state": "넘음" if note else "애매" if q else "또렷", "note": note, "rec": mine[0]["id"] if mine else None})
+    return out
+
+
+def paper_rows(t, sid):
+    """종이 한 장의 기록(읽은 이름 → 값). '읽은 값' 카드의 표."""
+    return t.get("records", select="id,type_name,data,uncertain", source_input_id=f"eq.{sid}", order="id")
+
+
+def answer_read(t, q, fixes=None):
+    """'읽은 값' 카드. fixes 가 없으면 [네, 맞아요], 있으면 고친 값 {기록 id: {읽은 이름: 값}}.
+    고친 칸에 기다리는 '읽기 애매한 칸' 카드가 있으면 같은 값으로 함께 닫는다."""
+    fixes = {int(r): v for r, v in (fixes or {}).items() if v}
+    for rid, vals in fixes.items():
+        rec = (t.get("records", select="data,uncertain", id=f"eq.{rid}") or [None])[0]
+        if rec:
+            t.patch("records", {"data": {**rec["data"], **vals}, "uncertain": [u for u in rec["uncertain"] if u not in vals]},
+                    id=f"eq.{rid}")
+    for u in pending(t, ["애매한 값"]):
+        P = u["payload"]
+        if u["source_input_id"] == q["source_input_id"] and P["label"] in fixes.get(P["record_id"], {}):
+            done(t, u, "고침", value=fixes[P["record_id"]][P["label"]])
+    n = sum(len(v) for v in fixes.values())
+    done(t, q, "고침" if n else "승인", fixed=n)
+    T = q["payload"]["type"]
+    if n and trust_level(t, T) == TRUST[1] and trust_state(t, [T])[T]["fixes"] >= TRUST_DOWN:
+        t.patch("object_types", {"trust": TRUST[0]}, name=f"eq.{T}", kind="eq.기록")
+        t.post("proposals", {"kind": "맡기기", "status": "승인", "decided_at": now(),
+                             "payload": {"type": T, "off": True, "auto": True, "why": f"바로 반영한 종이를 {TRUST_DOWN}번 고쳤어요"}})
+
+
+def trust_level(t, T):
+    return (t.get("object_types", select="trust", name=f"eq.{T}", kind="eq.기록") or [{}])[0].get("trust") or TRUST[0]
+
+
+def trust_state(t, types):
+    """기록 종류마다 맡기기의 근거: {T: {streak, papers, fixes, total}}. 마지막 맡기기 결정 뒤에 확인한 사진 종이만 센다.
+    streak: 최근부터 고친 값 없이 [맞아요]로 확정한 종이가 이어진 수. papers: 그 종이들(최근부터).
+    unclean: 고친 값이 있던 종이 수. fixes: 그중 '읽은 값' 카드에서 고친 종이 수(맡긴 뒤 스스로 낮출 때 센다)."""
+    rows = t.get("proposals", select="kind,status,payload,source_input_id,decided_at",
+                 kind='in.("종류","읽은 값","애매한 값","맡기기")', status="neq.대기", order="decided_at.desc")
+    fixed = {r["source_input_id"] for r in rows if r["kind"] in ("애매한 값", "읽은 값") and r["status"] == "고침"}
+    out = {}
+    for T in types:
+        last = next((r["decided_at"] or "" for r in rows if r["kind"] == "맡기기" and r["payload"].get("type") == T), "")
+        papers, seen = [], set()
+        for r in rows:
+            sid = r["source_input_id"]
+            if r["kind"] in ("종류", "읽은 값") and r["payload"].get("type") == T and sid and sid not in seen \
+                    and r["status"] != "거절" and r["payload"].get("paper", True) and (r["decided_at"] or "") > last:
+                seen.add(sid)
+                papers.append({"sid": sid, "at": r["decided_at"], "read": r["kind"] == "읽은 값",
+                               "clean": sid not in fixed and not (r["kind"] == "읽은 값" and r["status"] == "고침")})
+        run = []
+        for p in papers:
+            if not p["clean"]:
+                break
+            run.append(p)
+        out[T] = {"streak": len(run), "papers": run[:TRUST_N], "total": len(papers),
+                  "unclean": sum(1 for p in papers if not p["clean"]),
+                  "fixes": sum(1 for p in papers if p["read"] and not p["clean"])}
+    return out
+
+
+def maybe_trust(t, T):
+    """같은 종류의 사진 종이를 TRUST_N 장 이어서 고친 값 없이 확정했으면 '맡기기' 카드를 올린다(한 번에 한 장)."""
+    if trust_level(t, T) != TRUST[0] or any(q["payload"]["type"] == T for q in pending(t, ["맡기기"])):
+        return
+    state = trust_state(t, [T])[T]
+    if state["streak"] < TRUST_N:
+        return
+    sids = [p["sid"] for p in state["papers"]]
+    names = {s["id"]: s["name"] for s in t.get("source_inputs", select="id,name", id=f"in.({','.join(map(str, sids))})")}
+    days = {}
+    for r in t.get("records", select="source_input_id,occurred_at", source_input_id=f"in.({','.join(map(str, sids))})"):
+        days.setdefault(r["source_input_id"], r["occurred_at"])
+    propose(t, "맡기기", {"type": T, "streak": state["streak"],
+                       "papers": [{"sid": s, "name": names.get(s), "day": days.get(s)} for s in sids]})
+
+
+def answer_trust(t, q, ok):
+    """'맡기기' 카드: [켜기]면 그 종류의 사진 종이를 '애매한 것만 묻기'로, off 카드의 [적용]이면 '매번 묻기'로."""
+    P = q["payload"]
+    if ok:
+        t.patch("object_types", {"trust": TRUST[0] if P.get("off") else TRUST[1]}, name=f"eq.{P['type']}", kind="eq.기록")
+    done(t, q, "승인" if ok else "거절")
+
+
+def user_trust_down(t, T):
+    """'AI에게 맡기는 정도'의 [매번 묻기로]: 바로 바꾸지 않고 카드로 올린다."""
+    if not any(q["payload"]["type"] == T and q["payload"].get("off") for q in pending(t, ["맡기기"])):
+        propose(t, "맡기기", {"type": T, "off": True}, {"user": True})
+
+
+def auto_papers(t, days=UNDO_DAYS):
+    """'애매한 것만 묻기'로 바로 반영한 최근 종이: [{id, name, created_at, type, rows, cells}] 최근부터. days 일이 지나면 빠진다."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    srcs = t.get("source_inputs", select="id,name,created_at", auto="is.true", created_at=f"gte.{since}", order="id.desc")
+    if not srcs:
+        return []
+    recs = t.get("records", select="source_input_id,type_name,data,uncertain", status="eq.확정",
+                 source_input_id=f"in.({','.join(str(s['id']) for s in srcs)})")
+    out = []
+    for s in srcs:
+        mine = [r for r in recs if r["source_input_id"] == s["id"]]
+        if mine:
+            out.append({**s, "type": mine[0]["type_name"], "rows": len(mine),
+                        "cells": sum(len(r["data"]) - len(r["uncertain"]) for r in mine)})
+    return out
+
+
+def reopen(t, sid):
+    """바로 반영한 종이를 다시 확인 중으로: 기록을 대기로 돌리고 '읽은 값' 카드를 올린다. 답하면 다시 확정된다."""
+    if t.role not in (None, *db.ANSWER):
+        raise db.NotAllowed("확인하는 사람이 되돌려요.")
+    recs = t.get("records", select="id,type_name", source_input_id=f"eq.{sid}", status="eq.확정")
+    if not recs:
+        return
+    t.patch("records", {"status": "대기"}, source_input_id=f"eq.{sid}", status="eq.확정")
+    t.patch("source_inputs", {"auto": False}, id=f"eq.{sid}")
+    propose(t, "읽은 값", {"type": recs[0]["type_name"], "rows": len(recs), "reopened": True}, None, sid)
+
+
+def answered_summary(t, K, ids):
+    """확인을 마친 화면의 숫자: 답한 카드들(ids)로 생긴 것을 센다."""
+    rows = t.get("proposals", select="kind,status,payload,source_input_id", id=f"in.({','.join(map(str, ids))})") if ids else []
+    ok = [r for r in rows if r["status"] in ("승인", "고침")]
+    sids = {r["source_input_id"] for r in rows if r["source_input_id"]}
+    types = [r for r in ok if r["kind"] == "종류" and r["status"] == "승인"]  # [하나씩 볼게요]는 칸마다 따로 센다
+    return {"answered": len(rows), "records": sum(1 for r in K["records"] if r.get("source_input_id") in sids),
+            "types": len(types),
+            "props": sum(len(r["payload"].get("props") or []) for r in types) + sum(r["kind"] == "칸" and r["status"] == "승인" for r in ok),
+            "fixed": sum(r["payload"].get("fixed") or 1 for r in rows if r["kind"] in ("애매한 값", "읽은 값") and r["status"] == "고침"),
+            "links": sum(r["kind"] == "연결" for r in ok),
+            "entities": sum(len(r["payload"].get("values") or []) for r in ok if r["kind"] == "대상")}
+
+
+def record_span(K, r, prop, spans):
+    """확정한 기록 r 의 칸 prop 이 원본 어디에 적혔나(spans 의 한 줄). 이 종이의 몇 번째 기록인지(rec)로 찾고, 없으면 값으로."""
+    T = r["type_name"]
+    same = sorted(x["id"] for x in K["records"] if x.get("source_input_id") and x.get("source_input_id") == r.get("source_input_id"))
+    i = same.index(r["id"]) if r["id"] in same else None
+    for label in [l for l in r["data"] if K["alias"].get((T, l)) == prop]:
+        for s in spans.get(label, []):
+            if ("rec" in s and s["rec"] == i) or ("rec" not in s and same_value(s.get("value"), r["data"][label])):
+                return s
+    return None
+
+
+def decided_text(q):
+    """어제 이후 바뀐 것의 한 줄: 사람이 답한 카드."""
+    P, k, fixed = q["payload"], q["kind"], q["status"] == "고침"
+    short = lambda ref: split(ref)[1] or ref
+    return {
+        "종류": f"기록 종류 '{P.get('type')}'를 만들었어요",
+        "칸": f"'{P.get('type')}'에 칸 '{P.get('name')}'을(를) 더했어요",
+        "같은 칸": f"'{P.get('label')}'을(를) '{P.get('similar_to')}' 칸으로 읽기로 했어요",
+        "애매한 값": f"'{P.get('label')}' 값을 {P.get('value')}(으)로 고쳤어요" if fixed else None,
+        "읽은 값": f"'{P.get('type')}' 종이의 값 {P.get('fixed')}개를 고쳤어요" if fixed else f"'{P.get('type')}' 종이를 확인했어요",
+        "연결": f"관계 '{short(P.get('from', ''))} → {short(P.get('to', ''))}'를 이었어요",
+        "업무": f"자동화 '{P.get('title')}'를 켰어요",
+        "지표": f"지표 '{P.get('title')}'를 대시보드에 올렸어요",
+        "대상 분류": f"'{P.get('prop')}' 칸의 값을 '{P.get('class')}' 대상으로 등록했어요",
+        "대상": f"새 {P.get('class')} {len(P.get('values') or [])}개를 등록했어요",
+        "같은 대상": f"'{P.get('value')}'을(를) '{P.get('same_as')}'와 같은 대상으로 묶었어요",
+        "속성 값": f"{P.get('entity')}의 {P.get('attr')}을(를) {P.get('new')}(으)로 바꿨어요",
+        "맡기기": (f"바로 반영한 '{P.get('type')}' 종이를 {TRUST_DOWN}번 고쳐서 다시 매번 묻기로 돌아갔어요" if P.get("auto")
+                 else f"'{P.get('type')}' 종이를 다시 매번 묻기로 했어요" if P.get("off")
+                 else f"'{P.get('type')}' 종이의 또렷한 값은 바로 반영하기로 했어요"),
+    }.get(k)
+
+
+def changes_since(t, since, limit=6):
+    """어제 이후 바뀐 것: 올린 종이와 사람이 답한 카드. ([{at, text, who}] 최근부터, 그사이 올린 종이 id들). since 는 UTC ISO 시각."""
+    out = []
+    srcs = t.get("source_inputs", select="id,channel,name,created_by,created_at", created_at=f"gte.{since}", order="id.desc", limit=20)
+    recs = t.get("records", select="source_input_id,type_name,status",
+                 source_input_id=f"in.({','.join(str(s['id']) for s in srcs)})") if srcs else []
+    for s in srcs:
+        mine = [r for r in recs if r["source_input_id"] == s["id"]]
+        ok = sum(r["status"] == "확정" for r in mine)
+        if s["channel"] == "직접 입력" and mine:
+            text = f"'{mine[0]['type_name']}' 기록 1줄을 직접 적었어요"
+        elif ok:
+            text = f"'{s['name']}'에서 기록 {ok}줄이 들어왔어요"
+        elif any(r["status"] == "대기" for r in mine):
+            text = f"'{s['name']}'을(를) 올렸어요 · 확인 중"
+        else:
+            continue
+        out.append({"at": s["created_at"], "text": text, "who": s["created_by"]})
+    for q in t.get("proposals", select="kind,status,payload,decided_by,decided_at", status="in.(승인,고침)",
+                   decided_at=f"gte.{since}", order="decided_at.desc", limit=40):
+        if q["kind"] == "읽은 값" and q["status"] == "승인":
+            continue  # 기록이 들어온 줄이 이미 있다
+        if text := decided_text(q):
+            out.append({"at": q["decided_at"], "text": text, "who": q.get("decided_by")})
+    return sorted(out, key=lambda x: x["at"] or "", reverse=True)[:limit], {s["id"] for s in srcs}
 
 
 # ---- C 확인: 대상 층 ----

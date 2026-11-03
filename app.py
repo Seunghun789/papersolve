@@ -1,9 +1,11 @@
 """papersolve 웹 프로토타입. 화면만 담고, 규칙은 core/engine.py, Claude 호출은 core/llm.py 에 있다."""
+import base64
 import copy
 import datetime
 import hashlib
 import html
 import json
+import math
 import os
 import secrets
 import time
@@ -161,7 +163,8 @@ PAGES = ["홈", "올리기", "확인", "묻기", "지식그래프", "대상", "�
 CAPTION = {"종류": "새 기록 종류", "칸": "새 칸", "같은 칸": "같은 칸", "애매한 값": "읽기 애매한 칸",
            "연결": "관계 제안", "지표": "추천 지표", "업무": "반복 업무 제안", "대상 분류": "대상 등록",
            "대상": "새 대상", "같은 대상": "같은 대상", "대상 속성": "대상 정보", "속성 값": "대상 정보 값",
-           "상위 분류": "분류 묶기", "관계 속성": "관계 정보", "칸 설정": "칸 설정", "되돌리기": "되돌리기", "워크스페이스 설정": "워크스페이스 설정"}
+           "상위 분류": "분류 묶기", "관계 속성": "관계 정보", "칸 설정": "칸 설정", "되돌리기": "되돌리기", "워크스페이스 설정": "워크스페이스 설정",
+           "읽은 값": "읽은 값 확인", "맡기기": "맡기기 제안"}
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -450,13 +453,105 @@ def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올
         st.caption(note)
 
 
+OVERLAY_JS = """
+// 원본 쪽 그림 위에 읽은 값 상자와 이름표를 겹친다. 상자 자리는 쪽의 0~1000 비율이라 그림 크기와 상관없이 맞는다.
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component
+  const root = parentElement.querySelector(".ov")
+  let img = root.querySelector("img")
+  if (!img) {
+    img = document.createElement("img")
+    img.alt = "원본 쪽과 읽은 값"
+    root.appendChild(img)
+  }
+  if (img.dataset.sig !== data.sig) {  // 같은 쪽이면 그림을 다시 받지 않는다
+    img.src = data.img
+    img.dataset.sig = data.sig
+  }
+  img.style.maxHeight = data.maxh
+  root.querySelectorAll(".cell").forEach((e) => e.remove())
+  for (const c of data.cells) {
+    const d = document.createElement("button")
+    d.type = "button"
+    d.className = `cell ${c.state}${c.picked ? " picked" : ""}`
+    const [x0, y0, x1, y1] = c.b
+    Object.assign(d.style, { left: x0 / 10 + "%", top: y0 / 10 + "%", width: (x1 - x0) / 10 + "%", height: (y1 - y0) / 10 + "%" })
+    d.setAttribute("aria-label", `${c.label}: ${c.text}`)
+    d.title = `${c.label}: ${c.text}`
+    const tag = document.createElement("span")
+    tag.className = "tag"
+    tag.textContent = c.text
+    d.appendChild(tag)
+    d.onclick = () => setTriggerValue("clicked", c.key)
+    root.appendChild(d)
+  }
+}
+"""
+OVERLAY = st.components.v2.component("papersolve_overlay", html='<div class="wrap"><div class="ov"></div></div>', css="""
+.wrap { text-align: center; }
+.ov { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.ov img { display: block; max-width: 100%; height: auto; }
+.cell { position: absolute; box-sizing: border-box; margin: 0; padding: 0; cursor: pointer; border-radius: 3px;
+  border: 2px solid rgba(15, 118, 110, 0.9); background: rgba(20, 184, 166, 0.07); }
+.cell.unsure { border: 2px dashed #D97706; background: rgba(217, 119, 6, 0.12); }
+.cell.over { border-color: #DC2626; background: rgba(220, 38, 38, 0.10); }
+.cell.picked { box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.35); background: rgba(20, 184, 166, 0.20); z-index: 3; }
+.cell:hover, .cell:focus-visible { z-index: 4; outline: 2px solid #111827; outline-offset: 1px; }
+.tag { position: absolute; left: -2px; bottom: 100%; margin-bottom: 1px; padding: 0 4px; border-radius: 3px; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 11px/16px var(--st-font, sans-serif);
+  background: #0F766E; color: #FFFFFF; pointer-events: none; }
+.unsure .tag { background: #D97706; }
+.over .tag { background: #DC2626; }
+""", js=OVERLAY_JS)
+CELL_CLASS = {"또렷": "ok", "애매": "unsure", "넘음": "over"}
+
+
+@st.cache_data(max_entries=40, show_spinner=False)
+def page_jpeg(path, page):
+    """겹쳐 보기 바탕 그림(data URI). 같은 쪽은 다시 만들지 않는다."""
+    img = engine.page_image(path, page)
+    return "data:image/jpeg;base64," + base64.b64encode(img).decode() if img else None
+
+
+RUN = {}  # 이번 화면에서 한 번만 읽는 것(켜 둔 자동화). 스크립트가 다시 돌 때마다 비워진다
+
+
+def enabled(t):
+    if "autos" not in RUN:
+        RUN["autos"] = t.get("automations", select="id,spec", status="eq.켜짐", order="id") if t else []
+    return RUN["autos"]
+
+
+def cell_text(c):
+    v = fmtv(c["value"])
+    return v + (" · 애매해요" if c["state"] == "애매" else " · 기준 넘음" if c["state"] == "넘음" else "")
+
+
+def pick_cell(sid, cells, mine):
+    """겹쳐 본 상자를 누르면: 그 칸을 묻는 카드(애매한 칸 → 새 칸·같은 칸 → 종이 확인)를 고른다."""
+    key = st.session_state[f"ov{sid}"].clicked
+    c = next((c for c in cells if c["key"] == key), None)
+    if not c:
+        return
+    st.session_state._cell = key
+    q = c["qid"] or next((x["id"] for x in mine if x["payload"].get("label") == c["label"]), None) \
+        or next((x["id"] for x in mine if x["kind"] in ("읽은 값", "종류")), None)
+    if q:
+        st.session_state._pick = q
+
+
 def where_line(text):
     """확인 화면 왼쪽 원본 위의 한 줄: 고른 카드가 가리키는 곳. 글귀는 종이에서 읽은 글이라 그대로 HTML 에 넣지 않는다."""
     st.markdown(f'<p class="ps-where">원본에 적힌 곳 · {html.escape(text)}</p>', unsafe_allow_html=True)
 
 
-def show_page(src, sid, picked, unsure):
-    """사진·PDF 원본 한 쪽. picked: 고른 카드가 가리키는 적힌 곳들(실선 상자와 확대 그림), unsure: 읽기 애매한 칸(점선)."""
+OV_MODES = ["읽은 글자 겹쳐 보기", "원본만 보기"]
+
+
+def show_page(t, K, src, sid, picked, unsure, mine):
+    """사진·PDF 원본 한 쪽. picked: 고른 카드가 가리키는 적힌 곳들(확대 그림), unsure: 읽기 애매한 칸.
+    겹쳐 보기는 읽은 값마다 상자와 이름표(또렷 청록 · 애매 주황 점선 · 기준 넘음 빨강)를 얹고, 누르면 그 칸의 카드를 고른다.
+    원본만 보기는 고른 곳(실선)과 애매한 칸(점선)만 그린다. mine: 이 종이의 카드(상자를 누르면 그중 하나를 고른다)."""
     path, key = src["storage_path"], f"page{sid}"
     pages = drawn(path, 1)["pages"]
     if not pages:
@@ -466,12 +561,15 @@ def show_page(src, sid, picked, unsure):
     st.session_state[key] = page = max(1, min(st.session_state.get(key, 1), pages))  # 읽을 때 적은 쪽이 실제보다 크면 끝 쪽으로
     at_p, at_u = located(path, picked), located(path, unsure)
     here = lambda found: [b for f in found if f and f[0] == page for b in [f[1]]]
-    view = drawn(path, page, here(at_p), here(at_u))
     head = st.container(horizontal=True, vertical_alignment="center")
     head.caption(f"원본: {src['name']}")
     if pages > 1:
         head.number_input("쪽", min_value=1, max_value=pages, step=1, key=key, width=120, label_visibility="collapsed")
         head.caption(f"모두 {pages}쪽", width="content")
+    mode = head.segmented_control("원본 보기", OV_MODES, default=OV_MODES[0], required=True, key="ov_mode",
+                                  label_visibility="collapsed", width="content")
+    over = mode == OV_MODES[0]
+    view = drawn(path, page, here(at_p), () if over else here(at_u))
     if picked:
         first = next((f for f in at_p if f), None)
         at = f"{first[0]}쪽 " if first and pages > 1 else ""
@@ -479,9 +577,22 @@ def show_page(src, sid, picked, unsure):
     if view["zoom"]:
         st.container(key="orig_zoom").image(view["zoom"], width="stretch", alt="고른 카드가 가리키는 곳을 크게")
     st.html(f"<style>.st-key-orig {{--ps-zoom: {view['zoom_ratio']};}}</style>")  # 쪽 그림은 확대 그림을 뺀 높이에 맞춘다
-    st.container(key="orig_page").image(view["page"], alt="원본 쪽")
-    if here(at_u):
-        st.caption("실선: 고른 카드가 가리키는 곳 · 점선: 읽기 애매한 칸")
+    if not over:
+        st.container(key="orig_page").image(view["page"], alt="원본 쪽")
+        if here(at_u):
+            st.caption("실선: 고른 카드가 가리키는 곳 · 점선: 읽기 애매한 칸")
+        return
+    cells = engine.paper_cells(t, K, sid, spans_of(t.id, sid), enabled(t))
+    locs = located(path, [c["span"] for c in cells])
+    shown = [{"key": c["key"], "b": loc[1], "state": CELL_CLASS[c["state"]], "text": cell_text(c), "label": c["label"],
+              "picked": c["key"] == st.session_state.get("_cell") or c["span"] in picked}
+             for c, loc in zip(cells, locs) if loc and loc[0] == page]
+    OVERLAY(data={"img": page_jpeg(path, page), "sig": f"{path}:{page}", "cells": shown,
+                  "maxh": f"calc(100vh - 250px - {view['zoom_ratio']} * 100cqw)"},
+            key=f"ov{sid}", on_clicked_change=lambda: pick_cell(sid, cells, mine))
+    n = {s: sum(c["state"] == s for c in cells) for s in CELL_CLASS}
+    st.caption(f"읽은 칸 {len(cells)}개 · 또렷 {n['또렷']} · 애매 {n['애매']} · 기준 넘음 {n['넘음']}. "
+               "청록 실선은 또렷하게 읽은 값, 주황 점선은 읽기 애매한 값, 빨강은 확정한 기준을 넘은 값이에요. 상자를 누르면 그 칸의 카드가 열려요.")
 
 
 def show_table(t, src, sid, col=None, span=None):
@@ -546,10 +657,19 @@ def first_fill():
 
 def later(q):
     st.session_state.setdefault("later", set()).add(q["id"])
+    if st.session_state.get("_pick") == q["id"]:  # 한 장씩 보기에서는 다음 카드로 넘어간다
+        st.session_state._pick = None
+
+
+KEYS = []  # 한 장씩 보기에서 지금 카드의 버튼에 단축키(Enter · Backspace · L)를 단다. 스크립트가 다시 돌 때마다 비워진다
+
+
+def key_of(name):
+    return {"yes": "Enter", "no": "Backspace", "later": "L"}[name] if KEYS else None
 
 
 def buttons(q, no, yes, extra=None, note="", wait=False):
-    """note: [예]를 누른 뒤 덧붙일 한 줄. wait: [나중에]를 둔다(이번 접속 동안 카드를 맨 뒤로)."""
+    """note: [예]를 누른 뒤 덧붙일 한 줄. wait: [나중에]를 둔다(이번 접속 동안 카드를 맨 뒤로). 한 장씩 보기에서는 늘 둔다."""
     if not answerable(q):
         st.caption("확인하는 사람이 답해요.")
         return
@@ -557,14 +677,154 @@ def buttons(q, no, yes, extra=None, note="", wait=False):
     undo = q["kind"] in engine.UNDOABLE and q["payload"].get("op") != "칸 더하기"
     yes_done = "반영했어요. 확인 화면의 '최근 반영한 것'에서 되돌릴 수 있어요." if undo else "반영했어요."
     row = st.container(horizontal=True, horizontal_alignment="right")  # 버튼은 오른쪽에 작게
-    row.button(no[0], key=f"n{q['id']}", on_click=act, args=no[1],
+    if wait or KEYS:
+        row.button("나중에", key=f"w{q['id']}", type="tertiary", shortcut=key_of("later"), on_click=later, args=(q,))
+    row.button(no[0], key=f"n{q['id']}", shortcut=key_of("no"), on_click=act, args=no[1],
                kwargs={"done": "올린 것을 거두었어요." if user else "넘겼어요."})
-    if wait:
-        row.button("나중에", key=f"w{q['id']}", on_click=later, args=(q,))
     if extra:
         row.button(extra[0], key=f"x{q['id']}", on_click=act, args=extra[1], kwargs={"done": "하나씩 물을게요."})
     yes_done += note
-    row.button(yes[0], key=f"y{q['id']}", type=first_fill(), on_click=act, args=yes[1], kwargs={"done": yes_done})
+    row.button(yes[0], key=f"y{q['id']}", type=first_fill(), shortcut=key_of("yes"), on_click=act, args=yes[1],
+               kwargs={"done": yes_done})
+
+
+def rec_ids(t, sid):
+    """종이 한 장의 기록 id(읽은 순서). 읽기 애매한 칸 카드가 그 종이의 몇 번째 기록인지 찾는다."""
+    if ("recs", sid) not in RUN:
+        RUN[("recs", sid)] = [r["id"] for r in t.get("records", select="id", source_input_id=f"eq.{sid}", order="id")]
+    return RUN[("recs", sid)]
+
+
+def candidates(t, q):
+    """읽기 애매한 칸에서 AI가 본 다른 후보 값(읽을 때 함께 적은 것)."""
+    P = q["payload"]
+    ids = rec_ids(t, q["source_input_id"])
+    i = ids.index(P["record_id"]) if P["record_id"] in ids else None
+    for s in spans_of(t.id, q["source_input_id"]).get(P["label"]) or []:
+        if ("rec" in s and s["rec"] == i) or ("rec" not in s and engine.same_value(s.get("value"), P["value"])):
+            return [c for c in s.get("cand") or [] if not engine.same_value(c, P["value"])]
+    return []
+
+
+def value_card(t, q):
+    """읽기 애매한 칸(또는 맡긴 종이에서 확정한 기준을 넘은 값): AI가 본 후보를 한 번 눌러 고르거나, 직접 고친다."""
+    P = q["payload"]
+    if P.get("over"):
+        st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 확정한 기준을 넘어요({P['over']}). 맞게 읽었나요?**")
+        st.caption("바로 반영하기로 한 종이라도 기준을 넘은 값은 한 번 더 물어요.")
+    else:
+        st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 맞나요?**")
+    if len(P.get("record_ids") or []) > 1:
+        st.caption(f"종이 전체에 한 번 적힌 칸이라, 고치면 이 종이의 기록 {len(P['record_ids'])}줄이 함께 바뀌어요.")
+    if st.session_state.get("editing") == q["id"]:
+        st.text_input("고친 값", value=P["value"] or "", key=f"fix{q['id']}")
+        row = st.container(horizontal=True, horizontal_alignment="right")
+        row.button("아니요", key=f"ne{q['id']}", on_click=lambda: st.session_state.update(editing=None))
+        row.button("저장", key=f"s{q['id']}", type="primary", shortcut=key_of("yes"), on_click=save_fix, args=(t, q))
+        return
+    if cand := candidates(t, q):
+        st.caption("AI가 본 다른 후보예요. 누르면 그 값으로 고쳐요." + (" 숫자 키로도 골라요." if KEYS else ""))
+        row = st.container(horizontal=True)
+        for j, v in enumerate(cand):
+            row.button(v, key=f"c{q['id']}_{j}", shortcut=str(j + 1) if KEYS else None, on_click=act,
+                       args=(engine.answer_value, t, q, v), kwargs={"done": f"'{v}'(으)로 고쳤어요."})
+    row = st.container(horizontal=True, horizontal_alignment="right")
+    if KEYS:
+        row.button("나중에", key=f"w{q['id']}", type="tertiary", shortcut="L", on_click=later, args=(q,))
+    row.button("아니요, 고칠게요", key=f"n{q['id']}", shortcut=key_of("no"), on_click=start_edit, args=(q,))
+    row.button("네, 맞아요", key=f"y{q['id']}", type=first_fill(), shortcut=key_of("yes"), on_click=act,
+               args=(engine.answer_value, t, q), kwargs={"done": "반영했어요."})
+
+
+def trust_info(t, K):
+    """이번 화면에서 한 번만 센다: 기록 종류마다 맡기기 근거."""
+    if "trust" not in RUN:
+        RUN["trust"] = engine.trust_state(t, K["types"]) if t and K["types"] else {}
+    return RUN["trust"]
+
+
+def save_read(t, q, orig):
+    """'읽은 값' 카드에서 고친 칸만 모아 반영한다. orig: 표의 줄 순서대로 (기록 id, 읽은 이름 → 값)."""
+    edits = (st.session_state.get(f"ed{q['id']}") or {}).get("edited_rows") or {}
+    fixes = {}
+    for i, cols in edits.items():
+        rid, data = orig[int(i)]
+        changed = {c: str(v).strip() for c, v in cols.items() if v is not None and str(v).strip() != str(data.get(c) or "").strip()}
+        if changed:
+            fixes[rid] = changed
+    st.session_state.editing = None
+    act(engine.answer_read, t, q, fixes, done=f"고친 값 {sum(map(len, fixes.values()))}개를 반영했어요." if fixes else "반영했어요.")
+
+
+def read_card(t, K, q):
+    """'읽은 값': 이미 있는 종류의 사진 종이 한 장을 통째로 확인한다. 애매한 칸은 주황, 확정한 기준을 넘은 값은 빨강."""
+    P, sid = q["payload"], q["source_input_id"]
+    recs = engine.paper_rows(t, sid)
+    if P.get("reopened"):
+        st.caption("바로 반영했던 종이를 되돌려 다시 보는 중이에요. 답하면 다시 기록이 돼요.")
+    st.write(f"**이 종이에서 읽은 '{P['type']}' 기록 {len(recs)}줄이 맞나요?**")
+    pos = {p["name"]: i for i, p in enumerate(K["props"].get(P["type"], []))}  # 확정한 칸 순서(DB의 JSON 은 순서를 지키지 않는다)
+    labels = sorted(dict.fromkeys(l for r in recs for l in r["data"]), key=lambda l: pos.get(K["alias"].get((P["type"], l)), len(pos)))
+    orig = [(r["id"], r["data"]) for r in recs]
+    df = pd.DataFrame([{l: "" if r["data"].get(l) is None else str(r["data"][l]) for l in labels} for r in recs])
+    wait = [u for u in engine.pending(t, ["애매한 값"]) if u["source_input_id"] == sid]
+    unsure = {(rid, u["payload"]["label"]) for u in wait for rid in u["payload"].get("record_ids") or [u["payload"]["record_id"]]}
+    over = {r["id"]: engine.over_labels(K, P["type"], r["data"], enabled(t)) for r in recs}
+    editing = st.session_state.get("editing") == q["id"]
+    if editing:
+        st.data_editor(df, key=f"ed{q['id']}", hide_index=True, num_rows="fixed")
+        st.caption("틀린 칸을 눌러 고친 뒤 [저장]을 눌러요. 고친 칸만 바뀌어요.")
+    else:
+        def paint(d):
+            return pd.DataFrame([["background-color: #FFEDD5" if (rid, c) in unsure else "background-color: #FEE2E2"
+                                  if c in over[rid] else "" for c in d.columns] for rid, _ in orig], index=d.index, columns=d.columns)
+        st.dataframe(df.style.apply(paint, axis=None), hide_index=True, alt="이 종이에서 읽은 기록")
+        notes = [f"주황 읽기 애매한 칸 {len(wait)}개(따로 물어요)" if wait else "",
+                 f"빨강 확정한 기준을 넘은 값 {sum(map(len, over.values()))}개" if any(over.values()) else ""]
+        if any(notes):
+            st.caption(" · ".join(n for n in notes if n))
+    info = trust_info(t, K).get(P["type"])
+    if info and not P.get("reopened") and K["trust"].get(P["type"]) == engine.TRUST[0]:
+        st.caption(f"고친 값 없이 맞으면 '{P['type']}' 종이를 연속 {info['streak'] + 1}장째 맞게 읽은 거예요. "
+                   f"{engine.TRUST_N}장이 되면 바로 반영할지 물어요.")
+    if P["type"] not in K["types"]:
+        st.caption(f"먼저 기록 종류 '{P['type']}' 카드에 답해 주세요. 답하면 이 종이도 같은 칸으로 들어가요.")
+        return
+    if not answerable(q):
+        st.caption("확인하는 사람이 답해요.")
+        return
+    row = st.container(horizontal=True, horizontal_alignment="right")
+    if editing:
+        row.button("아니요", key=f"ne{q['id']}", on_click=lambda: st.session_state.update(editing=None))
+        row.button("저장", key=f"s{q['id']}", type="primary", on_click=save_read, args=(t, q, orig))  # 표에서 Enter 는 칸 고치기라 단축키를 달지 않는다
+        return
+    if KEYS:
+        row.button("나중에", key=f"w{q['id']}", type="tertiary", shortcut="L", on_click=later, args=(q,))
+    row.button("아니요, 고칠게요", key=f"n{q['id']}", shortcut=key_of("no"), on_click=start_edit, args=(q,))
+    row.button("네, 맞아요", key=f"y{q['id']}", type=first_fill(), shortcut=key_of("yes"), on_click=act,
+               args=(engine.answer_read, t, q), kwargs={"done": "반영했어요." + (f" 읽기 애매한 칸 {len(wait)}개는 따로 물어요." if wait else "")})
+
+
+def trust_card(t, q, ok):
+    """'맡기기': 같은 양식이 이어서 맞았을 때 바로 반영할지, 또는 사용자가 다시 매번 묻기로 돌리는 카드."""
+    P = q["payload"]
+    if P.get("off"):
+        st.write(f"**'{P['type']}' 종이를 다시 매번 물을까요?**")
+        st.caption("새로 올리는 종이마다 '읽은 값' 카드로 한 번씩 물어요. 이미 반영한 기록은 그대로예요.")
+        buttons(q, ("아니요", (engine.answer_trust, t, q, False)), (ok("맞아요"), (engine.answer_trust, t, q, True)))
+        return
+    st.write(f"**'{P['type']}' 종이는 이제 바로 반영할까요?**")
+    st.caption(f"최근 {P['streak']}장을 고친 값 없이 모두 [맞아요]로 답했어요.")
+    chips = "".join(f'<span class="ps-chip"><b>맞아요</b><span>{fmt_day(p["day"]) if p.get("day") else html.escape(p.get("name") or "")}</span></span>'
+                    for p in reversed(P.get("papers") or []))
+    st.html(f'<div class="ps-chips">{chips}<span class="ps-chip-next">다음 종이부터</span></div>')
+    st.html(f"""<div class="ps-trust">
+<p><b>켜면</b>이 양식의 또렷하게 읽은 칸은 묻지 않고 바로 기록이 돼요.</p>
+<p><b>그래도 물어요</b>읽기 애매한 칸 · 처음 보는 칸 · 처음 보는 대상 · 확정한 기준을 넘은 값</p>
+<p><b>되돌리기</b>바로 반영한 종이는 {engine.UNDO_DAYS}일 동안 [되돌리기]로 다시 확인할 수 있어요</p>
+<p><b>스스로 낮춤</b>바로 반영한 종이를 {engine.TRUST_DOWN}번 고치면 다시 '매번 묻기'로 돌아가요</p></div>""")
+    buttons(q, ("아니요", (engine.answer_trust, t, q, False)), ("켜기", (engine.answer_trust, t, q, True)))
+    st.caption("맡기는 것도 이 카드에 답해야 바뀌어요.")
 
 
 def show_impact(t, K, q, ids=(), what=""):
@@ -673,13 +933,29 @@ def pick_card(qid):
     st.session_state._pick = qid
 
 
+def card_spans(t, q):
+    """카드가 가리키는 적힌 곳. 읽기 애매한 칸은 그 기록의 칸 하나(종이 전체 칸은 그 칸), 새 칸·같은 칸은 그 칸이 적힌 곳 모두."""
+    spans = spans_of(t.id, q["source_input_id"]).get(q["payload"].get("label")) or []
+    if q["kind"] != "애매한 값":
+        return spans
+    ids = rec_ids(t, q["source_input_id"])
+    i = ids.index(q["payload"]["record_id"]) if q["payload"]["record_id"] in ids else None
+    mine = [s for s in spans if ("rec" in s and s["rec"] == i) or ("rec" not in s and engine.same_value(s.get("value"), q["payload"]["value"]))]
+    return mine or spans[:1]
+
+
 def where(t, q):
     """카드가 묻는 칸이 원본 어디에 적혔는지: 원문 글귀와 쪽. 카드를 누르면(카드를 덮은 투명 버튼) 왼쪽 원본이 그곳을 보여 준다."""
-    spans = spans_of(t.id, q["source_input_id"]).get(q["payload"].get("label")) or []
+    spans = card_spans(t, q)
     if not spans:
         return
     st.caption("원본에 적힌 곳: " + " · ".join(f"{spot(s, spans)}‘{s['quote']}’" for s in spans[:2]))
     st.button("이 카드가 가리키는 곳을 원본에서 보기", key=f"look{q['id']}", on_click=pick_card, args=(q["id"],))
+
+
+def look(q):
+    """칸 하나를 가리키지 않는 카드(종류·읽은 값)도 누르면 고른다. 원본은 읽은 값을 모두 겹쳐 보여 준다."""
+    st.button("이 카드의 종이를 원본에서 보기", key=f"look{q['id']}", on_click=pick_card, args=(q["id"],))
 
 
 def samples(t, q):
@@ -710,6 +986,8 @@ def card(t, K, q, label=True):
             st.caption(f"올린 사람: {person_name(q['created_by'])}")
         if kind in ("칸", "같은 칸", "애매한 값"):
             where(t, q)
+        elif kind in ("읽은 값", "종류") and q.get("source_input_id"):
+            look(q)
         if kind == "워크스페이스 설정":
             space_card(t, q, ok)
         elif kind == "종류":
@@ -738,15 +1016,11 @@ def card(t, K, q, label=True):
             st.caption(f"같은 칸이면 이 종이의 기록 {n}줄의 '{P['label']}' 값이 '{P['similar_to']}' 칸으로 들어가요.")
             buttons(q, ("다른 칸", (engine.answer_same, t, q, False)), ("같은 칸", (engine.answer_same, t, q, True)))
         elif kind == "애매한 값":
-            st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 맞나요?**")
-            if st.session_state.get("editing") == q["id"]:
-                st.text_input("고친 값", value=P["value"] or "", key=f"fix{q['id']}")
-                st.button("저장", key=f"s{q['id']}", type="primary", on_click=save_fix, args=(t, q))
-            else:
-                row = st.container(horizontal=True, horizontal_alignment="right")
-                row.button("아니요, 고칠게요", key=f"n{q['id']}", on_click=start_edit, args=(q,))
-                row.button("네, 맞아요", key=f"y{q['id']}", type=first_fill(), on_click=act,
-                           args=(engine.answer_value, t, q), kwargs={"done": "반영했어요."})
+            value_card(t, q)
+        elif kind == "읽은 값":
+            read_card(t, K, q)
+        elif kind == "맡기기":
+            trust_card(t, q, ok)
         elif kind == "연결":
             st.write(f"**{link_sentence(P)}**")
             try:
@@ -777,6 +1051,9 @@ def card(t, K, q, label=True):
             st.caption(OFF_NOTE)
         elif kind == "대상 분류":
             vals = P.get("values") or []
+            if not vals and P["type"] in K["types"]:  # 칸을 하나씩 확정하는 동안 올린 카드: 기록이 확정된 지금 값으로
+                df = engine.frame(K, P["type"])
+                vals = list(dict.fromkeys(df[P["prop"]].dropna().astype(str))) if P["prop"] in df else []
             st.write(f"**'{P['prop']}' 칸의 값을 '{P['class']}' 대상으로 등록할까요?**")
             st.caption(f"{P['type']} 기록의 '{P['prop']}' 값 {len(vals)}개: {', '.join(vals[:6])}{' …' if len(vals) > 6 else ''}.")
             buttons(q, ("아니요", (engine.answer_class, t, q, False)), (ok("등록"), (engine.answer_class, t, q, True)))
@@ -910,10 +1187,227 @@ def fmt_day(d):
     return f"{int(str(d)[5:7])}월 {int(str(d)[8:10])}일" if d and len(str(d)) >= 10 else str(d)
 
 
+KST = datetime.timezone(datetime.timedelta(hours=9))  # 화면의 시각은 한국 시간
+
+
+def local_now():
+    return datetime.datetime.now(KST)
+
+
+def when(iso):
+    """DB 시각(UTC ISO)을 '오늘 08:12' · '어제 18:20' · '11월 2일'로."""
+    try:
+        at = datetime.datetime.fromisoformat(str(iso)).astimezone(KST)
+    except ValueError:
+        return fmt_day(iso)
+    days = (local_now().date() - at.date()).days
+    return f"오늘 {at:%H:%M}" if days == 0 else f"어제 {at:%H:%M}" if days == 1 else f"{at.month}월 {at.day}일"
+
+
 def ask_about(name):
     """'다음: 묻기로 가기' — 그 대상에 대한 질문을 채운 묻기를 연다."""
     st.session_state.qtext = f"{name} 최근 기록 보여줘"
     st.session_state._goto = "묻기"
+
+
+HOME_CSS = """<style>
+/* 홈 브리핑: 걸린 자동화 카드는 왼쪽 띠 색으로 종류를 보인다 */
+[class*="st-key-alert_"] {padding: 18px 20px !important;}
+[class*="st-key-alert_over"] {border-left: 4px solid #DC2626 !important;}
+[class*="st-key-alert_under"] {border-left: 4px solid #DC2626 !important;}
+[class*="st-key-alert_gap"], [class*="st-key-alert_due"] {border-left: 4px solid #D97706 !important;}
+[class*="st-key-alert_hit"] {border-left: 4px solid #0F766E !important;}
+.ps-alert-head {display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717A;}
+.ps-tag {font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid;}
+.ps-tag.over, .ps-tag.under {color: #B91C1C; background: #FEF2F2; border-color: #FECACA;}
+.ps-tag.gap, .ps-tag.due {color: #B45309; background: #FFFBEB; border-color: #FDE68A;}
+.ps-tag.hit {color: #115E59; background: #F0FDFA; border-color: #99F6E4;}
+.ps-alert-t {font-size: 19px; font-weight: 600; letter-spacing: -0.01em; margin: 8px 0 2px; line-height: 28px;}
+[class*="st-key-alert_"] [data-testid="stImage"] img {border: 1px solid #E4E4E7; border-radius: 6px;}
+.st-key-home_check {padding: 14px 20px !important;}
+.ps-feed {display: flex; gap: 14px; padding: 9px 0; border-top: 1px solid #F0F0F2; font-size: 14px; line-height: 21px;}
+.ps-feed:first-of-type {border-top: none;}
+.ps-feed span {flex: none; width: 76px; color: #71717A; font-size: 13px;}
+.ps-feed p {margin: 0;} .ps-feed em {font-style: normal; color: #71717A;}
+.ps-hello {font-size: 13px; color: #71717A; margin-bottom: 2px;}
+</style>"""
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def space_name(tid):
+    return (db.get("tenants", select="title", id=f"eq.{tid}") or [{}])[0].get("title")
+
+
+@st.cache_data(max_entries=200, show_spinner=False)
+def crop_png(path, page, b):
+    return engine.snippet(path, page, b)
+
+
+def josa(word, pair):
+    """받침에 맞춘 조사: josa('측정 온도', '이가') → '측정 온도가'. 숫자·영문은 읽는 소리로(1 일, A 에이)."""
+    w = str(word)
+    last = w.rstrip(")")[-1:] if w else ""
+    if "가" <= last <= "힣":
+        has = (ord(last) - 0xAC00) % 28 != 0
+    else:
+        has = last in "013678LMNRlmnr"
+    return w + (pair[0] if has else pair[1])
+
+
+def alert_kind(spec):
+    """걸린 자동화 카드의 이름표와 띠 색: 기준 넘음 · 기준 아래 · 빠진 기록 · 예정일 · 걸린 것."""
+    ops = [c["op"] for c in spec["conditions"]]
+    if {"missed_weekday", "missed_monthday"} & set(ops):
+        return "예정일", "due"
+    if "older_than_days" in ops:
+        return "빠진 기록", "gap"
+    if any(o in (">", ">=") for o in ops):
+        return "기준 넘음", "over"
+    if any(o in ("<", "<=") for o in ops):
+        return "기준 아래", "under"
+    return "걸린 것", "hit"
+
+
+def value_cond(spec):
+    return next((c for c in spec["conditions"] if c["op"] in (">", ">=", "<", "<=") and c["prop"] != "날짜"), None)
+
+
+def headline(K, spec, hits):
+    """카드 맨 위 한 문장. 이름과 수는 걸린 기록에서 코드가 꺼내고 센다."""
+    ent = engine.entity(K, spec["type"])
+    names = list(dict.fromkeys(hits[ent].dropna().astype(str))) if ent else []
+    who = " · ".join(names[:2]) + (f" 외 {len(names) - 2}개" if len(names) > 2 else "") if names else f"기록 {len(hits)}줄"
+    _, kind = alert_kind(spec)
+    if kind == "due":
+        return f"{who}의 예정일 기록이 없어요"
+    if kind == "gap":
+        last = max(str(d) for d in hits["날짜"])
+        days = (date.today() - date.fromisoformat(last[:10])).days if len(names) == 1 else None
+        n = next(c["value"] for c in spec["conditions"] if c["op"] == "older_than_days")
+        return f"{who} 기록이 {days}일째 없어요" if days else f"{who} 기록이 {n}일 넘게 없어요"
+    c = value_cond(spec)
+    if c and kind in ("over", "under"):
+        verb, verb_past = ("기준을 넘었어요",) * 2 if kind == "over" else ("기준보다 낮아요", "기준보다 낮았어요")
+        if len(names) == 1:  # 보는 기간 안에 그 대상이 몇 번 걸렸나
+            a, b, _, _ = engine.period_range(period())
+            df = engine.frame(K, spec["type"])
+            df = df[(df[ent].astype(str) == names[0]) & (df["날짜"] >= a.isoformat()) & (df["날짜"] <= b.isoformat())]
+            n = len(engine.match(df, spec["conditions"]))
+            if n > 1:
+                return f"{who}의 {josa(c['prop'], '이가')} {period()} {n}번 {verb_past}"
+        return f"{who}의 {josa(c['prop'], '이가')} {verb}"
+    return f"'{spec['title']}'에 {josa(who, '이가')} 걸렸어요"
+
+
+def hit_crop(t, K, prop, row):
+    """걸린 기록의 그 칸이 적힌 손글씨 조각(PNG). 원본 위 자리를 모르면 None."""
+    rec = next((r for r in K["records"] if r["id"] == row["_id"]), None)
+    if not rec or not rec.get("source_input_id") or not rec.get("photo_path"):
+        return None
+    s = engine.record_span(K, rec, prop, spans_of(t.id, rec["source_input_id"]))
+    loc = located(rec["photo_path"], [s])[0] if s else None
+    return crop_png(rec["photo_path"], loc[0], tuple(loc[1])) if loc else None
+
+
+def spark(K, spec, name):
+    """걸린 대상의 최근 7번 값과 기준선. 빨간 점은 규칙에 걸린 기록이다. 값은 모두 기록에서 꺼낸다."""
+    c, ent = value_cond(spec), engine.entity(K, spec["type"])
+    if not c or not ent:
+        return
+    df = engine.frame(K, spec["type"])
+    g = df[df[ent].astype(str) == str(name)].sort_values("날짜").tail(7)
+    if len(g) < 2 or c["prop"] not in g:
+        return
+    over = set(engine.match(g, spec["conditions"])["_id"])
+    d = pd.DataFrame({"날짜": g["날짜"].astype(str), "값": pd.to_numeric(g[c["prop"]].map(engine.to_number), errors="coerce"),
+                      "점": g["_id"].isin(over).map({True: "규칙에 걸림", False: "기록"})}).dropna(subset=["값"])
+    std = engine.to_number(g[c["value_prop"]].iloc[-1]) if c.get("value_prop") and c["value_prop"] in g else engine.to_number(c.get("value"))
+    x = {"field": "날짜", "type": "ordinal", "axis": None}
+    y = {"field": "값", "type": "quantitative", "axis": None, "scale": {"zero": False}}
+    layers = [{"mark": {"type": "line", "color": "#0F766E", "strokeWidth": 2}, "encoding": {"x": x, "y": y}},
+              {"mark": {"type": "point", "filled": True, "size": 70, "opacity": 1},
+               "encoding": {"x": x, "y": y, "color": {"field": "점", "type": "nominal", "legend": None,
+                                                     "scale": {"domain": ["기록", "규칙에 걸림"], "range": ["#0F766E", "#DC2626"]}},
+                            "tooltip": [{"field": "날짜", "title": "날짜"}, {"field": "값", "title": c["prop"]}]}}]
+    if std is not None:
+        layers.append({"mark": {"type": "rule", "color": "#DC2626", "strokeDash": [4, 3]}, "encoding": {"y": {"datum": std}}})
+    st.caption(f"{name} {c['prop']} · 최근 {len(d)}번")
+    st.vega_lite_chart(d, {"layer": layers, "height": 90, "config": {**engine.VIEW_STYLE, "view": {"stroke": None}}},
+                       width="stretch", alt=f"{name} {c['prop']} 최근 추이")
+    st.caption("점은 기록 1줄 · 빨강은 규칙에 걸린 기록" + (f" · 점선은 기준 {std:g}" if std is not None else ""))
+
+
+def alert_card(t, K, a, hits):
+    """걸린 자동화 한 장: 한 문장 → 걸린 대상마다 왜 · 안 보면 · 다음(손글씨 조각, 원본 사진, 묻기로 가기) → 근거."""
+    spec = a["spec"]
+    chip, kind = alert_kind(spec)
+    ent = engine.entity(K, spec["type"])
+    follow = engine.follow(K, spec, hits)[:FOLLOW_MAX]
+    c = value_cond(spec)
+    first = str(hits[ent].iloc[0]) if ent and len(hits) else None
+    with st.container(border=True, key=f"alert_{kind}_{a['id']}"):
+        main, side = st.columns([2.3, 1]) if c and ent else (st.container(), None)
+        with main:
+            st.html(f'<div class="ps-alert-head"><span class="ps-tag {kind}">{chip}</span>'
+                    f'<span>켜 둔 자동화 \'{html.escape(spec["title"])}\' · {len(hits)}건</span></div>'
+                    f'<div class="ps-alert-t">{html.escape(headline(K, spec, hits))}</div>')
+            for j, (_, r) in enumerate(hits.head(WHY_MAX).iterrows()):
+                name = r[ent] if ent else fmt_day(r["날짜"])
+                st.markdown(f"**{name}**")
+                st.caption(f"왜: {why_line(spec, r)}")
+                if follow:
+                    st.caption("안 보면: " + ", ".join(f"{n} ({why})" for n, why in follow))
+                nxt = st.container(horizontal=True, vertical_alignment="center")
+                if c and (crop := hit_crop(t, K, c["prop"], r)):
+                    nxt.image(crop, width=170, caption=f"{fmt_day(r['날짜'])} 원본", alt=f"{name} {c['prop']} 손글씨")
+                with nxt.popover("원본 사진", type="tertiary"):
+                    show_photo(r["_photo"] if isinstance(r["_photo"], str) else None)
+                nxt.button("묻기로 가기", key=f"askgo{a['id']}_{j}", type="tertiary", on_click=ask_about, args=(name,))
+            if len(hits) > WHY_MAX:
+                st.caption(f"그 밖에 {len(hits) - WHY_MAX}건은 근거에서 봐요.")
+            foot = st.container(horizontal=True, vertical_alignment="center")
+            foot.caption(f"근거 {len(hits)}줄 · {until(K, spec['type'])}")
+            if kind in ("gap", "due"):
+                foot.button("사진 올리기", key=f"up{a['id']}", type="primary", on_click=go, args=("올리기",))
+            with st.expander(f"근거 기록 {len(hits)}줄"):
+                pick_table(hits, f"hits{a['id']}")
+        if side:
+            with side:
+                spark(K, spec, first)
+
+
+def changes_feed(t, K, runs):
+    """어제 이후 바뀐 것: 올린 종이, 사람이 답한 카드, 켜 둔 자동화에 새로 걸린 것. 이름은 그 일을 한 사람."""
+    start = local_now().replace(hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=1)
+    items, new = engine.changes_since(t, start.astimezone(datetime.timezone.utc).isoformat())
+    if new:  # 어제 이후 들어온 종이를 빼고 셌을 때보다 더 걸렸으면
+        past = {**K, "records": [r for r in K["records"] if r.get("source_input_id") not in new]}
+        for a, hits in runs:
+            more = len(hits) - len(engine.run_automation(past, a["spec"]))
+            if more > 0:
+                items.insert(0, {"at": local_now().isoformat(), "text": f"자동화 '{a['spec']['title']}'에 {more}건 더 걸렸어요", "who": None})
+    with st.container(border=True, key="feed"):
+        st.write("**어제 이후 바뀐 것**")
+        if not items:
+            st.caption("어제 이후 바뀐 것이 없어요.")
+        rows = "".join(f'<div class="ps-feed"><span>{when(it["at"])}</span><p>{html.escape(it["text"])}'
+                       f'{"<em> · " + html.escape(person_name(it["who"])) + "</em>" if it.get("who") else ""}</p></div>' for it in items[:6])
+        if rows:
+            st.html(rows)
+
+
+def glance(t, K):
+    """보는 기간 한눈에: 올린 지표(값이 하나인 것)부터, 모자라면 기록 종류마다 기록 수. 앞 기간 값과 근거 기록 수를 붙인다."""
+    specs = [w["spec"] for w in t.get("widgets", select="spec", status="eq.올림", order="id") if w["spec"].get("kind") in ("kpi", "count_where")]
+    specs = (specs + [{"title": f"{T} 기록 수", "kind": "kpi", "type": T, "fn": "count", "props": [], "conditions": []}
+                      for T in K["types"]])[:3]
+    st.write(f"**{period()} 한눈에**")
+    for col, s in zip(st.columns(len(specs)), specs):
+        v, pv, ev = engine.period_values(K, s, period())
+        with col, st.container(border=True):
+            st.metric(s["title"], fmt(v))
+            st.caption(f"{engine.PERIODS[period()][0]} {fmt(pv)} · 근거 {len(ev)}줄")
+    st.caption("숫자는 모두 기록에서 셌어요.")
 
 
 def home(t, K):
@@ -921,40 +1415,41 @@ def home(t, K):
         st.header("오늘 먼저 볼 것")
         empty()
         return
-    st.header("오늘 먼저 볼 것")
-    period_bar("period_home")
-    autos = t.get("automations", select="id,spec", status="eq.켜짐", order="id")
+    st.html(HOME_CSS)
+    autos = enabled(t)
     runs = [(a, engine.run_automation(K, a["spec"])) for a in autos]
     hit = sorted([r for r in runs if len(r[1])], key=lambda r: -len(r[1]))
     quiet = [a for a, h in runs if not len(h)]
-    cols = st.columns(3)
-    if not autos:
-        with cols[0], st.container(border=True, height=CARD_H):
-            st.metric("자동화", "없음")
-            st.caption("자동화에서 업무를 켜 두면 여기에 알아서 보여요.")
-    elif not hit:
-        with cols[0], st.container(border=True, height=CARD_H):
-            st.metric("켜 둔 자동화", f"{len(autos)}개")
-            st.caption("오늘은 걸린 것이 없어요.")
+    n_check = len(engine.pending(t, engine.CHECK))
+    todo = len(hit) + bool(n_check)
     shown = hit[:HOME_MAX]  # 걸린 것이 많은 순서로 몇 장만. 걸린 카드는 닫지 않는다
-    for i, (a, hits) in enumerate(shown):
-        ent = engine.entity(K, a["spec"]["type"])
-        follow = engine.follow(K, a["spec"], hits)[:FOLLOW_MAX]
-        with cols[i % 3], st.container(border=True, height=CARD_H):
-            st.metric(a["spec"]["title"], f"{len(hits)}건")
-            st.caption(f"근거 {len(hits)}줄 · {until(K, a['spec']['type'])}")
-            for j, (_, r) in enumerate(hits.head(WHY_MAX).iterrows()):  # 걸린 대상마다 왜 · 안 보면 · 다음
-                name = r[ent] if ent else fmt_day(r["날짜"])
-                st.markdown(f"**{name}**")
-                st.caption(f"왜: {why_line(a['spec'], r)}")
-                if follow:
-                    st.caption("안 보면: " + ", ".join(f"{n} ({why})" for n, why in follow))
-                nxt = st.container(horizontal=True)
-                with nxt.popover("원본 사진", type="tertiary"):
-                    show_photo(r["_photo"] if isinstance(r["_photo"], str) else None)
-                nxt.button("묻기로 가기", key=f"askgo{a['id']}_{j}", type="tertiary", on_click=ask_about, args=(name,))
-            if len(hits) > WHY_MAX:
-                st.caption(f"그 밖에 {len(hits) - WHY_MAX}건은 근거에서 봐요.")
+    now = local_now()
+    name = person_name(uid) if uid else ""
+    hello = "좋은 아침이에요" if 5 <= now.hour < 11 else "좋은 오후예요" if 11 <= now.hour < 17 else "좋은 저녁이에요"
+    hello += f", {name}님" if name and not name.startswith("이름 없음") else ""
+    today_line = f"오늘 챙길 것은 {todo}가지예요" if todo else "오늘은 챙길 것이 없어요"
+    where_ = dict((i, n) for i, n, _ in CASES).get(t.id) if isinstance(t, Demo) else space_name(t.id)
+    left, right = st.columns([3, 1.4], vertical_alignment="bottom")
+    left.html(f'<div class="ps-hello">{now.month}월 {now.day}일 {engine.WEEKDAYS[now.weekday()]}'
+              f'{" · " + html.escape(where_) if where_ else ""}</div>')
+    left.header(f"{hello}. {today_line}")
+    right.container(horizontal=True, horizontal_alignment="right").button(
+        "이번 주 요약 만들기", on_click=lambda: st.session_state.update(_make_week=True))
+    period_bar("period_home")
+    week(t, K)
+    st.caption("오늘 먼저 볼 것")
+    for a, hits in shown:
+        alert_card(t, K, a, hits)
+    if n_check:
+        with st.container(border=True, key="home_check"):
+            a_, b_ = st.columns([4, 1.3], vertical_alignment="center")
+            a_.write(f"**확인할 것 {n_check}개가 기다려요**")
+            a_.caption("AI가 읽고 제안한 것을 예/아니오로 확인하면 기록과 지표에 들어가요.")
+            b_.button(f"확인할 것 {n_check}개", on_click=go, args=("확인",), type="primary", width="stretch")
+    if not autos:
+        st.caption("자동화에서 업무를 켜 두면 걸린 대상이 여기에 알아서 보여요.")
+    elif not hit:
+        st.caption(f"켜 둔 자동화 {len(autos)}개 · 오늘은 걸린 것이 없어요.")
     if len(hit) > len(shown) or quiet:
         more = len(hit) - len(shown)
         with st.expander(" · ".join(([f"더 걸린 자동화 {more}개"] if more else []) + ([f"걸린 것이 없는 자동화 {len(quiet)}개"] if quiet else []))):
@@ -962,30 +1457,29 @@ def home(t, K):
                 st.caption(f"{a['spec']['title']}: {len(hits)}건")
             for a in quiet:
                 st.caption(f"{a['spec']['title']}: 걸린 것 없음")
-    with cols[len(shown) if shown else 1], st.container(border=True, height=CARD_H):
-        n = len(engine.pending(t, engine.CHECK))
-        st.metric("확인", f"{n}개")
-        st.button(f"확인할 것 {n}개" if n else "확인할 것 없음", on_click=go, args=("확인",), disabled=not n, width="stretch")
-
-    week(t, K)
-    st.subheader("쌓인 기록")
-    for T, tab in zip(K["types"], st.tabs(K["types"])):
-        with tab:
-            df = engine.frame(K, T)
-            nums = engine.prop_names(K, T, "number")
-            a_, b_, _, _ = engine.period_range(period())
-            seen = df[(df["날짜"] >= a_.isoformat()) & (df["날짜"] <= b_.isoformat())]
-            if nums and len(seen):  # 추이를 먼저 크게(보는 기간만), 표는 그 아래
-                st.caption(f"{nums[0]} 추이 · {period()}")
-                line(engine.trend(K, T, seen, [nums[0]], engine.PERIODS[period()][1]), f"{T} {nums[0]} 추이")
-            st.caption(f"{len(df)}줄 · {until(K, T)}")
-            pick_table(df, f"home{T}", {p["name"]: p["description"] for p in K["props"][T] if p.get("description")})
+    feed, look_ = st.columns([1, 1.2])
+    with feed:
+        changes_feed(t, K, runs)
+    with look_:
+        glance(t, K)
+    with st.expander("쌓인 기록 · 표와 추이", key="home_tables"):
+        for T, tab in zip(K["types"], st.tabs(K["types"])):
+            with tab:
+                df = engine.frame(K, T)
+                nums = engine.prop_names(K, T, "number")
+                a_, b_, _, _ = engine.period_range(period())
+                seen = df[(df["날짜"] >= a_.isoformat()) & (df["날짜"] <= b_.isoformat())]
+                if nums and len(seen):  # 추이를 먼저 크게(보는 기간만), 표는 그 아래
+                    st.caption(f"{nums[0]} 추이 · {period()}")
+                    line(engine.trend(K, T, seen, [nums[0]], engine.PERIODS[period()][1]), f"{T} {nums[0]} 추이")
+                st.caption(f"{len(df)}줄 · {until(K, T)}")
+                pick_table(df, f"home{T}", {p["name"]: p["description"] for p in K["props"][T] if p.get("description")})
 
 
 def week(t, K):
-    """이번 주 요약: 숫자는 engine 이 세고, Claude 는 그 숫자로 문장만 쓴다."""
+    """이번 주 요약: 숫자는 engine 이 세고, Claude 는 그 숫자로 문장만 쓴다. [이번 주 요약 만들기]는 홈 맨 위에 있다."""
     key = f"week{t.id}"
-    if st.button("이번 주 요약 만들기"):
+    if st.session_state.pop("_make_week", False):
         with st.spinner("이번 주 기록을 세는 중이에요..."):
             try:
                 st.session_state[key] = engine.week_summary(t, llm.MODELS[0], K)
@@ -996,9 +1490,9 @@ def week(t, K):
     lines, facts = st.session_state[key]
     with st.container(border=True):
         st.caption("이번 주 요약: 오늘까지 7일과 그 전 7일")
-        for i, line in enumerate(lines):
-            st.write(line["text"])
-            rows = engine.records_by_id(K, {f"r{x}" for x in line["ids"]})
+        for i, line_ in enumerate(lines):
+            st.write(line_["text"])
+            rows = engine.records_by_id(K, {f"r{x}" for x in line_["ids"]})
             if rows:
                 with st.expander(f"근거 기록 {len(rows)}줄"):
                     pick_table(pd.DataFrame(rows), f"wk{i}")
@@ -1108,6 +1602,7 @@ def paper_row(t, K, s, show_type):
                     if ok:
                         forget(t)
                         st.session_state.pop("_space_seen", None)
+                        fresh_queue()
                         st.session_state._goto = "확인"
                         st.rerun()
         if mine:
@@ -1212,6 +1707,7 @@ def read_file(t, key="up"):
                 return
         forget(t)
         st.session_state.pop("_space_seen", None)  # 새 종이를 읽으면 워크스페이스 설정을 다시 본다
+        fresh_queue()
         st.session_state._goto = "확인"
         st.rerun()
 
@@ -1221,6 +1717,7 @@ CHECK_CSS = """<style>
 /* 원본은 카드를 내려도 화면 위에 붙어 있다. 쪽 그림은 화면 높이에 맞춘다 */
 [data-testid="stLayoutWrapper"]:has(> .st-key-orig) {position: sticky; top: 16px;}
 [data-testid="stMain"] {overflow-anchor: none;}  /* 카드를 눌러 다시 그리는 동안 화면이 맨 아래로 밀리지 않게 */
+[data-testid="stMain"]::before {box-shadow: none !important;}  /* 단축키로 답한 뒤 화면 둘레에 생기는 테두리(본문 포커스 표시) */
 .st-key-orig {max-height: calc(100vh - 32px); overflow-y: auto; container-type: inline-size;}
 .st-key-orig_zoom img {border: 1px solid #E4E4E7; border-radius: 6px;}
 .st-key-orig_page {align-items: center;}
@@ -1232,72 +1729,344 @@ CHECK_CSS = """<style>
 [class*="st-key-look"] {position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; z-index: 1; margin: 0 !important;}
 [class*="st-key-look"] [data-testid="stButton"], [class*="st-key-look"] button {width: 100%; height: 100%; min-height: 0;}
 [class*="st-key-look"] button {opacity: 0; cursor: pointer;}
-[class*="st-key-card"] :is([data-testid="stButton"], [data-testid="stTextInput"]):not([class*="st-key-look"] *) {position: relative; z-index: 2;}
+[class*="st-key-card"] :is([data-testid="stButton"], [data-testid="stTextInput"], [data-testid="stDataFrame"], [data-testid="stCheckbox"]):not([class*="st-key-look"] *) {position: relative; z-index: 2;}
+/* 진행 막대: 칸 하나가 카드 한 장 */
+.ps-prog {display: flex; align-items: center; gap: 16px; margin: 2px 0 6px;}
+.ps-prog .bar {flex: 1; display: flex; gap: 4px; height: 6px;}
+.ps-prog .bar i {flex: 1; border-radius: 3px; background: #E4E4E7;}
+.ps-prog .bar i.on {background: #0F766E;} .ps-prog .bar i.now {background: #5EEAD4;}
+.ps-prog .bar.line {background: #E4E4E7; border-radius: 3px;} .ps-prog .bar.line b {display: block; height: 6px; border-radius: 3px; background: #0F766E;}
+.ps-prog span {font-size: 13px; color: #71717A; white-space: nowrap;} .ps-prog span b {color: #111827; margin-right: 8px;}
+/* 한 장씩: 다음 카드 목록, 비슷한 카드 묶음 */
+.st-key-nextlist {gap: 0 !important; padding: 6px !important;}
+.st-key-nextlist button {justify-content: flex-start; min-height: 0; padding: 7px 10px; border-radius: 8px; text-align: left;}
+.st-key-nextlist button > div, .st-key-nextlist button [data-testid="stMarkdownContainer"] {justify-content: flex-start; width: 100%;}
+.st-key-nextlist button p {text-align: left; font-size: 13.5px; line-height: 19px;}
+.st-key-nextlist button:hover {background: var(--ps-hover-bg);}
+.st-key-offer {border-color: #99F6E4 !important; background: var(--ps-accent-bg);}
+.st-key-done_card {border-color: #0F766E !important; box-shadow: 0 0 0 1px #0F766E; padding: 24px !important;}
+.ps-done-k {font-size: 13px; color: #71717A;} .ps-done-t {font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 4px 0;}
+/* 맡기기 카드 */
+.ps-chips {display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 4px 0 10px;}
+.ps-chip {display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12.5px; color: #71717A;}
+.ps-chip b {font-weight: 600; font-size: 13px; color: #115E59; background: #F0FDFA; border: 1px solid #99F6E4; border-radius: 999px; padding: 3px 12px;}
+.ps-chip-next {font-size: 13px; color: #71717A; padding-bottom: 22px;}
+.ps-trust {background: #FAFAFA; border: 1px solid #E4E4E7; border-radius: 10px; padding: 12px 16px; margin-bottom: 8px;}
+.ps-trust p {margin: 4px 0; font-size: 14px; line-height: 22px;} .ps-trust p b {margin-right: 8px;}
+.ps-mode {font-size: 13px; padding: 3px 10px; border-radius: 6px; background: #F4F4F5; color: #52525B; white-space: nowrap;}
+.ps-mode.on {background: #F0FDFA; color: #115E59; font-weight: 600;}
 </style>"""
+MODES = ["한 장씩", "모아 보기"]
 
 
-def check(t, K):
-    qs = sorted(engine.pending(t, engine.CHECK), key=lambda q: q["id"] in st.session_state.get("later", set()))
-    if not qs and not K["types"]:
-        st.header("확인")
-        empty()
+def card_title(q):
+    """다음 카드 목록의 한 줄: 카드 종류와 무엇을 묻는지."""
+    P, k = q["payload"], q["kind"]
+    what = (P.get("label") if k in ("칸", "같은 칸", "애매한 값") else P.get("type") if k in ("종류", "읽은 값", "맡기기")
+            else P.get("class") if k in engine.ENTITY else f"{ref_text(P['from'])} → {ref_text(P['to'])}" if k == "연결" else "")
+    return f"{CAPTION[k]} · {what}" if what else CAPTION[k]
+
+
+def queue(t):
+    """확인할 카드 순서: 워크스페이스 설정 → 종이마다(종류 → 칸·같은 칸 → 읽기 애매한 칸 → 읽은 값) → 맡기기 → 대상 → 관계.
+    [나중에]를 누른 카드는 맨 뒤로."""
+    qs = engine.pending(t, engine.CHECK)
+    first = {}
+    for q in qs:
+        if q["kind"] in engine.ENTRY:
+            first.setdefault(q["source_input_id"], q["id"])
+    step = {"종류": 0, "칸": 1, "같은 칸": 1, "애매한 값": 2, "읽은 값": 3}
+    later_ = st.session_state.get("later", set())
+
+    def rank(q):
+        k = q["kind"]
+        group = (0, 0, 0) if k == "워크스페이스 설정" else (1, first[q["source_input_id"]], step[k]) if k in engine.ENTRY \
+            else (2, 0, 0) if k == "맡기기" else (3, 0, 0) if k in engine.ENTITY else (4, 0, 0)
+        return q["id"] in later_, group, q["id"]
+    return sorted(qs, key=rank)
+
+
+def track(qs):
+    """이번 접속에서 본 카드로 진행을 센다: (답한 수, 모두). 다 답한 뒤 새 카드가 오면 처음부터 센다."""
+    S = st.session_state
+    if qs and S.pop("_q_finished", False):
+        S.pop("_seen_q", None)
+        S.pop("_q_steps", None)
+    seen = S.setdefault("_seen_q", set())
+    seen |= {q["id"] for q in qs}
+    done_n = len(seen) - len(qs)
+    steps = S.setdefault("_q_steps", [(time.time(), done_n)])
+    if done_n > steps[-1][1]:
+        steps.append((time.time(), done_n))
+    return done_n, len(seen)
+
+
+def eta(left):
+    """남은 시간: 이번 접속에서 카드 한 장에 든 시간(한 번에 90초까지만 센다) × 남은 수. 아직 답한 것이 없으면 빈칸."""
+    steps = st.session_state.get("_q_steps") or []
+    n = steps[-1][1] - steps[0][1] if steps else 0
+    if not n or not left:
+        return ""
+    spent = sum(min(b[0] - a[0], 90 * (b[1] - a[1])) for a, b in zip(steps, steps[1:]))
+    sec = spent / n * left
+    return "1분 안에 끝나요" if sec < 60 else f"약 {math.ceil(sec / 60)}분 남음"
+
+
+def progress(done_n, total):
+    left = total - done_n
+    if total <= 24:
+        bar = '<div class="bar">' + "".join(f'<i class="{"on" if i < done_n else "now" if i == done_n else ""}"></i>' for i in range(total)) + "</div>"
+    else:
+        bar = f'<div class="bar line"><b style="width:{done_n / total:.0%}"></b></div>'
+    st.html(f'<div class="ps-prog">{bar}<span><b>{min(done_n + 1, total)} / {total}</b>{eta(left)}</span></div>')
+
+
+def similar(qs):
+    """한꺼번에 답할 수 있는 카드 묶음: 같은 종이의 새 칸(또는 같은 칸) 중 읽기 애매한 값이 없는 칸 3장 이상. {(종이, 종류): [카드]}"""
+    unsure = {(u["source_input_id"], u["payload"]["label"]) for u in qs if u["kind"] == "애매한 값"}
+    groups = {}
+    for q in qs:
+        if q["kind"] in ("칸", "같은 칸") and answerable(q) and (q["source_input_id"], q["payload"]["label"]) not in unsure \
+                and not (q.get("evidence") or {}).get("user"):
+            groups.setdefault((q["source_input_id"], q["kind"]), []).append(q)
+    return {k: v for k, v in groups.items() if len(v) >= 3}
+
+
+def answer_many(t, qs):
+    """[고른 N개 맞아요]: 묶음에서 고른 카드마다 [추가]·[같은 칸]을 누른 것과 같다."""
+    for q in qs:
+        (engine.answer_prop if q["kind"] == "칸" else engine.answer_same)(t, q, True)
+    st.session_state.pop("_batch", None)
+
+
+def batch_view(t, items):
+    kind = items[0]["kind"]
+    with st.container(border=True, key="card_batch"):
+        st.caption(f"비슷한 카드 {len(items)}개 · 같은 종이의 {CAPTION[kind]}")
+        st.write(f"**AI가 모두 또렷하게 읽은 {CAPTION[kind]} {len(items)}개예요. 한꺼번에 답할까요?**")
+        st.caption("맞지 않는 것은 체크를 빼 두세요. 뺀 카드는 한 장씩 다시 물어요.")
+        for q in items:
+            P = q["payload"]
+            what = (f"'{P['label']}' → '{P['type']}'에 '{P['name']}' 칸({engine.DTYPE_KO[P['dtype']]}) 추가" if kind == "칸"
+                    else f"'{P['label']}' = '{P['type']}'의 '{P['similar_to']}' 칸")
+            st.checkbox(f"{what} · 읽은 값 예: {samples(t, q)}", value=True, key=f"bt{q['id']}")
+        chosen = [q for q in items if st.session_state.get(f"bt{q['id']}", True)]
+        row = st.container(horizontal=True, horizontal_alignment="right")
+        row.button("하나씩 볼게요", key="bt_back", on_click=lambda: st.session_state.pop("_batch", None))
+        row.button(f"고른 {len(chosen)}개 맞아요", key="bt_yes", type="primary", shortcut="Enter", disabled=not chosen,
+                   on_click=act, args=(answer_many, t, chosen), kwargs={"done": f"{len(chosen)}개를 반영했어요."})
+
+
+def paper_panel(t, K, sid, mine, pick):
+    """왼쪽 원본: 사진·PDF 는 읽은 글자를 겹쳐 보거나 원본만, 표는 전체 표. mine: 이 종이의 카드, pick: 고른 카드 id."""
+    src = (t.get("source_inputs", select="channel,name,storage_path", id=f"eq.{sid}") or [None])[0]
+    if not src:
+        st.caption("원본을 찾지 못했어요.")
         return
-    st.button("← 올리기로", on_click=go, args=("올리기",))
-    st.header(f"확인할 것 {len(qs)}개")
-    if not qs and first_run() == 2:  # 첫 바퀴: 다 답하면 바로 내 기록으로
-        st.session_state._goto = "홈"
-        st.rerun()
-    if not qs:
-        st.success("홈에서 기록을 보세요.", title="확인할 것이 없어요")
-        recent(t, K)
-        st.button("홈으로", on_click=go, args=("홈",))
-        return
-    st.warning("원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.", title="AI가 읽고 제안한 것만 물어요")
-    for q in [q for q in qs if q["kind"] == "워크스페이스 설정"]:  # 첫 종이를 읽으면 워크스페이스 설정부터
+    q = next((x for x in mine if x["id"] == pick), None)
+    label = q["payload"].get("label") if q else None
+    picked = card_spans(t, q) if label else []
+    if st.session_state.get("_picked") != pick:  # 새로 고른 카드가 적힌 쪽으로 넘긴다
+        st.session_state._picked = pick
+        st.session_state._cell = None
+        if src["channel"] == "사진" and (found := next((f for f in located(src["storage_path"], picked) if f), None)):
+            st.session_state[f"page{sid}"] = found[0]
+    unsure = [s for x in mine if x["kind"] == "애매한 값" for s in card_spans(t, x)[:1]]
+    with st.container(border=True, key="orig"):
+        if src["channel"] == "사진":
+            show_page(t, K, src, sid, picked, unsure, mine)
+        else:
+            show_table(t, src, sid, label, picked[0] if picked else None)
+
+
+def selected_css(pick):
+    return CHECK_CSS + (f"<style>.st-key-card{pick} {{border-color: {COLOR['type_fill']} !important; background: var(--ps-accent-bg);"
+                        f" box-shadow: 0 0 0 1px {COLOR['type_fill']}, 0 2px 6px rgba(0, 0, 0, 0.06);}}"
+                        f" .st-key-nx{pick} button {{background: var(--ps-accent-bg); color: var(--ps-accent-text);}}"
+                        f" .st-key-nx{pick} button p {{font-weight: 600;}}</style>" if pick else "")
+
+
+def one_by_one(t, K, qs):
+    """한 장씩: 카드 한 장과 그 종이의 원본, 오른쪽에 다음 카드와 비슷한 카드 묶음. Enter · Backspace · L 로 답한다."""
+    ids = {q["id"]: q for q in qs}
+    cur = ids.get(st.session_state.get("_pick")) or qs[0]
+    groups = similar(qs)
+    batch = st.session_state.get("_batch")
+    st.html(selected_css(cur["id"]))
+    paper = cur["kind"] in engine.ENTRY and cur.get("source_input_id")
+    cols = st.columns([3, 2, 1.15] if paper else [3.4, 1.15])
+    if paper:
+        with cols[0]:
+            mine = [q for q in qs if q.get("source_input_id") == cur["source_input_id"] and q["kind"] in engine.ENTRY]
+            paper_panel(t, K, cur["source_input_id"], mine, cur["id"])
+    with cols[-2]:
+        if batch in groups:
+            batch_view(t, groups[batch])
+        else:
+            KEYS.append(1)
+            card(t, K, cur)
+            KEYS.clear()
+            st.caption("Enter 맞아요 · Backspace 아니요 · L 나중에" + (" · 숫자 키 후보 고르기" if cur["kind"] == "애매한 값" else ""))
+    with cols[-1]:
+        st.caption("다음 카드")
+        with st.container(border=True, key="nextlist"):
+            for q in qs[:8]:
+                st.button(card_title(q), key=f"nx{q['id']}", type="tertiary", width="stretch", on_click=pick_card, args=(q["id"],))
+            if len(qs) > 8:
+                st.caption(f"그 밖에 {len(qs) - 8}개")
+        for key, items in groups.items():
+            if key == batch:
+                continue
+            with st.container(border=True, key=f"offer_{key[0]}_{'same' if key[1] == '같은 칸' else 'new'}"):
+                st.write(f"**비슷한 카드 {len(items)}개**")
+                st.caption(f"같은 종이의 {CAPTION[key[1]]} · 읽기 애매한 값이 없어요")
+                st.button(f"{len(items)}개 한꺼번에 보기", key=f"of{key[0]}{key[1]}", type="primary", width="stretch",
+                          on_click=lambda k=key: st.session_state.update(_batch=k))
+
+
+def all_cards(t, K, qs):
+    """모아 보기: 첫 종이의 카드를 원본과 나란히 모두 펼치고, 대상·관계·맡기기 제안은 아래에."""
+    for q in [q for q in qs if q["kind"] == "워크스페이스 설정"]:
         card(t, K, q)
     entry = [q for q in qs if q["kind"] in engine.ENTRY]
     if entry:
         sid = entry[0]["source_input_id"]
-        src = t.get("source_inputs", select="channel,name,storage_path", id=f"eq.{sid}")[0]
         mine = [q for q in entry if q["source_input_id"] == sid]
         spans = spans_of(t.id, sid)
-        marks = {q["id"]: spans.get(q["payload"].get("label")) or [] for q in mine}
         pick = st.session_state.get("_pick")
-        if not marks.get(pick):  # 처음 왔거나 고른 카드에 답했으면 적힌 곳이 있는 첫 카드
-            pick = next((i for i, m in marks.items() if m), None)
-        picked = marks.get(pick) or []
-        if st.session_state.get("_picked") != pick:  # 새로 고른 카드가 적힌 쪽으로 넘긴다
-            st.session_state._picked = pick
-            if src["channel"] == "사진" and (found := next((f for f in located(src["storage_path"], picked) if f), None)):
-                st.session_state[f"page{sid}"] = found[0]
-        unsure = [next((s for s in marks[q["id"]] if s["value"] == q["payload"].get("value")), marks[q["id"]][0])
-                  for q in mine if q["kind"] == "애매한 값" and marks[q["id"]]]
-        st.html(CHECK_CSS + (f"<style>.st-key-card{pick} {{border-color: {COLOR['type_fill']} !important; background: var(--ps-accent-bg);"
-                             f" box-shadow: 0 0 0 1px {COLOR['type_fill']}, 0 2px 6px rgba(0, 0, 0, 0.06);}}</style>" if pick else ""))
+        if pick not in {q["id"] for q in mine}:  # 처음 왔거나 고른 카드에 답했으면 적힌 곳이 있는 첫 카드
+            pick = next((q["id"] for q in mine if spans.get(q["payload"].get("label"))), mine[0]["id"])
+        st.html(selected_css(pick))
         left, right = st.columns([3, 2])
-        with left, st.container(border=True, key="orig"):
-            if src["channel"] == "사진":
-                show_page(src, sid, picked, unsure)
-            else:
-                label = next((q["payload"]["label"] for q in mine if q["id"] == pick), None)
-                show_table(t, src, sid, label, picked[0] if picked else None)
+        with left:
+            paper_panel(t, K, sid, mine, pick)
         with right:
             for q in mine:
                 card(t, K, q)
         if len(entry) > len(mine):
             st.caption(f"다른 입력의 확인할 것 {len(entry) - len(mine)}개가 이어서 나와요.")
-    ents = [q for q in qs if q["kind"] in engine.ENTITY]
-    if ents:
-        st.subheader("대상")
-        for q in ents:
-            card(t, K, q)
-    links = [q for q in qs if q["kind"] == "연결"]
-    if links:
-        st.subheader("관계 제안")
-        for q in links:
-            card(t, K, q, label=False)
+    for title_, kinds, label in (("맡기기 제안", ["맡기기"], False), ("대상", engine.ENTITY, True), ("관계 제안", ["연결"], False)):
+        group = [q for q in qs if q["kind"] in kinds]
+        if group:
+            st.subheader(title_)
+            for q in group:
+                card(t, K, q, label=label)
+
+
+def fresh_queue():
+    """새 종이를 읽으면 확인 진행을 처음부터 센다."""
+    for k in ("_seen_q", "_q_steps", "_q_finished", "_pick", "_batch"):
+        st.session_state.pop(k, None)
+
+
+def leave_done():
+    fresh_queue()
+    go("홈")
+
+
+def finished(t, K, done_n):
+    """다 답하면: 이번에 답한 카드로 생긴 것을 코드가 세서 보여 주고 홈으로 이어 준다."""
+    st.session_state._q_finished = True
+    if not done_n:
+        st.success("홈에서 기록을 보세요.", title="확인할 것이 없어요")
+        return
+    s = engine.answered_summary(t, K, sorted(st.session_state.get("_seen_q", set())))
+    parts = ([f"기록 {s['records']}줄이 생겼어요"] if s["records"] else []) + [f"{w} {s[k]}개" for k, w in (
+        ("types", "기록 종류"), ("props", "칸"), ("fixed", "고친 값"), ("entities", "대상"), ("links", "관계")) if s[k]]
+    parts = parts or ["답한 것이 모두 반영됐어요"]
+    with st.container(border=True, key="done_card"):
+        st.html(f'<div class="ps-done-k">이번에 답한 카드 {done_n}개</div><div class="ps-done-t">오늘 확인 끝</div>')
+        st.write(" · ".join(parts))
+        st.caption("다음: 홈의 '오늘 먼저 볼 것'에서 오늘 챙길 것을 봐요.")
+        st.button("홈으로", key="done_home", type="primary", shortcut="Enter", on_click=leave_done)
+
+
+def ask_reopen(sid):
+    toggle("auto_open", sid)
+
+
+def trust_panel(t, K):
+    """AI에게 맡기는 정도: 사진 종이가 있는 기록 종류마다 지금 정도와 근거. 바꾸는 것은 카드로만."""
+    info = {T: v for T, v in trust_info(t, K).items() if v["total"] or K["trust"].get(T) == engine.TRUST[1]}
+    if not info:
+        return
+    st.subheader("AI에게 맡기는 정도")
+    st.caption("기록 종류마다 정해요. 같은 양식의 종이를 고친 값 없이 이어서 맞게 읽으면, 바로 반영할지 카드로 물어요.")
+    with st.container(border=True):
+        for T, v in info.items():
+            on = K["trust"].get(T) == engine.TRUST[1]
+            a, b, c, d = st.columns([2, 2.2, 1.4, 2.4], vertical_alignment="center")
+            a.write(f"**{T}**")
+            b.caption(f"연속 {v['streak']}장 맞음 · 고친 종이 {v['fixes'] if on else v['unclean']}장")
+            c.html(f'<span class="ps-mode{" on" if on else ""}">{K["trust"].get(T, engine.TRUST[0])}</span>')
+            if on:
+                d.button("매번 묻기로", key=f"tdown{T}", on_click=act, args=(engine.user_trust_down, t, T),
+                         kwargs={"done": "카드로 올렸어요. [맞아요]를 누르면 바뀌어요."}, disabled=not answerable({"kind": "맡기기"}))
+            elif any(q["payload"]["type"] == T for q in engine.pending(t, ["맡기기"])):
+                d.caption("위 '맡기기 제안' 카드에 답하면 바뀌어요.")
+            else:
+                d.caption(f"{max(0, engine.TRUST_N - v['streak'])}장 더 맞으면 제안해요.")
+
+
+def auto_panel(t, K):
+    """AI가 바로 반영한 것: 맡긴 종류의 종이는 7일 동안 [되돌리기]로 다시 확인 중으로 돌린다(바뀌는 것을 보고 [적용])."""
+    rows = engine.auto_papers(t) if t else []
+    if not rows:
+        return
+    st.subheader("AI가 바로 반영한 것")
+    st.caption(f"{engine.UNDO_DAYS}일 안에는 되돌려서 다시 확인할 수 있어요.")
+    with st.container(border=True):
+        for s in rows:
+            a, b, c = st.columns([3, 3, 1.2], vertical_alignment="center")
+            a.html(f'<div class="ps-paper"><b>{html.escape(s["name"] or "이름 없음")}</b><span>{html.escape(s["type"])} · {when(s["created_at"])}</span></div>')
+            b.caption(f"기록 {s['rows']}줄 · 또렷한 칸 {s['cells']}개 바로 반영")
+            c.button("되돌리기", key=f"auto{s['id']}", on_click=ask_reopen, args=(s["id"],), width="stretch",
+                     disabled=t.role not in (None, *db.ANSWER))
+            if st.session_state.get("auto_open") == s["id"]:
+                ids, lines = engine.delete_impact(t, K, s["id"])
+                with st.container(border=True, key=f"card_reopen{s['id']}"):
+                    st.write(f"**'{s['name']}'를 다시 확인 중으로 돌릴까요?**")
+                    st.caption(f"기록 {len(ids)}줄이 '읽은 값' 카드에 답할 때까지 홈·대시보드에서 빠져요.")
+                    for line in lines:
+                        st.caption(line)
+                    row = st.container(horizontal=True, horizontal_alignment="right")
+                    row.button("아니요", key=f"rno{s['id']}", on_click=ask_reopen, args=(s["id"],))
+                    row.button("적용", key=f"ryes{s['id']}", type="primary", on_click=reopen_paper, args=(t, s["id"]))
+
+
+def reopen_paper(t, sid):
+    st.session_state.auto_open = None
+    st.session_state._pick = None
+    act(engine.reopen, t, sid, done="다시 확인 중으로 돌렸어요. 위 카드에 답해 주세요.")
+
+
+def check(t, K):
+    qs = queue(t) if t else []
+    if not qs and not K["types"]:
+        st.header("확인")
+        empty()
+        return
+    done_n, total = track(qs)
+    st.button("← 올리기로", on_click=go, args=("올리기",))
+    head, mode_col = st.columns([4, 1.3], vertical_alignment="bottom")
+    head.header(f"확인할 것 {len(qs)}개")
+    mode = mode_col.segmented_control("보기", MODES, default=MODES[0], required=True, key="check_mode",
+                                      label_visibility="collapsed", width="stretch") if qs else None
+    if not qs and first_run() == 2:  # 첫 바퀴: 다 답하면 바로 내 기록으로
+        st.session_state._goto = "홈"
+        st.rerun()
+    if not qs:
+        st.html(CHECK_CSS)
+        finished(t, K, done_n)
+    else:
+        st.caption("AI가 읽고 제안한 것만 물어요. 원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.")
+        progress(done_n, total)
+        (one_by_one if mode == MODES[0] else all_cards)(t, K, qs)
+    trust_panel(t, K)
+    auto_panel(t, K)
     recent(t, K)
-    st.button("홈으로", on_click=go, args=("홈",))
+    if qs or not done_n:  # 다 답한 화면은 위 카드에 [홈으로]가 있다
+        st.button("홈으로", on_click=go, args=("홈",))
 
 
 FN_KO = {"count": "줄 수", "sum": "합계", "avg": "평균", "min": "가장 작은 값", "max": "가장 큰 값", "latest": "가장 최근 값"}
@@ -2174,7 +2943,7 @@ DUMMY = {4: "4-시험-제조점검", 3: "3-시험-생산검사", 1: "1-시험-�
 
 
 def match(row, key, cond):
-    """PostgREST 조건 한 개(eq.값, neq.값, in.(a,b), is.null, not.조건)를 메모리의 줄에 맞춘다."""
+    """PostgREST 조건 한 개(eq.값, neq.값, in.(a,b), is.null, gte.값 등, not.조건)를 메모리의 줄에 맞춘다."""
     op, _, val = cond.partition(".")
     if op == "not":
         return not match(row, key, val)
@@ -2187,6 +2956,11 @@ def match(row, key, cond):
         return str(v) in [x.strip('"') for x in val.strip("()").split(",")]
     if op == "is":
         return v is None if val == "null" else str(v).lower() == val
+    if op in ("gte", "gt", "lte", "lt"):  # 날짜·시각(ISO 글)과 숫자
+        if v is None:
+            return False
+        a, b = (float(v), float(val)) if isinstance(v, (int, float)) else (str(v), val)
+        return {"gte": a >= b, "gt": a > b, "lte": a <= b, "lt": a < b}[op]
     return True
 
 

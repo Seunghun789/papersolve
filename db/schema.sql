@@ -74,6 +74,7 @@ create table public.object_types (           -- 기록 종류(재고 점검, 고
   name text not null,
   kind text not null default '기록' check (kind in ('기록', '대상')),
   parent_name text,                          -- 대상 분류의 상위 분류 (예: 식품 → 품목)
+  trust text not null default '매번 묻기' check (trust in ('매번 묻기', '애매한 것만 묻기')),  -- 기록 종류의 사진 종이를 AI에게 맡기는 정도. '맡기기' 카드로만 바뀐다
   created_at timestamptz not null default now(),
   unique (tenant_id, name)
 );
@@ -154,7 +155,8 @@ create table public.source_inputs (          -- 올린 사진이나 파일 1개,
   channel text not null check (channel in ('사진', '파일', '직접 입력')),
   name text,
   storage_path text,
-  spans jsonb not null default '{}',          -- 읽은 칸 이름 → 원본 어디에 적혔나 [{page, quote, value, box}]. box 는 AI가 적은 자리(쪽의 0~1000 비율). 확인 화면이 원본 위에 상자로 보여 준다
+  spans jsonb not null default '{}',          -- 읽은 칸 이름 → 원본 어디에 적혔나 [{page, quote, value, box, rec, unsure, cand}]. box 는 AI가 적은 자리(쪽의 0~1000 비율), rec 는 이 종이의 몇 번째 기록(0부터, 종이 전체 칸은 없음), unsure 는 읽기 애매한 칸, cand 는 AI가 본 다른 후보 값. 확인 화면이 원본 위에 겹쳐 보여 준다
+  auto boolean not null default false,        -- '애매한 것만 묻기'로 맡긴 종류라 [맞아요] 없이 바로 반영한 종이. 7일 동안 되돌릴 수 있다
   created_by bigint references public.users(id),
   created_at timestamptz not null default now()
 );
@@ -178,7 +180,8 @@ create table public.proposals (
   id bigint generated always as identity primary key,
   tenant_id bigint not null references public.tenants(id) on delete cascade,
   kind text not null check (kind in ('종류', '칸', '같은 칸', '애매한 값', '연결', '지표', '업무',
-                                     '대상 분류', '대상', '같은 대상', '대상 속성', '속성 값', '상위 분류', '관계 속성', '칸 설정', '되돌리기', '워크스페이스 설정')),
+                                     '대상 분류', '대상', '같은 대상', '대상 속성', '속성 값', '상위 분류', '관계 속성', '칸 설정', '되돌리기', '워크스페이스 설정',
+                                     '읽은 값', '맡기기')),
   payload jsonb not null,
   evidence jsonb,
   status text not null default '대기' check (status in ('대기', '승인', '고침', '거절')),
