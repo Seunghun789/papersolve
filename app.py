@@ -364,11 +364,11 @@ def link_sentence(P):
 
 
 def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올린 기록)."):
-    if path and (engine.DATA / path).exists():
-        if path.lower().endswith(".pdf"):  # PDF 는 그림이 아니라 여기서 그리지 않는다
-            st.caption("PDF로 올린 기록이에요. 원본은 미리 보지 않아요.")
-        else:
-            st.image(str(engine.DATA / path), alt="원본 사진")
+    content = engine.original(path)
+    if content and path.lower().endswith(".pdf"):  # PDF 는 그림이 아니라 여기서 그리지 않는다
+        st.caption("PDF로 올린 기록이에요. 원본은 미리 보지 않아요.")
+    elif content:
+        st.image(content, alt="원본 사진")
     else:
         st.caption(note)
 
@@ -2306,7 +2306,7 @@ def save_org(oid):
     body = {f: st.session_state.get(f"org_{f}", "").strip() or None for f in ("name", "industry", "product", "website")}
     if photo := st.session_state.get("org_photo"):
         path = f"uploads/org_{oid}{os.path.splitext(photo.name)[1].lower()}"
-        (engine.DATA / path).write_bytes(photo.getvalue())
+        engine.save_file(path, photo.getvalue())
         body["photo_path"] = path
     db.call("PATCH", "orgs", {"id": f"eq.{oid}"}, body)
     st.toast("저장했어요.")
@@ -2326,8 +2326,8 @@ def org_info(t, uid):
         if can:
             btn.button("변경사항 저장하기", key="org_save", type="primary", on_click=save_org, args=(o["id"],), width="stretch")
         st.caption("조직 프로필 사진")
-        if o.get("photo_path") and (engine.DATA / o["photo_path"]).exists():
-            st.image(str(engine.DATA / o["photo_path"]), width=96)
+        if logo := engine.original(o.get("photo_path")):
+            st.image(logo, width=96)
         if can:
             st.file_uploader("조직 프로필 사진", type=["jpg", "jpeg", "png", "webp"], key="org_photo", label_visibility="collapsed",
                              help="JPG, PNG, WEBP 파일을 10MB까지 올릴 수 있어요.")

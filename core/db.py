@@ -33,6 +33,22 @@ def post(table, body, **params):
     return call("POST", table, params, body, prefer)
 
 
+STORAGE = env["SUPABASE_URL"].strip().rstrip("/") + "/storage/v1/object/uploads/"  # 비공개 버킷 'uploads'
+
+
+def put_file(path, content):
+    """올린 원본을 Supabase Storage 에 둔다. 같은 경로면 덮어쓴다."""
+    res = requests.post(STORAGE + path, headers={**HEADERS, "Authorization": "Bearer " + HEADERS["apikey"],
+                                                 "x-upsert": "true"}, data=content, timeout=60)
+    res.raise_for_status()
+
+
+def get_file(path):
+    """Storage 의 원본. 없으면 None."""
+    res = requests.get(STORAGE + path, headers={**HEADERS, "Authorization": "Bearer " + HEADERS["apikey"]}, timeout=60)
+    return res.content if res.ok else None
+
+
 def new_tenant(name):
     return post("tenants", {"name": name})[0]
 

@@ -335,10 +335,30 @@ def now():
 
 # ---- A 수집 ----
 
+def save_file(path, content):
+    """원본을 Storage 에 올리고, 이 서버에도 사본을 둔다. 서버의 사본은 다시 켜면 사라지지만 Storage 는 남는다."""
+    db.put_file(path, content)
+    (DATA / path).parent.mkdir(parents=True, exist_ok=True)
+    (DATA / path).write_bytes(content)
+
+
+def original(path):
+    """원본 파일 내용. 서버에 사본이 없으면 Storage 에서 받아 사본을 둔다. 어디에도 없으면 None."""
+    if not path:
+        return None
+    if (DATA / path).exists():
+        return (DATA / path).read_bytes()
+    content = db.get_file(path)
+    if content:
+        (DATA / path).parent.mkdir(parents=True, exist_ok=True)
+        (DATA / path).write_bytes(content)
+    return content
+
+
 def save_source(t, channel, name, content):
     src = t.post("source_inputs", {"channel": channel, "name": name})
-    path = f"uploads/{t.id}-{src['id']}{Path(name).suffix.lower() or '.bin'}"
-    (DATA / path).write_bytes(content)
+    path = f"uploads/{t.id}-{src['id']}{Path(name).suffix.lower() or '.bin'}"  # Storage 에서도 워크스페이스 번호로 시작한다
+    save_file(path, content)
     t.patch("source_inputs", {"storage_path": path}, id=f"eq.{src['id']}")
     return src["id"], path
 
