@@ -343,8 +343,22 @@ def save_source(t, channel, name, content):
     return src["id"], path
 
 
+TABLES = (".csv", ".xlsx")  # 값을 파일 그대로 쓰는 표
+PAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".pdf")  # Claude 가 보고 읽는 사진·PDF
+
+
+def ingest(t, model, name, content):
+    """올린 파일 1개를 형식에 맞는 길로 읽는다. 읽을 길이 없는 형식은 안내 문장으로 멈춘다."""
+    ext = Path(name).suffix.lower()
+    if ext in TABLES:
+        return ingest_table(t, model, name, content)
+    if ext in PAGES:
+        return ingest_photo(t, model, name, content)
+    raise ValueError("이 파일은 아직 읽지 못해요. 종이를 찍은 사진, PDF, 엑셀, CSV로 올려 주세요.")
+
+
 def ingest_photo(t, model, name, photo):
-    """사진 1장 → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안."""
+    """사진 1장(또는 PDF 1개) → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안."""
     sheet = llm.extract(t, model, name, photo)
     sid, path = save_source(t, "사진", name, photo)
     day = (to_date(sheet["occurred_at"]) or date.today()).isoformat()
@@ -357,14 +371,15 @@ def ingest_photo(t, model, name, photo):
             rows.append({**doc, **{c["label"].strip(): c["value"].strip() for c in cells}})
             unsure.append(doc_unsure + [c["label"].strip() for c in cells if c["uncertain"]])
     if not rows:
-        raise RuntimeError("사진에서 읽은 칸이 없어요.")
+        raise RuntimeError("올린 종이에서 읽은 칸이 없어요.")
     stage(t, model, sid, sheet["title"], rows, unsure, [day] * len(rows), [path] * len(rows))
     return sid
 
 
-def ingest_csv(t, model, name, content):
-    """CSV 1개 → 행마다 기록 1개. 값은 파일 그대로 쓰고, 구조만 제안받는다."""
-    df = pd.read_csv(io.BytesIO(content), dtype=str).fillna("")
+def ingest_table(t, model, name, content):
+    """CSV·엑셀 1개 → 행마다 기록 1개. 값은 파일 그대로 쓰고, 구조만 제안받는다. 엑셀은 첫 시트를 읽는다."""
+    read = pd.read_excel if name.lower().endswith(".xlsx") else pd.read_csv
+    df = read(io.BytesIO(content), dtype=str).fillna("")
     sid, _ = save_source(t, "파일", name, content)
     photo_cols = [c for c in df if len(df) and df[c].str.lower().str.endswith((".jpg", ".jpeg", ".png")).all()]
     dates = [c for c in df if c not in photo_cols and infer_dtype(df[c]) == "date"]

@@ -10,3 +10,7 @@ requests==2.34.2
 Authlib==1.9.3
 # Google 로그인(st.login)이 Google 과 토큰을 주고받을 때 쓴다. Streamlit 로그인 기능에 Authlib 와 함께 필요하다 — app.py
 httpx==0.28.1
+# 엑셀(xlsx) 표 파일을 읽는다 — core/engine.py
+openpyxl==3.1.5
+# 큰 사진을 Claude 가 받는 크기로 줄인다(Streamlit 이 이미 함께 설치한다) — core/llm.py
+pillow==13.0.0

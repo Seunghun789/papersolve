@@ -1,6 +1,7 @@
 """모든 Claude 호출을 이 모듈 한 곳에 모은다 (메인 PRD v3.1 공통층: LLM 호출층).
 Claude 는 읽기·이름 붙이기·제안·조회 도구 고르기만 한다. 화면에 보이는 숫자는 engine 이 기록으로 센다."""
 import base64
+import io
 import json
 from datetime import date
 
@@ -85,12 +86,28 @@ EXTRACT_PROMPT = (
 )
 
 
+def as_image(photo):
+    """휴대폰 사진처럼 큰 사진은 긴 변 1568px JPEG 로 줄인다. Claude 는 그보다 큰 사진을 줄여 읽고, 한 장 5MB 를 넘으면 받지 않는다."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    try:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(photo)))
+    except UnidentifiedImageError:
+        raise ValueError("이 사진을 열지 못했어요. 다른 사진으로 다시 올려 주세요.") from None
+    img.thumbnail((1568, 1568))
+    out = io.BytesIO()
+    img.convert("RGB").save(out, "JPEG", quality=90)
+    return out.getvalue()
+
+
 def extract(t, model, name, photo):
-    mime = "image/png" if name.lower().endswith(".png") else "image/jpeg"
-    content = [
-        {"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.standard_b64encode(photo).decode()}},
-        {"type": "text", "text": EXTRACT_PROMPT},
-    ]
+    """사진이나 PDF 1개를 읽는다. PDF 는 쪽마다 Claude 가 직접 읽는다."""
+    if name.lower().endswith(".pdf"):
+        part = {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
+                                               "data": base64.standard_b64encode(photo).decode()}}
+    else:
+        part = {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                            "data": base64.standard_b64encode(as_image(photo)).decode()}}
+    content = [part, {"type": "text", "text": EXTRACT_PROMPT}]
     return ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}")
 
 

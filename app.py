@@ -30,7 +30,6 @@ st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent
 st.markdown("""<style>
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
 .st-key-close_sidebar, .st-key-remember {display: none;}
-.st-key-cv_on0 {border: 2px solid #0F766E !important;}
 /* 메뉴: 단계 이름 아래 왼쪽 정렬 버튼, 고른 메뉴는 메뉴 폭 전체를 칠한다 */
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: 2px;}
 [data-testid="stPopoverBody"]:has(.st-key-ws_menu) {padding: 10px 10px 8px; min-width: 260px; max-width: 280px;}
@@ -82,26 +81,12 @@ section[data-testid="stSidebar"] [class*="st-key-nav_"] button:hover {background
 section[data-testid="stSidebar"] [class*="st-key-navon_"] button {background: var(--ps-accent-bg); color: var(--ps-accent-text);}
 section[data-testid="stSidebar"] [class*="st-key-navon_"] button p {font-weight: 600;}
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14px 0 2px 4px;}
-/* 올리기 네 칸의 ① 칸: 끌어 놓는 칸을 크게, 안내는 한 줄 */
-.st-key-cv_on0 [data-testid="stFileUploaderDropzone"] {flex-direction: column; justify-content: center; align-items: center;
-  min-height: 200px; gap: 12px; text-align: center;}
-.ps-arrow-big {text-align: center; color: #A1A1AA; font-size: 18px;}
-/* 올리기 네 칸: 넓은 화면은 와이어프레임 비율(가로 1 : 세로 1.9), 좁은 화면은 내용만큼 쌓고 화살표를 아래로 */
-@media (min-width: 769px) {.st-key-cv_on0, [class*="st-key-cv_off"] {aspect-ratio: 1 / 1.9; min-height: 400px;}}
-@media (max-width: 768px) {.ps-arrow-big {transform: rotate(90deg); line-height: 1;}}
-.st-key-cv_on0 [data-testid="stFileUploaderDropzoneInstructions"]::after {content: "사진이나 CSV를 여기로 끌어 놓으세요";}
-/* 파일을 고른 뒤: 끌어 놓는 칸은 작게, 미리보기는 낮게, 칸은 내용만큼 늘어나 [읽기 시작]과 진행 글이 칸 안에 남는다 */
-.st-key-cv_on0:has(.st-key-cv_picked) {aspect-ratio: auto; height: auto;}
-.st-key-cv_picked [data-testid="stFileUploaderDropzone"] {min-height: 0; padding: 8px;}
-.st-key-cv_picked [data-testid="stFileUploaderDropzoneInstructions"] {display: none;}
-.st-key-cv_picked img {max-height: 180px; object-fit: contain;}
 .ps-logo {font-size: 26px; font-weight: 400; letter-spacing: -0.01em; padding: 0.5rem 0 1rem;}
 .ps-logo b {font-weight: 600;}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
 .ps-steps .ps-on {padding: 4px 10px; border: 1px solid #0F766E; border-radius: 8px; background: var(--ps-accent-bg);
   color: var(--ps-accent-text); font-weight: 600;}
-.ps-steps .ps-off, .ps-steps .ps-arrow {color: #A1A1AA;}  /* 첫 바퀴 캔버스: 지금 할 칸 */
-[class*="st-key-cv_off"] {opacity: 0.55;}                  /* 아직 오지 않은 칸 */
+.ps-steps .ps-off, .ps-steps .ps-arrow {color: #A1A1AA;}
 .ps-skel {height: 12px; border-radius: 4px; background: #F4F4F5; margin: 0 0 12px 0;}  /* 사이드바를 접는 스크립트 칸은 자리를 차지하지 않게 */
 @media (min-width: 769px) {
 [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
@@ -126,7 +111,7 @@ section[data-testid="stSidebar"] h3 {font-size: 18px !important; font-weight: 70
 [data-testid="stFileUploaderDropzone"] button * {display: none;}
 [data-testid="stFileUploaderDropzone"] button::after {content: "파일 고르기";}
 [data-testid="stFileUploaderDropzoneInstructions"] * {display: none;}
-[data-testid="stFileUploaderDropzoneInstructions"]::after {content: "200MB까지 · 사진(PNG, JPG) 또는 CSV"; font-size: 0.8rem; color: var(--ps-text-muted);}
+[data-testid="stFileUploaderDropzoneInstructions"]::after {content: "한 번에 30MB까지"; font-size: 0.8rem; color: var(--ps-text-muted);}
 </style>""", unsafe_allow_html=True)
 ERRORS = (anthropic.APIError, requests.RequestException, RuntimeError, KeyError, ValueError, pd.errors.ParserError)
 PAGES = ["홈", "올리기", "확인", "묻기", "지식그래프", "대상", "대시보드", "자동화"]
@@ -165,7 +150,7 @@ def fail(title, e):
     elif isinstance(e, anthropic.APIError):
         body = "AI가 답하지 못했어요. 잠시 뒤 다시 눌러 주세요."
     elif isinstance(e, pd.errors.ParserError):
-        body = "CSV를 읽지 못했어요. 쉼표로 나뉜 CSV 파일인지 확인해 주세요."
+        body = "표 파일을 읽지 못했어요. 첫 줄에 칸 이름이 있는 표인지 확인해 주세요."
     elif isinstance(e, (RuntimeError, ValueError)):
         body = str(e)
     else:
@@ -227,33 +212,10 @@ def upload_button():
     right.caption("종이 한 장이면 이 화면이 채워져요.")
 
 
-def canvas():
-    """올리기의 첫 화면: 종이 → 확인 → 내 기록 → 묻기 네 칸. 첫 칸에서 바로 올린다."""
-    waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
-    notes = ["", "칸 · 대상 · 관계를 확인해요", "표 · 지표 · 챙길 일로 쌓여요", "답과 근거 기록이 여기에 와요"]
-    cols = st.columns([10, 1, 10, 1, 10, 1, 10], gap="small", vertical_alignment="center")  # 칸 사이에 화살표
-    for arrow in cols[1::2]:
-        arrow.markdown('<div class="ps-arrow-big">→</div>', unsafe_allow_html=True)
-    for i, ((name, _), col) in enumerate(zip(STEPS, cols[::2])):
-        with col, st.container(border=True, key=f"cv_on{i}" if i == 0 else f"cv_off{i}"):
-            st.markdown(f"**{name}**")
-            if i == 0 and waiting:
-                st.caption("올린 종이를 읽었어요.")
-                st.button(f"확인할 것 {waiting}개", type="primary", on_click=go, args=("확인",), width="stretch")
-            elif i == 0:
-                read_file(tenant, key="cv")
-            else:
-                bars("100%", "70%", "100%", "55%", "100%")
-                st.caption(notes[i])
-
-
 def empty():
     """기록이 없을 때의 화면. 메뉴마다 채워졌을 때의 모양을 빈 틀로 보여 주고, 예시 데이터는 쓰지 않는다."""
     page = st.session_state.page
     st.caption(NOTE[page])
-    if page == "올리기":
-        canvas()
-        return
     if page == "홈":
         for i, col in enumerate(st.columns(3)):
             with col, st.container(border=True, height=CARD_H):
@@ -880,11 +842,8 @@ def upload(t, K):
     if t and t.role == "보는 사람":
         st.info("보는 사람은 종이를 올리거나 적지 않아요. 홈·대시보드·묻기에서 기록을 볼 수 있어요.")
         return
-    if not K["types"]:
-        empty()
-        return
-    st.caption("손글씨 사진이든 CSV든 그대로 올려 주세요. 무슨 기록인지 고르지 않아도 돼요.")
-    paper, write = st.tabs(["사진·CSV", "직접 적기"])
+    st.caption("손글씨 사진이든 파일이든 그대로 올려 주세요. 무슨 기록인지 고르지 않아도 돼요.")
+    paper, write = st.tabs(["사진·파일", "직접 적기"])
     with paper:
         read_file(t)
     with write:
@@ -933,24 +892,19 @@ def write_form(t, K):
 
 
 def read_file(t, key="up"):
-    box = st.container(key="cv_picked") if key == "cv" and st.session_state.get(f"{key}file") else st.container()
-    f = box.file_uploader("사진이나 CSV를 여기로 끌어 놓으세요", type=["png", "jpg", "jpeg", "csv"], key=f"{key}file",
-                         label_visibility="collapsed" if key == "cv" else "visible")
-    if f and not f.name.lower().endswith(".csv"):
-        box.image(f, caption=f.name, alt="올린 사진")
-    model = llm.MODELS[0]  # 처음 화면(네 칸)은 기본 모델로 읽는다
-    if key != "cv":
-        with st.expander("모델 고르기"):
-            model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
-    if st.button("읽기 시작", type="primary", key=f"{key}read", width="stretch" if key == "cv" else "content"):
+    f = st.file_uploader("사진이나 파일을 여기로 끌어 놓으세요", key=f"{key}file")  # 형식은 가리지 않고 받고, 읽을 때 고른다
+    if f and f.name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+        st.image(f, caption=f.name, alt="올린 사진")
+    with st.expander("모델 고르기"):
+        model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
+    if st.button("읽기 시작", type="primary", key=f"{key}read"):
         if not f:
             st.error("사진이나 파일을 먼저 넣어 주세요.")
             return
-        ingest = engine.ingest_csv if f.name.lower().endswith(".csv") else engine.ingest_photo
         with st.spinner("읽고 정리하는 중이에요..."):
             try:
                 t = t or new_account()  # 처음 올리는 사람은 이때 계정이 생긴다
-                ingest(t, model, f.name, f.getvalue())
+                engine.ingest(t, model, f.name, f.getvalue())
             except ERRORS as e:
                 fail("읽지 못했어요", e)
                 return
@@ -1820,6 +1774,13 @@ section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], hea
 .ps-loop::before {content: ""; position: absolute; left: -7px; top: -2px; border: 6px solid transparent; border-bottom: 9px solid #0F766E; border-top: none;}
 .ps-loop span {position: absolute; left: 50%; bottom: -0.8rem; transform: translateX(-50%); background: #FFFFFF; padding: 0 14px; white-space: nowrap; font-size: 0.95rem; color: #0F766E;}
 .ps-card {border-radius: 14px; padding: 28px 24px;}
+.ps-cv {min-height: 340px; display: flex; flex-direction: column;} .ps-cv b {margin-bottom: 18px;}
+.ps-cv .ps-skel {height: 12px; border-radius: 4px; background: #F4F4F5; margin: 0 0 12px;} .ps-cv:not(.on) {opacity: .7;}
+.ps-drop {flex: 1; border-radius: 10px; background: #F4F4F5; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; padding: 16px; text-align: center; min-height: 170px;}
+.ps-drop span {background: #FFFFFF; border: 1px solid #E4E4E7; border-radius: 8px; padding: 6px 14px; font-size: .9rem;}
+.ps-drop small {color: #71717A; font-size: .8rem; line-height: 1.5;}
+.ps-fakebtn {margin-top: 14px; background: #0F766E; color: #FFFFFF; border-radius: 8px; text-align: center; padding: 9px 0; font-size: .9rem;}
 .ps-card b {font-size: 1.15rem;} .ps-card p {font-size: 0.95rem; margin: 10px 0 0; line-height: 1.6;}
 @media (max-width: 768px) {.block-container {padding: 0.5rem 1.25rem 0;} .ps-hero h1 {margin-top: 8vh;} .ps-cards {grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8vh;}
   .ps-cards .ps-card::after {display: none;} .ps-loop {margin: 0 25% 8vh;} .ps-loop span {white-space: normal; text-align: center; width: 70vw;}}
@@ -1848,8 +1809,17 @@ LOGIN = """<style>
 .st-key-google button {background: #FFFFFF;} .st-key-kakao button {background: #FEE500; color: #191919; border: none;}
 @media (max-width: 768px) {.stApp {background: #FFFFFF;}}
 </style>"""
-STEP_CARDS = [("① 종이", "사진이나 CSV 한 장을 올려요"), ("② 확인", "AI가 찾은 칸 · 대상을 예/아니오로 확인해요"),
+STEP_CARDS = [("① 종이", "사진이나 파일 한 장을 올려요"), ("② 확인", "AI가 찾은 칸 · 대상을 예/아니오로 확인해요"),
               ("③ 내 기록", "표 · 지표 · 챙길 일로 쌓여요"), ("④ 묻기", "물으면 기록에서 센 답과 근거가 와요")]
+
+
+def canvas_cards():
+    """랜딩의 네 칸: 올리기 첫 화면 모양 그대로(① 끌어 놓는 칸, ②~④ 흐린 빈 틀). 누를 수는 없는 그림이다."""
+    skel = "".join(f'<div class="ps-skel" style="width:{w}"></div>' for w in ("100%", "70%", "100%", "55%", "100%"))
+    drop = ('<div class="ps-drop"><span>파일 고르기</span><small>사진이나 파일을 여기로 끌어 놓으세요</small></div>'
+            '<div class="ps-fakebtn">읽기 시작</div>')
+    return "".join(f'<div class="ps-card ps-cv{" on" if i == 0 else ""}"><b>{h}</b>{drop if i == 0 else skel + f"<p>{p}</p>"}</div>'
+                   for i, (h, p) in enumerate(STEP_CARDS))
 
 
 def step_cards():
@@ -2005,7 +1975,7 @@ def landing():
                 unsafe_allow_html=True)
     st.button("바로 써 보기  →", key="go", type="primary", on_click=enter)
     st.markdown('<div class="ps-note">이메일로 1분이면 시작해요</div>'
-                f'<div class="ps-cards">{step_cards()}</div>'
+                f'<div class="ps-cards">{canvas_cards()}</div>'
                 '<div class="ps-loop"><span>④에서 다시 ① 종이로 · 올릴수록 묻는 건 줄고, 답은 정확해져요</span></div>'
                 '<div class="ps-glows"><div class="ps-glow ps-g1"></div><div class="ps-glow ps-g2"></div></div>', unsafe_allow_html=True)
     st.stop()

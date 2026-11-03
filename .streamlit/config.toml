@@ -1,5 +1,6 @@
 [server]
 enableStaticServing = true  # static/fonts 의 글꼴 파일을 앱이 직접 제공한다
+maxUploadSize = 30  # MB. Claude 가 한 번에 받는 PDF 는 32MB 까지라 그 안으로 맞춘다
 fileWatcherType = "none"  # Streamlit Cloud 는 파일 감시 한도가 차서 경고만 쌓인다. 코드를 바꾸면 서버를 다시 켠다
 
 [browser]
