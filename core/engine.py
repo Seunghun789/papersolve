@@ -536,6 +536,90 @@ def ingest_table(t, model, name, content):
     return sid
 
 
+# ---- 올린 종이: 목록·다시 읽기·지우기 ----
+
+def sources(t):
+    """올린 사진·파일마다 기다리는 카드 수, 반영된 기록 수, 기록 종류(반영 전이면 AI가 붙인 이름), 기록 날짜 범위. 최근 것부터."""
+    srcs = t.get("source_inputs", select="id,channel,name,storage_path,created_by,created_at", channel="neq.직접 입력",
+                 order="id.desc")
+    recs = t.get("records", select="source_input_id,type_name,occurred_at,status", source_input_id="not.is.null")
+    wait = {}
+    for q in pending(t, ENTRY):
+        wait[q["source_input_id"]] = wait.get(q["source_input_id"], 0) + 1
+    out = []
+    for s in srcs:
+        mine = [r for r in recs if r["source_input_id"] == s["id"]]
+        done = [r for r in mine if r["status"] == "확정"]
+        days = sorted(r["occurred_at"] for r in done)
+        out.append({**s, "wait": wait.get(s["id"], 0), "rows": len(done), "type": (done or mine or [{}])[0].get("type_name"),
+                    "first": days[0] if days else None, "last": days[-1] if days else None})
+    return out
+
+
+def can_delete(t, s):
+    """주인·확인하는 사람은 모든 종이를, 올리는 사람은 자기가 올린 반영 전 종이만 지운다. s 는 sources() 의 한 줄."""
+    if t.role in (None, *db.ANSWER):
+        return True
+    return t.role == "올리는 사람" and s.get("created_by") == t.user and not s["rows"]
+
+
+def delete_impact(t, K, sid):
+    """종이를 지우면 빠지는 확정 기록(id)과, 켜 둔 자동화·올린 지표가 바뀌는 것."""
+    ids = {r["id"] for r in t.get("records", select="id", source_input_id=f"eq.{sid}", status="eq.확정")}
+    K2 = {**K, "records": [r for r in K["records"] if r["id"] not in ids]}
+    return ids, changes(t, K, K2)
+
+
+def delete_source(t, sid):
+    """올린 종이 하나를 지운다: 기다리는 카드, 그 종이의 기록, 원본 파일. 답한 카드는 남겨 같은 것을 다시 묻지 않는다."""
+    src = (t.get("source_inputs", select="id,storage_path,created_by", id=f"eq.{sid}") or [None])[0]
+    if not src:
+        return
+    rows = len(t.get("records", select="id", source_input_id=f"eq.{sid}", status="eq.확정"))
+    if not can_delete(t, {**src, "rows": rows}):
+        raise db.NotAllowed("확인하는 사람이 지워요.")
+    t.delete("proposals", source_input_id=f"eq.{sid}", status="eq.대기")
+    t.patch("proposals", {"source_input_id": None}, source_input_id=f"eq.{sid}")
+    t.delete("records", source_input_id=f"eq.{sid}")
+    t.delete("source_inputs", id=f"eq.{sid}")
+    if src["storage_path"] and t.drop_file(src["storage_path"]):
+        (DATA / src["storage_path"]).unlink(missing_ok=True)
+
+
+def reread(t, model, sid):
+    """반영 전 종이를 저장된 원본으로 다시 읽는다(다른 모델로). 기다리던 카드와 기록을 거두고 새로 읽은 뒤 예전 종이를 지운다.
+    새로 읽기가 실패하면 예전 종이와 원본은 남는다."""
+    src = (t.get("source_inputs", select="id,name,storage_path,created_by", id=f"eq.{sid}") or [None])[0]
+    content = original(src["storage_path"]) if src else None
+    if not content:
+        raise ValueError("원본 파일을 찾지 못해 다시 읽을 수 없어요. 새로 올려 주세요.")
+    if t.get("records", select="id", source_input_id=f"eq.{sid}", status="eq.확정", limit=1):
+        raise ValueError("이미 반영된 기록이 있어 다시 읽지 않아요. 지운 뒤 새로 올려 주세요.")
+    if not can_delete(t, {**src, "rows": 0}):
+        raise db.NotAllowed("확인하는 사람이 다시 읽어요.")
+    t.delete("proposals", source_input_id=f"eq.{sid}", status="eq.대기")
+    t.delete("records", source_input_id=f"eq.{sid}", status="eq.대기")
+    new = ingest(t, model, src["name"], content)
+    delete_source(t, sid)
+    return new
+
+
+def thumbnail(path, width=192):
+    """올린 종이 목록의 작은 그림(PNG), 쪽 수, 원본이 있는지(found). PDF 는 첫 쪽. 표나 없는 원본은 그림 None."""
+    from PIL import Image, ImageOps
+    content = original(path)
+    if not content or not path.lower().endswith(PAGES):
+        return {"png": None, "pages": 0, "found": bool(content)}
+    if path.lower().endswith(".pdf"):
+        import pypdfium2
+        doc = pypdfium2.PdfDocument(content)
+        img, pages = doc[0].render(scale=width / doc[0].get_size()[0]).to_pil(), len(doc)
+    else:
+        img, pages = ImageOps.exif_transpose(Image.open(io.BytesIO(content))), 1
+        img.thumbnail((width, width))
+    return {"png": _png(img.convert("RGB")), "pages": pages, "found": True}
+
+
 def stage(t, model, sid, title, rows, unsure, days, photos):
     """읽은 행들을 대기 기록으로 넣고, 확정 지식과 다른 부분만 제안으로 올린다."""
     K = load(t)
@@ -1175,6 +1259,11 @@ def impact(t, K, q):
                     K2["elinks"].append({"link_id": L["id"], "from_entity": x, "to_entity": y, "attrs": {P["attr"]: v}})
     else:
         return []
+    return changes(t, K, K2)
+
+
+def changes(t, K, K2):
+    """지식 K 가 K2 로 바뀌면 켜 둔 자동화의 걸린 건수와 올린 지표의 값이 어떻게 바뀌나(바뀌는 것만)."""
     out = []
     for a in t.get("automations", select="spec", status="eq.켜짐"):
         before, after = len(run_automation(K, a["spec"])), len(run_automation(K2, a["spec"]))

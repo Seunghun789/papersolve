@@ -74,6 +74,11 @@ def get_file(path):
     return res.content if res.ok else None
 
 
+def delete_file(path):
+    """Storage 의 원본을 지운다. 이미 없으면 그대로 둔다."""
+    session().delete(STORAGE + path, headers={**HEADERS, "Authorization": "Bearer " + HEADERS["apikey"]}, timeout=60)
+
+
 def new_tenant(name):
     return post("tenants", {"name": name})[0]
 
@@ -132,3 +137,9 @@ class Tenant:
         self.allow(table)
         self.waiting = None
         call("DELETE", table, {"tenant_id": f"eq.{self.id}", **params})
+
+    def drop_file(self, path):
+        """올린 원본을 Storage 에서 지운다. True 면 서버에 둔 사본도 지운다(활용 사례는 False)."""
+        self.allow("source_inputs")
+        delete_file(path)
+        return True

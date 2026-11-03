@@ -85,7 +85,8 @@ section[data-testid="stSidebar"] [class*="st-key-navon_"] button p {font-weight:
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 12px 0 0; padding: 0 12px; line-height: 28px;}
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {font-size: 12px; margin: 0;}
 /* 맨 아래 계정: 사이드바 바닥에 붙이고, 이름표 · 이름 · 역할. 누르면 위로 열린다 */
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {min-height: calc(100vh - 2.25rem); display: flex; flex-direction: column; padding-bottom: 12px;}
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {display: flex; flex-direction: column;}
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {flex: 1 0 auto; display: flex; flex-direction: column; padding-bottom: 12px;}  /* 남은 높이만 채운다. 넘칠 때만 스크롤 */
 section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div, section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {flex: 1; display: flex; flex-direction: column;}
 section[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]:has(> .st-key-me_row) {margin-top: auto; padding-top: 16px;}
 .st-key-me_row {border-top: 1px solid #E4E4E7; padding-top: 10px;}
@@ -97,6 +98,19 @@ section[data-testid="stSidebar"] .st-key-me_row [data-testid="stPopover"] > div 
 .st-key-me_row [data-testid="stPopover"] > div > button p {color: #374151 !important;}
 [data-testid="stPopoverBody"]:has(.st-key-me_menu) {padding: 8px; min-width: 220px; max-width: 240px;}
 .st-key-me_menu {gap: 2px !important;}
+/* 올린 종이 목록 */
+[class*="st-key-prow"] {padding: 10px 0; border-top: 1px solid #F0F0F2;}
+[class*="st-key-pg_"] [class*="st-key-prow"]:first-child, .st-key-pg_all [class*="st-key-prow"]:first-child {border-top: none;}
+[class*="st-key-prow"] [data-testid="stImage"] img {border: 1px solid #E4E4E7; border-radius: 6px;}
+.ps-thumb {width: 96px; height: 72px; border: 1px solid #E4E4E7; border-radius: 6px; background: #FAFAFA; display: flex;
+  align-items: center; justify-content: center; color: #71717A; font-size: 12px;}
+.ps-paper b {display: block; font-weight: 600;} .ps-paper span {color: #71717A; font-size: 12.5px;}
+.ps-state {font-size: 13px; padding: 3px 8px; border-radius: 6px; color: #52525B; background: #F4F4F5; white-space: nowrap;}
+.ps-state.wait {color: #92400E; background: #FFFBEB;} .ps-state.done {color: #115E59; background: #F0FDFA;}
+.st-key-pg_wait summary {background: #FFFBEB;}
+[class*="st-key-pdel"] button p {color: #B91C1C;}
+[class*="st-key-card_del"] {border-color: #0F766E !important; box-shadow: 0 0 0 1px #0F766E, 0 2px 6px rgba(0, 0, 0, 0.06);}
+.ps-del-q {font-weight: 600; font-size: 15px;}
 .ps-me-email {color: #6B7280; font-size: 13px; padding: 6px 8px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 20px;}
 .ps-me-email span {font-size: 12px; color: #0F766E; font-weight: 600;}
 /* 요금제: 플랜 카드, 추천 플랜은 청록 테두리 */
@@ -426,8 +440,10 @@ def located(path, spans):
 def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올린 기록)."):
     """원본 사진, 또는 PDF 의 첫 쪽."""
     if path and path.lower().endswith(".pdf"):
-        img = drawn(path, 1)["page"]
-        st.image(img, alt="원본 PDF 쪽") if img else st.caption(note)
+        if img := drawn(path, 1)["page"]:
+            st.image(img, alt="원본 PDF 쪽")
+        else:
+            st.caption(note)
     elif content := engine.original(path):
         st.image(content, alt="원본 사진")
     else:
@@ -999,11 +1015,140 @@ def upload(t, K):
         st.info("보는 사람은 종이를 올리거나 적지 않아요. 홈·대시보드·묻기에서 기록을 볼 수 있어요.")
         return
     st.caption("손글씨 사진이든 파일이든 그대로 올려 주세요. 무슨 기록인지 고르지 않아도 돼요.")
-    paper, write = st.tabs(["사진·파일", "직접 적기"])
-    with paper:
+    S = engine.sources(t) if t else []
+    tabs = st.tabs(paper_tabs(["사진·파일", "직접 적기"], S, "upload_tab"), key="upload_tab", on_change="rerun")
+    with tabs[0]:
         read_file(t)
-    with write:
+    with tabs[1]:
         write_form(t, K)
+    if S:
+        with tabs[2]:
+            papers(t, K, S)
+
+
+def paper_tabs(labels, S, key):
+    """올리기 탭 이름. "올린 종이 N"은 지우면 N이 바뀌니, 그 탭을 보고 있었으면 새 이름으로 이어 보게 한다."""
+    labels = labels + ([f"올린 종이 {len(S)}"] if S else [])
+    if str(st.session_state.get(key) or "").startswith("올린 종이"):
+        st.session_state[key] = labels[-1]
+    return labels
+
+
+@st.cache_data(max_entries=300, show_spinner=False)
+def thumb(path):
+    return engine.thumbnail(path)
+
+
+def toggle(key, value):
+    st.session_state[key] = None if st.session_state.get(key) == value else value
+
+
+def papers(t, K, S):
+    """올린 종이: AI가 정리한 기록 종류별(또는 올린 날 순)로 묶은 목록. 줄마다 [보기]·[다시 읽기]·[지우기]."""
+    head, view_col = st.columns([4, 1], vertical_alignment="center")
+    head.caption("AI가 정리한 기록 종류별로 묶었어요. 지우면 그 종이에서 나온 기록도 함께 빠져요.")
+    view = view_col.segmented_control("보기", ["기록 종류별", "올린 날 순"], default="기록 종류별", required=True,
+                                      key="paper_view", label_visibility="collapsed")
+    if view == "올린 날 순":
+        with st.container(border=True, key="pg_all"):
+            for s in S:
+                paper_row(t, K, s, show_type=True)
+        return
+    groups = []
+    wait = [s for s in S if s["wait"]]
+    done = [s for s in S if not s["wait"] and s["rows"]]
+    none = [s for s in S if not s["wait"] and not s["rows"]]
+    if wait:
+        groups.append(("wait", "확인 중", f"종이 {len(wait)}장 · 답하면 기록 종류가 정해져요", wait))
+    for i, T in enumerate(dict.fromkeys(s["type"] for s in done)):  # 최근에 올린 종이가 있는 종류부터
+        g = [s for s in done if s["type"] == T]
+        first, last = min(s["first"] for s in g), max(s["last"] for s in g)
+        span = fmt_day(first) + ("" if first == last else f" ~ {fmt_day(last)}")
+        groups.append((i, T, f"종이 {len(g)}장 · 기록 {sum(s['rows'] for s in g)}줄 · {span}", g))
+    if none:
+        groups.append(("none", "반영된 기록 없음", f"종이 {len(none)}장 · 카드에 모두 아니요로 답한 종이", none))
+    for gid, title_, note, items in groups:
+        with st.expander(f"**{title_}** :gray[{note}]", expanded=gid in ("wait", 0), key=f"pg_{gid}"):
+            for s in items:
+                paper_row(t, K, s, show_type=False)
+
+
+def paper_row(t, K, s, show_type):
+    """올린 종이 한 줄: 작은 원본 · 이름 · 올린 날 · 올린 사람 · 상태 · 버튼. [보기]·[지우기]를 누르면 줄 아래가 펼쳐진다."""
+    sid, path = s["id"], s.get("storage_path")
+    with st.container(key=f"prow{sid}"):
+        pic, name, day, who, state, acts = st.columns([1.1, 3.2, 1.1, 1, 1.4, 2.6], vertical_alignment="center")
+        th = thumb(path) if path else {"png": None, "pages": 0, "found": False}
+        if th["png"]:
+            pic.image(th["png"], width=96, alt="올린 원본")
+        else:
+            pic.html(f'<div class="ps-thumb">{"표" if s["channel"] == "파일" else "원본 없음"}</div>')
+        kind = (f"PDF · {th['pages']}쪽" if (path or "").lower().endswith(".pdf") else "사진" if s["channel"] == "사진" else "표")
+        sub = kind + (f" · AI 제안: {s['type']}" if s["wait"] and s["type"] else f" · {s['type']}" if show_type and s["type"] else "")
+        name.html(f'<div class="ps-paper"><b>{html.escape(s["name"] or "이름 없음")}</b><span>{html.escape(sub)}</span></div>')
+        day.write(fmt_day(s["created_at"]))
+        who.html(f'<span>{html.escape(person_name(s["created_by"])) if s.get("created_by") else "-"}</span>')
+        label = f"확인 중 {s['wait']}개" if s["wait"] else f"기록 {s['rows']}줄" if s["rows"] else "반영된 기록 없음"
+        state.html(f'<span class="ps-state {"wait" if s["wait"] else "done" if s["rows"] else ""}">{label}</span>')
+        row = acts.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center")
+        row.button("보기", key=f"pview{sid}", on_click=toggle, args=("paper_open", ("보기", sid)))
+        mine = engine.can_delete(t, s)
+        if s["wait"] and not s["rows"] and th["found"] and mine and not isinstance(t, Demo):  # 활용 사례는 종이를 새로 읽지 않는다
+            with row.popover("다시 읽기"):
+                model = st.selectbox("읽는 모델", llm.MODELS, index=1, format_func=lambda m: MODEL_KO.get(m, m), key=f"prm{sid}")
+                st.caption("저장된 원본을 이 모델로 다시 읽어요. 지금 확인 중인 카드는 새 카드로 바뀌어요.")
+                if st.button("읽기 시작", key=f"prr{sid}", type="primary"):
+                    with st.spinner("다시 읽는 중이에요..."):
+                        try:
+                            engine.reread(t, model, sid)
+                            ok = True
+                        except (*ERRORS, db.NotAllowed) as e:
+                            fail("다시 읽지 못했어요", e)
+                            ok = False
+                    if ok:
+                        forget(t)
+                        st.session_state.pop("_space_seen", None)
+                        st.session_state._goto = "확인"
+                        st.rerun()
+        if mine:
+            row.button("지우기", key=f"pdel{sid}", type="tertiary", on_click=toggle, args=("paper_open", ("지우기", sid)))
+    if st.session_state.get("paper_open") == ("보기", sid):
+        with st.container(border=True):
+            if s["channel"] == "사진":
+                show_photo(path, note="원본 파일이 없어요.")
+            else:
+                show_table(t, s, sid)
+    if st.session_state.get("paper_open") == ("지우기", sid):
+        delete_card(t, K, s)
+
+
+def drop_paper(t, sid):
+    st.session_state.paper_open = None
+    act(engine.delete_source, t, sid, done="지웠어요.")
+
+
+def delete_card(t, K, s):
+    """[지우기]를 누른 종이: 반영 전이면 한 번 더 묻고 [지우기], 반영됐으면 빠지는 기록과 바뀌는 자동화·지표를 보여 주고 [적용]."""
+    sid = s["id"]
+    with st.container(border=True, key=f"card_del{sid}"):
+        st.caption("종이 지우기")
+        st.html(f'<div class="ps-del-q">\'{html.escape(s["name"] or "이름 없음")}\'를 지울까요?</div>')
+        if s["rows"]:
+            ids, lines = engine.delete_impact(t, K, sid)
+            span = fmt_day(s["first"]) + ("" if s["first"] == s["last"] else f" ~ {fmt_day(s['last'])}")
+            st.caption("이 종이에서 나온 기록이 이미 반영돼 있어요. 지우면 이렇게 바뀌어요.")
+            with st.container(border=True):
+                st.write(f"기록 **{len(ids)}줄**({s['type']} · {span})이 빠져요")
+                for line in lines:
+                    st.write(line)
+                st.write("원본 파일도 지워져요. 확정한 칸·대상·관계는 그대로 남아요.")
+        else:
+            st.caption(f"확인 중인 카드 {s['wait']}개와 원본 파일이 지워져요. 반영된 기록이 없어 다른 화면은 바뀌지 않아요.")
+        foot, btns = st.columns([3, 2], vertical_alignment="center")
+        foot.caption("지운 종이는 되돌릴 수 없어요.")
+        row = btns.container(horizontal=True, horizontal_alignment="right")
+        row.button("아니요", key=f"pno{sid}", on_click=toggle, args=("paper_open", ("지우기", sid)))
+        row.button("적용" if s["rows"] else "지우기", key=f"pyes{sid}", type="primary", on_click=drop_paper, args=(t, sid))
 
 
 def field(K, p, seen):
@@ -1941,6 +2086,7 @@ section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], hea
 [data-testid="stMainBlockContainer"], .block-container {max-width: calc(1224px + 6rem); padding: 0 3rem 0 !important;}  /* 내용 폭 1224px */
 .ps-logo {font-size: 26px; padding: 0 !important; line-height: 2.5rem;}
 .st-key-back button {padding: 0;} .st-key-back button p {font-size: 26px !important; font-weight: 400; letter-spacing: -0.01em;} .st-key-back button strong {font-weight: 600;}
+.st-key-ps_top_login {padding-top: 14px;}  /* 랜딩은 머리줄 위에 빛 칸이 있어 14px 아래에서 시작한다. 로그인 화면 로고도 같은 자리에 */
 .st-key-login button {min-height: 40px; height: 40px; border-radius: 6px;}
 .st-key-go button {min-height: 48px; height: 48px; padding: 0 28px; border-radius: 6px;}
 [class*="st-key-go"] button p, .st-key-login button p {font-size: 1rem;}
@@ -2028,8 +2174,10 @@ DUMMY = {4: "4-시험-제조점검", 3: "3-시험-생산검사", 1: "1-시험-�
 
 
 def match(row, key, cond):
-    """PostgREST 조건 한 개(eq.값, in.(a,b), is.null)를 메모리의 줄에 맞춘다."""
+    """PostgREST 조건 한 개(eq.값, neq.값, in.(a,b), is.null, not.조건)를 메모리의 줄에 맞춘다."""
     op, _, val = cond.partition(".")
+    if op == "not":
+        return not match(row, key, val)
     v = row.get(key)
     if op == "eq":
         return str(v).lower() == val.lower() if isinstance(v, bool) else str(v) == val
@@ -2085,6 +2233,9 @@ class Demo(db.Tenant):
             if all(match(r, k, c) for k, c in params.items()):
                 r.update(copy.deepcopy(body))
 
+    def drop_file(self, path):
+        return False  # 활용 사례는 원본 파일을 지우지 않는다
+
     def delete(self, table, **params):
         self.waiting = None
         self.tables[table] = [r for r in self.tables.setdefault(table, []) if not all(match(r, k, c) for k, c in params.items())]
@@ -2129,7 +2280,8 @@ def landing():
     st.html(LANDING_CSS)
     if st.session_state.get("landing") in ("login", "signup"):
         st.html(LOGIN)
-        st.button("paper**solve**", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
+        with st.container(key="ps_top_login"):  # 로고 자리를 랜딩 머리줄과 같게(높이 71px 가운데)
+            st.button("paper**solve**", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
         left, right = st.columns(2, gap="xlarge", vertical_alignment="center")  # 오른쪽 네 카드를 왼쪽 글·입력 칸의 세로 가운데에
         with left:
             st.markdown('<div class="ps-hero"><h1>손으로 적은 기록을 찍으면<br>표 · 챙길 일 · 답이 돼요</h1>'
@@ -2863,7 +3015,13 @@ elif not K["types"]:
 if page == "올리기" and demo:
     st.header("올리기")
     st.caption("활용 사례에서는 종이를 새로 읽지 않아요. 아래 [직접 적기]로 적어 보거나, [내 종이로 시작]을 누르면 내 계정에서 올릴 수 있어요.")
-    write_form(tenant, K)
+    S = engine.sources(tenant)
+    tabs = st.tabs(paper_tabs(["직접 적기"], S, "demo_upload_tab"), key="demo_upload_tab", on_change="rerun")
+    with tabs[0]:
+        write_form(tenant, K)
+    if S:
+        with tabs[1]:
+            papers(tenant, K, S)  # 지워도 이 창 안에서만 바뀐다
 elif page == "올리기":
     upload(tenant, K)
 elif page == "모두 보기" and uid:
