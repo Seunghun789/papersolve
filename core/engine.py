@@ -94,25 +94,33 @@ def infer_dtype(values):
 # ---- 지식 읽기 ----
 
 def load(t):
-    """확정된 지식(종류·분류·칸·별칭·관계·대상)과 확정된 기록."""
-    objs = t.get("object_types", select="name,kind,parent_name", order="id")
+    """확정된 지식(종류·분류·칸·별칭·관계·대상)과 확정된 기록. 표 8개는 서로 기다릴 필요가 없어 한꺼번에 읽는다."""
+    reads = [("object_types", dict(select="name,kind,parent_name", order="id")),
+             ("alias_dict", dict(select="type_name,alias,prop_name")),
+             ("link_types", dict(select="id,from_ref,to_ref,kind,reason,name,attr_defs", order="id")),
+             ("records", dict(select="id,type_name,occurred_at,data,photo_path", status="eq.확정", order="occurred_at.desc,id.desc")),
+             ("entities", dict(select="id,class_name,name,attrs", order="id")),
+             ("entity_links", dict(select="id,link_id,from_entity,to_entity,attrs")),
+             ("property_defs", dict(select="type_name,name,dtype,unit,description,is_entity,ref_class,position", order="position,id")),
+             ("entity_aliases", dict(select="entity_id,alias"))]
+    objs, aliases, links, records, entities, elinks, props, ealiases = db.together(
+        [lambda table=table, params=params: t.get(table, **params) for table, params in reads])
     K = {
         "types": [o["name"] for o in objs if o["kind"] == "기록"],
         "classes": {o["name"]: o["parent_name"] for o in objs if o["kind"] == "대상"},
         "props": {},
-        "alias": {(a["type_name"], a["alias"]): a["prop_name"] for a in t.get("alias_dict", select="type_name,alias,prop_name")},
-        "links": t.get("link_types", select="id,from_ref,to_ref,kind,reason,name,attr_defs", order="id"),
-        "records": t.get("records", select="id,type_name,occurred_at,data,photo_path", status="eq.확정",
-                         order="occurred_at.desc,id.desc"),
-        "entities": {e["id"]: e for e in t.get("entities", select="id,class_name,name,attrs", order="id")},
+        "alias": {(a["type_name"], a["alias"]): a["prop_name"] for a in aliases},
+        "links": links,
+        "records": records,
+        "entities": {e["id"]: e for e in entities},
         "ealias": {},
-        "elinks": t.get("entity_links", select="id,link_id,from_entity,to_entity,attrs"),
+        "elinks": elinks,
     }
-    for p in t.get("property_defs", select="type_name,name,dtype,unit,description,is_entity,ref_class,position", order="position,id"):
+    for p in props:
         K["props"].setdefault(p["type_name"], []).append(p)
     for T in K["types"] + list(K["classes"]):
         K["props"].setdefault(T, [])
-    for a in t.get("entity_aliases", select="entity_id,alias"):
+    for a in ealiases:
         K["ealias"].setdefault(a["alias"].strip(), []).append(a["entity_id"])
     return K
 
@@ -315,9 +323,11 @@ def stats_text(K):
 # ---- 제안 ----
 
 def pending(t, kinds):
-    quoted = ",".join(f'"{k}"' for k in kinds)
-    return t.get("proposals", select="id,kind,payload,evidence,source_input_id,status,created_by", status="eq.대기",
-                 kind=f"in.({quoted})", order="id")
+    """기다리는 제안 중 kinds 종류. 한 화면에서 여러 번 불러도 DB 는 한 번만 읽고(t.waiting), 이 워크스페이스에 쓰면 다시 읽는다."""
+    if getattr(t, "waiting", None) is None:
+        t.waiting = t.get("proposals", select="id,kind,payload,evidence,source_input_id,status,created_by",
+                          status="eq.대기", order="id")
+    return [copy.deepcopy(q) for q in t.waiting if q["kind"] in kinds]
 
 
 def asked(t, kind):

@@ -155,6 +155,22 @@ def knowledge(tid):
     return engine.load(db.Tenant(tid))
 
 
+def forget(t):
+    """이 워크스페이스의 저장해 둔 지식만 지운다. 다른 워크스페이스(다른 사람)의 것은 그대로 둔다."""
+    st.session_state.pop("_synced", None)  # 지식이 바뀌면 규칙에서 나오는 제안을 다시 살핀다
+    if isinstance(t, db.Tenant) and not isinstance(t, Demo):
+        knowledge.clear(t.id)
+    elif t is None:
+        knowledge.clear()
+
+
+def rules_once(t, K):
+    """확정한 관계·기록 간격에서 나오는 지표·업무 제안은 지식이 바뀐 뒤 한 번만 살핀다(화면마다 DB 4번을 줄인다)."""
+    if st.session_state.get("_synced") != t.id:
+        engine.sync_rules(t, K)
+        st.session_state._synced = t.id
+
+
 def know(t):
     """활용 사례는 세션마다 따로 바뀌므로 캐시하지 않는다."""
     return engine.load(t) if isinstance(t, Demo) else knowledge(t.id) if t else {"types": []}
@@ -162,12 +178,15 @@ def know(t):
 
 def act(fn, *args, done=None):
     """버튼에서 지식을 바꾸는 일을 하고, 화면이 새 지식을 읽게 한다. done: 누른 뒤 잠깐 띄울 알림."""
+    t = next((a for a in args if isinstance(a, db.Tenant)), None)
+    if t:
+        t.waiting = None  # 버튼은 앞 화면의 워크스페이스를 받는다. 기다리는 제안은 새로 읽는다
     try:
         fn(*args)
     except db.NotAllowed as e:
         st.toast(str(e))
         return
-    knowledge.clear()
+    forget(t)
     if done:
         st.toast(done)
 
@@ -495,7 +514,7 @@ def start_edit(q):
 def save_fix(t, q):
     engine.answer_value(t, q, st.session_state[f"fix{q['id']}"].strip())
     st.session_state.editing = None
-    knowledge.clear()
+    forget(t)
     st.toast("고친 값을 저장했어요.")
 
 
@@ -816,7 +835,7 @@ def suggest(fn, t):
         except ERRORS as e:
             fail("제안을 받지 못했어요", e)
             return
-    knowledge.clear()
+    forget(t)
     st.rerun()
 
 
@@ -1023,7 +1042,8 @@ def write_form(t, K):
         except ERRORS as e:
             fail("저장하지 못했어요", e)
             return
-        knowledge.clear()
+        forget(t)
+        st.session_state.pop("_space_seen", None)  # 새 기록이 생기면 워크스페이스 설정을 다시 본다
         new = engine.pending(t, engine.ENTITY)
         st.success("홈 표에 한 줄 늘었어요." + (f" 확인할 것 {len(new)}개가 있어요." if new else ""), title="저장했어요")
 
@@ -1045,7 +1065,8 @@ def read_file(t, key="up"):
             except ERRORS as e:
                 fail("읽지 못했어요", e)
                 return
-        knowledge.clear()
+        forget(t)
+        st.session_state.pop("_space_seen", None)  # 새 종이를 읽으면 워크스페이스 설정을 다시 본다
         st.session_state._goto = "확인"
         st.rerun()
 
@@ -1658,11 +1679,11 @@ def adopt(t, kind, m):
         (engine.answer_widget if kind == "지표" else engine.answer_automation)(t, q, True)
     except db.NotAllowed:  # 올리는 사람: 카드로 남겨 확인하는 사람이 답한다
         m["done"] = True
-        knowledge.clear()
+        forget(t)
         st.toast("카드로 올렸어요. 확인하는 사람이 답해요.")
         return
     m["done"] = True
-    knowledge.clear()
+    forget(t)
     st.toast("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
 
 
@@ -1714,7 +1735,7 @@ def dashboard(t, K):
     if not K["types"]:
         empty()
         return
-    engine.sync_rules(t, K)
+    rules_once(t, K)
     period_bar("period_dash")
     build_chat(t, K, "지표")
     for q in engine.pending(t, ["지표"]):
@@ -1734,7 +1755,7 @@ def automation(t, K):
     if not K["types"]:
         empty()
         return
-    engine.sync_rules(t, K)
+    rules_once(t, K)
     build_chat(t, K, "업무")
     for q in engine.pending(t, ["업무"]):
         card(t, K, q)
@@ -2043,6 +2064,7 @@ class Demo(db.Tenant):
         return copy.deepcopy([{c: r.get(c) for c in cols} if cols else r for r in rows])
 
     def post(self, table, body, on_conflict=None, **params):
+        self.waiting = None
         rows, out = self.tables.setdefault(table, []), []
         keys = [k for k in (on_conflict or "").split(",") if k and k != "tenant_id"]
         for r in (body if isinstance(body, list) else [body]):
@@ -2058,11 +2080,13 @@ class Demo(db.Tenant):
         return out if isinstance(body, list) else out[0]
 
     def patch(self, table, body, **params):
+        self.waiting = None
         for r in self.tables.setdefault(table, []):
             if all(match(r, k, c) for k, c in params.items()):
                 r.update(copy.deepcopy(body))
 
     def delete(self, table, **params):
+        self.waiting = None
         self.tables[table] = [r for r in self.tables.setdefault(table, []) if not all(match(r, k, c) for k, c in params.items())]
 
 
@@ -2708,8 +2732,11 @@ if uid and st.query_params.get("invite"):
     invite_page(st.query_params["invite"], uid)  # 초대 링크로 온 사람
 tid, role = (demo, None) if demo else account(uid)
 tenant = Demo(tid) if demo else db.Tenant(tid, uid, role) if tid else None
-if tenant and not demo and role in (None, *db.ANSWER) and tenant.get("source_inputs", select="id", limit=1):
-    engine.suggest_space(tenant, llm.MODELS[0])
+if tenant and not demo and role in (None, *db.ANSWER) and st.session_state.get("_space_seen") != tid:
+    # 워크스페이스 설정 카드는 이 접속에서 워크스페이스마다 한 번, 그리고 종이를 새로 읽은 뒤에만 살핀다(화면마다 DB 3번을 줄인다)
+    if tenant.get("source_inputs", select="id", limit=1):
+        engine.suggest_space(tenant, llm.MODELS[0])
+    st.session_state._space_seen = tid
 K = know(tenant)
 waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
 if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
