@@ -355,6 +355,104 @@ def original(path):
     return content
 
 
+def box(b):
+    """AI가 적은 상자가 쓸 만하면 [x0, y0, x1, y1](쪽의 왼쪽 위 0·0, 오른쪽 아래 1000·1000), 아니면 None."""
+    if not isinstance(b, list) or len(b) != 4:
+        return None
+    x0, y0, x1, y1 = (max(0, min(1000, int(v))) for v in b)
+    return [x0, y0, x1, y1] if x1 > x0 and y1 > y0 else None
+
+
+def _pdf_find(doc, text, first):
+    """PDF 글자 층에서 text 가 보이는 (쪽, 상자). 적힌 쪽부터 찾는다. 글자 층이 없는(스캔한) PDF 는 None."""
+    order = [first] + [p for p in range(1, len(doc) + 1) if p != first]
+    for words in dict.fromkeys(w for w in (str(text or "").strip(), " ".join(str(text or "").split())) if w):
+        for p in order:
+            page = doc[p - 1]
+            tp = page.get_textpage()
+            hit = tp.search(words).get_next()
+            if hit:
+                rects = [tp.get_rect(i) for i in range(tp.count_rects(*hit))]
+                w, h = page.get_size()
+                return p, [round(min(r[0] for r in rects) / w * 1000), round((h - max(r[3] for r in rects)) / h * 1000),
+                           round(max(r[2] for r in rects) / w * 1000), round((h - min(r[1] for r in rects)) / h * 1000)]
+    return None
+
+
+def locate(path, spans):
+    """적힌 곳마다 (쪽, 상자) 또는 None. PDF 는 글자 층에서 글귀를 찾아 정확히 잡고, 못 찾으면 읽을 때 AI가 적은 상자,
+    그다음 값(세 글자 이상)으로 찾는다. 사진은 AI가 적은 상자."""
+    doc = None
+    if path and path.lower().endswith(".pdf") and (content := original(path)):
+        import pypdfium2
+        doc = pypdfium2.PdfDocument(content)
+    out = []
+    for s in spans:
+        page = max(1, min(s.get("page") or 1, len(doc) if doc else 1))
+        hit = doc and _pdf_find(doc, s.get("quote"), page)
+        hit = hit or (s.get("box") and (page, s["box"]))
+        if not hit and doc and len(str(s.get("value") or "")) >= 3:
+            hit = _pdf_find(doc, s["value"], page)
+        out.append(hit or None)
+    return out
+
+
+def _dashes(draw, b, color, width):
+    x0, y0, x1, y1 = b
+    seg = width * 4
+    for x in range(int(x0), int(x1), seg * 2):
+        draw.line([(x, y0), (min(x + seg, x1), y0)], fill=color, width=width)
+        draw.line([(x, y1), (min(x + seg, x1), y1)], fill=color, width=width)
+    for y in range(int(y0), int(y1), seg * 2):
+        draw.line([(x0, y), (x0, min(y + seg, y1))], fill=color, width=width)
+        draw.line([(x1, y), (x1, min(y + seg, y1))], fill=color, width=width)
+
+
+def page_marked(path, page, solid, dashed, colors):
+    """원본 한 쪽(PDF 는 1부터, 사진은 1) 그림에 적힌 곳을 그린다. solid: 고른 카드가 가리키는 곳(실선),
+    dashed: 읽기 애매한 칸(점선). 상자는 locate 의 0~1000 기준. colors: solid·fill·dashed 색.
+    돌려주는 것: page 쪽 그림(PNG), zoom 첫 실선 상자 둘레를 크게 자른 그림(PNG, 없으면 None), zoom_ratio 그 그림의 세로/가로, pages 쪽 수."""
+    from PIL import Image, ImageDraw, ImageOps
+    content = original(path)
+    if not content:
+        return {"page": None, "zoom": None, "zoom_ratio": 0, "pages": 0}
+    if path.lower().endswith(".pdf"):
+        import pypdfium2
+        doc = pypdfium2.PdfDocument(content)
+        pages = len(doc)
+        img = doc[max(1, min(page, pages)) - 1].render(scale=2).to_pil()
+    else:
+        pages = 1
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(content)))  # AI가 본 사진과 같은 방향
+        img.thumbnail((2000, 2000))
+    img = img.convert("RGBA")
+    W, H = img.size
+    pad, width = W * 0.006, max(3, round(W / 400))
+    px = lambda b: (b[0] * W / 1000 - pad, b[1] * H / 1000 - pad, b[2] * W / 1000 + pad, b[3] * H / 1000 + pad)
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    for b in dashed:
+        _dashes(draw, px(b), colors["dashed"], width)
+    for b in solid:
+        draw.rectangle(px(b), fill=colors["fill"], outline=colors["solid"], width=width)
+    img = Image.alpha_composite(img, layer).convert("RGB")
+    zoom, ratio = None, 0
+    if solid:  # 상자 높이의 두 배쯤 위아래를 두고, 가로는 상자 세 배(쪽의 40% 이상), 세로:가로는 0.3 이하
+        x0, y0, x1, y1 = px(solid[0])
+        ch = min(H, (y1 - y0) + 2 * max((y1 - y0) * 0.9, H * 0.02))
+        cw = min(W, max((x1 - x0) * 3, W * 0.4, ch / 0.3))
+        left = max(0, min((x0 + x1 - cw) / 2, W - cw))
+        top = max(0, min((y0 + y1 - ch) / 2, H - ch))
+        zoom, ratio = _png(img.crop((round(left), round(top), round(left + cw), round(top + ch)))), ch / cw
+    return {"page": _png(img), "zoom": zoom, "zoom_ratio": round(ratio, 3), "pages": pages}
+
+
+def _png(img):
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    return out.getvalue()
+
+
 def save_source(t, channel, name, content):
     src = t.post("source_inputs", {"channel": channel, "name": name})
     path = f"uploads/{t.id}-{src['id']}{Path(name).suffix.lower() or '.bin'}"  # Storage 에서도 워크스페이스 번호로 시작한다
@@ -381,6 +479,13 @@ def ingest_photo(t, model, name, photo):
     """사진 1장(또는 PDF 1개) → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안."""
     sheet = llm.extract(t, model, name, photo)
     sid, path = save_source(t, "사진", name, photo)
+    spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 글귀와 쪽, 그 자리의 상자를 보여 준다
+    for c in sheet["doc_fields"] + [c for row in sheet["rows"] for c in row["cells"]]:
+        if filled(c["value"]) and len(spans.setdefault(c["label"].strip(), [])) < 5:
+            b = box(c.get("box"))
+            spans[c["label"].strip()].append({"page": c["page"], "quote": c["quote"].strip(), "value": c["value"].strip(),
+                                              **({"box": b} if b else {})})
+    t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
     day = (to_date(sheet["occurred_at"]) or date.today()).isoformat()
     doc = {c["label"].strip(): c["value"].strip() for c in sheet["doc_fields"] if filled(c["value"])}
     doc_unsure = [c["label"].strip() for c in sheet["doc_fields"] if c["uncertain"] and filled(c["value"])]
@@ -396,11 +501,19 @@ def ingest_photo(t, model, name, photo):
     return sid
 
 
-def ingest_table(t, model, name, content):
-    """CSV·엑셀 1개 → 행마다 기록 1개. 값은 파일 그대로 쓰고, 구조만 제안받는다. 엑셀은 첫 시트를 읽는다."""
+def read_table(name, content):
+    """CSV·엑셀 원본을 표로. 값은 모두 글자 그대로. 엑셀은 첫 시트."""
     read = pd.read_excel if name.lower().endswith(".xlsx") else pd.read_csv
-    df = read(io.BytesIO(content), dtype=str).fillna("")
+    return read(io.BytesIO(content), dtype=str).fillna("")
+
+
+def ingest_table(t, model, name, content):
+    """CSV·엑셀 1개 → 행마다 기록 1개. 값은 파일 그대로 쓰고, 구조만 제안받는다."""
+    df = read_table(name, content)
     sid, _ = save_source(t, "파일", name, content)
+    spans = {c: [{"row": i + 1, "quote": f"{c}: {v}", "value": v} for i, v in enumerate(df[c]) if filled(v)][:5]
+             for c in df}  # 칸 이름 → 표의 몇 번째 줄에 있나. 확인 카드가 원본 표의 그 줄을 짚는다
+    t.patch("source_inputs", {"spans": {c: s for c, s in spans.items() if s}}, id=f"eq.{sid}")
     photo_cols = [c for c in df if len(df) and df[c].str.lower().str.endswith((".jpg", ".jpeg", ".png")).all()]
     dates = [c for c in df if c not in photo_cols and infer_dtype(df[c]) == "date"]
     rows, days, photos = [], [], []
@@ -566,8 +679,9 @@ def answer_type(t, q, how):
         return done(t, q, "거절")
     t.post("object_types", {"name": P["type"], "kind": "기록"}, on_conflict="tenant_id,name")
     if how == "하나씩":
+        samples = (q.get("evidence") or {}).get("samples") or {}
         for p in P["props"]:
-            propose(t, "칸", {"type": P["type"], **p}, None, q["source_input_id"])
+            propose(t, "칸", {"type": P["type"], **p}, {"samples": samples.get(p["label"], [])}, q["source_input_id"])
         return done(t, q, "고침")
     for i, p in enumerate(P["props"]):
         add_prop(t, P["type"], p, i)

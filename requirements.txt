@@ -14,3 +14,5 @@ httpx==0.28.1
 openpyxl==3.1.5
 # 큰 사진을 Claude 가 받는 크기로 줄인다(Streamlit 이 이미 함께 설치한다) — core/llm.py
 pillow==13.0.0
+# PDF 원본을 쪽 그림으로 바꿔 확인 화면에 보여 준다(BSD/Apache 라이선스) — core/engine.py
+pypdfium2==5.14.0

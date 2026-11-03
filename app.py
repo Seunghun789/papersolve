@@ -2,6 +2,7 @@
 import copy
 import datetime
 import hashlib
+import html
 import json
 import os
 import secrets
@@ -25,11 +26,12 @@ COLOR = {
     "entity_dot": "#D4D4D8", "entity_link": "#C2410C",          # 지식그래프: 대상, 대상 쌍
     "line_weak": "#E4E4E7", "line": "#71717A", "line_strong": "#52525B",
 }
+MARK = {"solid": "#0F766E", "fill": "#14B8A62D", "dashed": "#D97706"}  # 원본 위 상자: 고른 카드가 가리키는 곳(청록 실선), 읽기 애매한 칸(주황 점선)
 st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent-text: {COLOR["accent_text"]};
 --ps-text-muted: {COLOR["text_muted"]}; --ps-hover-bg: {COLOR["hover_bg"]};}}</style>""", unsafe_allow_html=True)
 st.markdown("""<style>
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
-.st-key-close_sidebar, .st-key-remember {display: none;}
+.st-key-close_sidebar, .st-key-close_menu, .st-key-remember {display: none;}
 /* 메뉴: 단계 이름 아래 왼쪽 정렬 버튼, 고른 메뉴는 메뉴 폭 전체를 칠한다 */
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: 2px;}
 [data-testid="stPopoverBody"]:has(.st-key-ws_menu) {padding: 10px 10px 8px; min-width: 260px; max-width: 280px;}
@@ -73,14 +75,40 @@ section[data-testid="stSidebar"] [data-testid="stColumn"]:has(.st-key-new_space_
 section[data-testid="stSidebar"] [data-testid="stColumn"]:has([data-testid="stPopover"]) {flex: 1 1 0 !important; width: auto; min-width: 0;}  /* 줄어들 수 있어야 [+]가 사이드바 밖으로 밀리지 않는다 */
 section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {margin-top: 6px; gap: 0;}
 section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 10px; min-height: 40px;}
-section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; padding: 7px 12px;
+section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; height: 30px; padding: 0 12px;
   border-radius: 8px; width: 100%;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button > div,
 section[data-testid="stSidebar"] [class*="st-key-nav"] button p {justify-content: flex-start; text-align: left; width: 100%;}
 section[data-testid="stSidebar"] [class*="st-key-nav_"] button:hover {background: var(--ps-hover-bg);}
 section[data-testid="stSidebar"] [class*="st-key-navon_"] button {background: var(--ps-accent-bg); color: var(--ps-accent-text);}
 section[data-testid="stSidebar"] [class*="st-key-navon_"] button p {font-weight: 600;}
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 14px 0 2px 4px;}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {margin: 12px 0 0; padding: 0 12px; line-height: 28px;}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {font-size: 12px; margin: 0;}
+/* 맨 아래 계정: 사이드바 바닥에 붙이고, 이름표 · 이름 · 역할. 누르면 위로 열린다 */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {min-height: calc(100vh - 2.25rem); display: flex; flex-direction: column; padding-bottom: 12px;}
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div, section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {flex: 1; display: flex; flex-direction: column;}
+section[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]:has(> .st-key-me_row) {margin-top: auto; padding-top: 16px;}
+.st-key-me_row {border-top: 1px solid #E4E4E7; padding-top: 10px;}
+section[data-testid="stSidebar"] .st-key-me_row [data-testid="stPopover"] > div > button {border: none; background: transparent; height: 44px; padding: 0 8px; justify-content: flex-start; gap: 10px;}
+section[data-testid="stSidebar"] .st-key-me_row [data-testid="stPopover"] > div > button:hover {background: var(--ps-hover-bg);}
+.st-key-me_row [data-testid="stPopover"] > div > button::before {flex: none; width: 28px; height: 28px; border-radius: 50%; background: #0F766E; color: #FFFFFF;
+  font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; letter-spacing: -0.02em;}
+.st-key-me_row [data-testid="stPopover"] > div > button [data-testid="stIconMaterial"] {display: none;}
+.st-key-me_row [data-testid="stPopover"] > div > button p {color: #374151 !important;}
+[data-testid="stPopoverBody"]:has(.st-key-me_menu) {padding: 8px; min-width: 220px; max-width: 240px;}
+.st-key-me_menu {gap: 2px !important;}
+.ps-me-email {color: #6B7280; font-size: 13px; padding: 6px 8px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 20px;}
+.ps-me-email span {font-size: 12px; color: #0F766E; font-weight: 600;}
+/* 요금제: 플랜 카드, 추천 플랜은 청록 테두리 */
+[class*="st-key-plancard"] {padding: 20px !important; gap: 12px !important;}
+[class*="st-key-plancard"][class*="_pick"] {border-color: #0F766E !important; box-shadow: 0 0 0 1px #0F766E;}
+.ps-plan-name {font-size: 16px; font-weight: 600;}
+.ps-plan-price {font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-top: 8px;}
+.ps-plan-for {color: #71717A; font-size: 13px; margin-top: 2px;}
+.ps-plan-line {font-size: 14px; padding: 7px 0; border-top: 1px solid #F0F0F2;}
+.st-key-me_menu button {justify-content: flex-start; height: 34px; min-height: 0; padding: 0 8px; border-radius: 8px;}
+.st-key-me_menu button > div, .st-key-me_menu button p {justify-content: flex-start; text-align: left; width: 100%; font-size: 14px;}
+.st-key-me_menu button:hover {background: var(--ps-hover-bg);}
 .ps-logo {font-size: 26px; font-weight: 400; letter-spacing: -0.01em; padding: 0.5rem 0 1rem;}
 .ps-logo b {font-weight: 600;}
 .ps-steps {display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 4px;}
@@ -96,7 +124,8 @@ section[data-testid="stSidebar"] {min-width: 240px !important; max-width: 240px 
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {height: 2.25rem; padding-top: 0.5rem; padding-bottom: 0;}
 section[data-testid="stSidebar"] .ps-logo {padding-top: 0;}
 }
-.block-container {padding-top: 32px; max-width: 1080px;}
+/* 서비스 화면: 내용 폭을 화면 끝까지(1600px까지) 넓혀 사이드바 옆 빈 곳을 줄인다. 랜딩·로그인은 따로 정한다 */
+.block-container {padding-top: 32px; padding-left: 24px; padding-right: 32px; max-width: 1600px;}
 /* 글자 단계 24 · 20 · 16, 소제목 위는 넉넉히 */
 body, [data-testid="stMetricValue"], [data-testid="stDataFrame"] {font-variant-numeric: tabular-nums;}
 h1 {font-size: 24px !important; font-weight: 600 !important; letter-spacing: -0.01em;}
@@ -363,14 +392,83 @@ def link_sentence(P):
             "대체": f"'{a}'이(가) '{b}'을(를) 대신할 수 있나요?"}[P["kind"]]
 
 
+@st.cache_data(max_entries=40, show_spinner=False)
+def drawn(path, page, solid=(), dashed=()):
+    """원본 한 쪽 그림(page), 고른 곳을 크게 자른 그림(zoom, zoom_ratio), 쪽 수(pages). 같은 쪽·같은 상자는 다시 그리지 않는다."""
+    return engine.page_marked(path, page, solid, dashed, MARK)
+
+
+@st.cache_data(max_entries=200, show_spinner=False)
+def located(path, spans):
+    """적힌 곳마다 (쪽, 상자) 또는 None."""
+    return engine.locate(path, spans)
+
+
 def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올린 기록)."):
-    content = engine.original(path)
-    if content and path.lower().endswith(".pdf"):  # PDF 는 그림이 아니라 여기서 그리지 않는다
-        st.caption("PDF로 올린 기록이에요. 원본은 미리 보지 않아요.")
-    elif content:
+    """원본 사진, 또는 PDF 의 첫 쪽."""
+    if path and path.lower().endswith(".pdf"):
+        img = drawn(path, 1)["page"]
+        st.image(img, alt="원본 PDF 쪽") if img else st.caption(note)
+    elif content := engine.original(path):
         st.image(content, alt="원본 사진")
     else:
         st.caption(note)
+
+
+def where_line(text):
+    """확인 화면 왼쪽 원본 위의 한 줄: 고른 카드가 가리키는 곳. 글귀는 종이에서 읽은 글이라 그대로 HTML 에 넣지 않는다."""
+    st.markdown(f'<p class="ps-where">원본에 적힌 곳 · {html.escape(text)}</p>', unsafe_allow_html=True)
+
+
+def show_page(src, sid, picked, unsure):
+    """사진·PDF 원본 한 쪽. picked: 고른 카드가 가리키는 적힌 곳들(실선 상자와 확대 그림), unsure: 읽기 애매한 칸(점선)."""
+    path, key = src["storage_path"], f"page{sid}"
+    pages = drawn(path, 1)["pages"]
+    if not pages:
+        st.caption(f"원본: {src['name']}")
+        st.caption("원본 파일을 찾지 못했어요.")
+        return
+    st.session_state[key] = page = max(1, min(st.session_state.get(key, 1), pages))  # 읽을 때 적은 쪽이 실제보다 크면 끝 쪽으로
+    at_p, at_u = located(path, picked), located(path, unsure)
+    here = lambda found: [b for f in found if f and f[0] == page for b in [f[1]]]
+    view = drawn(path, page, here(at_p), here(at_u))
+    head = st.container(horizontal=True, vertical_alignment="center")
+    head.caption(f"원본: {src['name']}")
+    if pages > 1:
+        head.number_input("쪽", min_value=1, max_value=pages, step=1, key=key, width=120, label_visibility="collapsed")
+        head.caption(f"모두 {pages}쪽", width="content")
+    if picked:
+        first = next((f for f in at_p if f), None)
+        at = f"{first[0]}쪽 " if first and pages > 1 else ""
+        where_line(f"{at}‘{picked[0]['quote']}’" + (f" 외 {len(picked) - 1}곳" if len(picked) > 1 else ""))
+    if view["zoom"]:
+        st.container(key="orig_zoom").image(view["zoom"], width="stretch", alt="고른 카드가 가리키는 곳을 크게")
+    st.html(f"<style>.st-key-orig {{--ps-zoom: {view['zoom_ratio']};}}</style>")  # 쪽 그림은 확대 그림을 뺀 높이에 맞춘다
+    st.container(key="orig_page").image(view["page"], alt="원본 쪽")
+    if here(at_u):
+        st.caption("실선: 고른 카드가 가리키는 곳 · 점선: 읽기 애매한 칸")
+
+
+def show_table(t, src, sid, col=None, span=None):
+    """표 원본(CSV·엑셀) 전체. 고른 카드의 칸은 옅게, 그 줄의 값은 진하게 칠하고, 그 줄 둘레는 위에 따로 크게 보인다."""
+    st.caption(f"원본: {src['name']}")
+    content = engine.original(src.get("storage_path"))
+    if content:
+        df = engine.read_table(src["name"], content)
+    else:  # 원본 파일이 없으면 읽어 둔 기록으로
+        df = pd.DataFrame([r["data"] for r in t.get("records", select="data", source_input_id=f"eq.{sid}", limit=200)])
+    df.index = range(1, len(df) + 1)  # 카드의 'N번째 줄'과 같은 번호
+    row = span.get("row") if span else None
+
+    def paint(c):
+        if c.name != col:
+            return [""] * len(c)
+        return ["background-color: #99F6E4" if i == row else "background-color: #E6FFFA" for i in c.index]
+    if row and col in df:
+        where_line(f"{row}번째 줄 ‘{span['quote']}’")
+        st.container(key="orig_zoom").dataframe(df.loc[max(1, row - 2):row + 2].style.apply(paint), alt="고른 카드가 가리키는 줄 둘레")
+    st.dataframe(df.style.apply(paint) if col in df else df, alt="올린 표 원본")
+    st.caption(f"모두 {len(df)}줄")
 
 
 def pick_table(df, key, notes=None):
@@ -529,6 +627,40 @@ def space_card(t, q, ok):
     buttons(q, ("해당 없음", (answer_space, t, q, False)), ("맞아요", (answer_space, t, q, True)))
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def spans_of(tid, sid):
+    """올린 원본 1개에서 칸 이름 → 적힌 곳 [{page, quote, value, box}]. 표는 page 대신 row."""
+    rows = db.get("source_inputs", select="spans", tenant_id=f"eq.{tid}", id=f"eq.{sid}") if tid and sid else []
+    return (rows or [{}])[0].get("spans") or {}
+
+
+def pick_card(qid):
+    st.session_state._pick = qid
+
+
+def where(t, q):
+    """카드가 묻는 칸이 원본 어디에 적혔는지: 원문 글귀와 쪽. 카드를 누르면(카드를 덮은 투명 버튼) 왼쪽 원본이 그곳을 보여 준다."""
+    spans = spans_of(t.id, q["source_input_id"]).get(q["payload"].get("label")) or []
+    if not spans:
+        return
+    st.caption("원본에 적힌 곳: " + " · ".join(f"{spot(s, spans)}‘{s['quote']}’" for s in spans[:2]))
+    st.button("이 카드가 가리키는 곳을 원본에서 보기", key=f"look{q['id']}", on_click=pick_card, args=(q["id"],))
+
+
+def samples(t, q):
+    """카드의 '읽은 값 예'. 제안에 담긴 값이 없으면 원본에 적힌 값으로."""
+    vals = (q.get("evidence") or {}).get("samples") or [
+        s["value"] for s in spans_of(t.id, q["source_input_id"]).get(q["payload"].get("label")) or []]
+    return ", ".join(map(str, list(dict.fromkeys(vals))[:4]))
+
+
+def spot(s, spans):
+    """적힌 곳의 앞말: 표는 '3번째 줄 ', 여러 쪽 PDF 는 '2쪽 ', 사진 한 장은 없음."""
+    if "row" in s:
+        return f"{s['row']}번째 줄 "
+    return f"{s['page']}쪽 " if len({x.get('page', 1) for x in spans}) > 1 or s.get("page", 1) > 1 else ""
+
+
 def card(t, K, q, label=True):
     """label: 카드 맨 위 종류 이름표. 같은 이름의 소제목 아래에서는 빼서 겹치지 않게 한다."""
     P, kind = q["payload"], q["kind"]
@@ -541,6 +673,8 @@ def card(t, K, q, label=True):
             st.caption(name + (" (직접 고친 것)" if user else ""))
         if q.get("created_by"):
             st.caption(f"올린 사람: {person_name(q['created_by'])}")
+        if kind in ("칸", "같은 칸", "애매한 값"):
+            where(t, q)
         if kind == "워크스페이스 설정":
             space_card(t, q, ok)
         elif kind == "종류":
@@ -560,11 +694,11 @@ def card(t, K, q, label=True):
                     ("하나씩 볼게요", (engine.answer_type, t, q, "하나씩")), note=note)
         elif kind == "칸":
             st.write(f"**'{P['label']}' 칸이 처음 보여요. '{P['type']}'에 '{P['name']}'({engine.DTYPE_KO[P['dtype']]}) 칸을 추가할까요?**")
-            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))}. 추가하면 지난 기록에는 빈칸으로 들어가요.")
+            st.caption(f"읽은 값 예: {samples(t, q)}. 추가하면 지난 기록에는 빈칸으로 들어가요.")
             buttons(q, ("아니요", (engine.answer_prop, t, q, False)), ("추가", (engine.answer_prop, t, q, True)))
         elif kind == "같은 칸":
             st.write(f"**'{P['label']}'은(는) '{P['type']}'의 '{P['similar_to']}' 칸과 같은 칸인가요?**")
-            st.caption(f"읽은 값 예: {', '.join(map(str, ev.get('samples', [])))}. 지난 기록과 이름만 달라요.")
+            st.caption(f"읽은 값 예: {samples(t, q)}. 지난 기록과 이름만 달라요.")
             n = sum(P["label"] in r["data"] for r in t.get("records", select="data", source_input_id=f"eq.{q['source_input_id']}"))
             st.caption(f"같은 칸이면 이 종이의 기록 {n}줄의 '{P['label']}' 값이 '{P['similar_to']}' 칸으로 들어가요.")
             buttons(q, ("다른 칸", (engine.answer_same, t, q, False)), ("같은 칸", (engine.answer_same, t, q, True)))
@@ -916,6 +1050,26 @@ def read_file(t, key="up"):
         st.rerun()
 
 
+CHECK_CSS = """<style>
+/* 확인 화면: 원본:카드 = 3:2 */
+/* 원본은 카드를 내려도 화면 위에 붙어 있다. 쪽 그림은 화면 높이에 맞춘다 */
+[data-testid="stLayoutWrapper"]:has(> .st-key-orig) {position: sticky; top: 16px;}
+[data-testid="stMain"] {overflow-anchor: none;}  /* 카드를 눌러 다시 그리는 동안 화면이 맨 아래로 밀리지 않게 */
+.st-key-orig {max-height: calc(100vh - 32px); overflow-y: auto; container-type: inline-size;}
+.st-key-orig_zoom img {border: 1px solid #E4E4E7; border-radius: 6px;}
+.st-key-orig_page {align-items: center;}
+.st-key-orig_page img {max-height: calc(100vh - 210px - var(--ps-zoom, 0) * 100cqw); width: auto !important; max-width: 100%;}
+.ps-where {margin: 0; font-size: 13px; font-weight: 600; color: var(--ps-accent-text);}
+/* 카드 아무 데나 누르면 고른다: 카드를 덮은 투명 버튼. 카드 안의 다른 버튼·입력 칸은 그 위에 둔다 */
+[class*="st-key-card"]:has([class*="st-key-look"]) {position: relative; cursor: pointer;}
+[class*="st-key-card"]:has([class*="st-key-look"]):hover {border-color: #5EEAD4;}
+[class*="st-key-look"] {position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; z-index: 1; margin: 0 !important;}
+[class*="st-key-look"] [data-testid="stButton"], [class*="st-key-look"] button {width: 100%; height: 100%; min-height: 0;}
+[class*="st-key-look"] button {opacity: 0; cursor: pointer;}
+[class*="st-key-card"] :is([data-testid="stButton"], [data-testid="stTextInput"]):not([class*="st-key-look"] *) {position: relative; z-index: 2;}
+</style>"""
+
+
 def check(t, K):
     qs = sorted(engine.pending(t, engine.CHECK), key=lambda q: q["id"] in st.session_state.get("later", set()))
     if not qs and not K["types"]:
@@ -940,15 +1094,27 @@ def check(t, K):
         sid = entry[0]["source_input_id"]
         src = t.get("source_inputs", select="channel,name,storage_path", id=f"eq.{sid}")[0]
         mine = [q for q in entry if q["source_input_id"] == sid]
-        left, right = st.columns(2)
-        with left, st.container(border=True):
-            st.caption(f"원본: {src['name']}")
+        spans = spans_of(t.id, sid)
+        marks = {q["id"]: spans.get(q["payload"].get("label")) or [] for q in mine}
+        pick = st.session_state.get("_pick")
+        if not marks.get(pick):  # 처음 왔거나 고른 카드에 답했으면 적힌 곳이 있는 첫 카드
+            pick = next((i for i, m in marks.items() if m), None)
+        picked = marks.get(pick) or []
+        if st.session_state.get("_picked") != pick:  # 새로 고른 카드가 적힌 쪽으로 넘긴다
+            st.session_state._picked = pick
+            if src["channel"] == "사진" and (found := next((f for f in located(src["storage_path"], picked) if f), None)):
+                st.session_state[f"page{sid}"] = found[0]
+        unsure = [next((s for s in marks[q["id"]] if s["value"] == q["payload"].get("value")), marks[q["id"]][0])
+                  for q in mine if q["kind"] == "애매한 값" and marks[q["id"]]]
+        st.html(CHECK_CSS + (f"<style>.st-key-card{pick} {{border-color: {COLOR['type_fill']} !important; background: var(--ps-accent-bg);"
+                             f" box-shadow: 0 0 0 1px {COLOR['type_fill']}, 0 2px 6px rgba(0, 0, 0, 0.06);}}</style>" if pick else ""))
+        left, right = st.columns([3, 2])
+        with left, st.container(border=True, key="orig"):
             if src["channel"] == "사진":
-                show_photo(src["storage_path"])
+                show_page(src, sid, picked, unsure)
             else:
-                rows = t.get("records", select="data", source_input_id=f"eq.{sid}", limit=8)
-                st.dataframe(pd.DataFrame([r["data"] for r in rows]), hide_index=True, alt="파일 앞부분 8줄")
-                st.caption("파일 앞부분 8줄")
+                label = next((q["payload"]["label"] for q in mine if q["id"] == pick), None)
+                show_table(t, src, sid, label, picked[0] if picked else None)
         with right:
             for q in mine:
                 card(t, K, q)
@@ -2066,6 +2232,18 @@ def logout():
     st.query_params.clear()
 
 
+def badge(name):
+    """사이드바 맨 아래 동그란 이름표의 글자: 세 글자 한글 이름은 뒤 두 글자(한승훈 → 승훈), 그 밖에는 첫 글자.
+    글자·숫자만 남겨 CSS 안에 그대로 넣어도 안전하게 한다."""
+    s = "".join(c for c in name if c.isalnum())
+    return s[1:] if len(s) == 3 and all("가" <= c <= "힣" for c in s) else s[:1].upper()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def my_email(uid):
+    return (db.get("users", select="email", id=f"eq.{uid}") or [{}])[0].get("email")
+
+
 @st.cache_data(ttl=30, show_spinner=False)
 def person_name(uid):
     rows = db.get("users", select="name", id=f"eq.{uid}")
@@ -2095,7 +2273,7 @@ def my_spaces(uid):
 
 
 def space_title(x):
-    return x.get("title") or f"워크스페이스 {x['id']}"
+    return x.get("title") or "내 워크스페이스"
 
 
 def org_title(o):
@@ -2467,6 +2645,30 @@ def my_account(uid):
     st.button("로그아웃", key="logout", on_click=logout)
 
 
+# 요금제 초안(목업). 가격·한도는 예시이고 아직 아무것도 막거나 받지 않는다
+PLANS = [
+    {"name": "무료", "price": "0원", "for": "혼자 써 보기",
+     "lines": ["한 달 종이 30장", "빠르게 읽기", "워크스페이스 1개", "구성원 1명"]},
+    {"name": "프로", "price": "월 19,000원", "for": "가게·현장 하나", "pick": True,
+     "lines": ["한 달 종이 500장", "보통으로 읽기까지 (1장을 5장으로 셈)", "워크스페이스 3개", "구성원 5명"]},
+    {"name": "팀", "price": "월 59,000원", "for": "여러 현장·팀",
+     "lines": ["한 달 종이 2,000장", "꼼꼼하게 읽기까지 (1장을 10장으로 셈)", "워크스페이스 10개", "구성원 20명"]},
+]
+
+
+def plans():
+    """요금제: 플랜 셋을 나란히. 지금은 모두 무료 플랜이고, 다른 플랜 버튼은 막아 둔다."""
+    st.header("요금제")
+    st.caption("요금제는 준비 중이에요. 지금은 모두 무료로 써요. 아래 가격과 한도는 예시예요.")
+    for col, (i, P) in zip(st.columns(len(PLANS)), enumerate(PLANS)):
+        with col, st.container(border=True, key=f"plancard{i}{'_pick' if P.get('pick') else ''}"):
+            st.html(f'<div class="ps-plan-name">{P["name"]}</div><div class="ps-plan-price">{P["price"]}</div>'
+                    f'<div class="ps-plan-for">{P["for"]}</div>')
+            st.button("지금 플랜" if i == 0 else "준비 중", key=f"plan_btn{i}", disabled=True, width="stretch",
+                      type="primary" if P.get("pick") else "secondary")
+            st.html("".join(f'<div class="ps-plan-line">{line}</div>' for line in P["lines"]))
+
+
 def all_spaces(uid):
     """[모두 보기]: 조직마다 내 워크스페이스의 걸린 건수와 확인할 것 수. 워크스페이스끼리 합쳐 세지는 않는다."""
     st.header("모두 보기")
@@ -2483,6 +2685,12 @@ def all_spaces(uid):
                 left.button(space_title(x), key=f"all_{x['id']}", type="tertiary", on_click=switch_space, args=(x["id"],))
                 a.metric("걸린 것", f"{hits}건")
                 b.metric("확인할 것", f"{wait}개")
+
+
+def from_menu(fn, *args):
+    """계정 메뉴의 버튼: 할 일을 하고, 다시 그린 뒤 메뉴를 닫는다(아래 close_menu)."""
+    st.session_state._close_menu = time.time()
+    fn(*args)
 
 
 def pick(p):
@@ -2543,10 +2751,24 @@ with st.sidebar:
         for p in items:
             st.button(f"{p}  {waiting}" if p == "확인" and waiting else p, key=f"{'navon' if p == st.session_state.page else 'nav'}_{p}", type="tertiary",
                       on_click=pick, args=(p,), width="stretch")
-    if uid:  # 맨 아래: 지금 사람과 역할, 내 계정
-        st.divider()
-        st.button(f"{person_name(uid)}{' · ' + role if role else ''}", key="my_account", type="tertiary",
-                  on_click=pick, args=("내 계정",), width="stretch")
+    if uid:  # 맨 아래: 이름표와 이름·역할. 누르면 위로 이메일·[내 계정]·[로그아웃]
+        name = person_name(uid)
+        with st.container(key="me_row"):
+            st.html(f"<style>.st-key-me_row [data-testid='stPopover'] > div > button::before {{content: '{badge(name)}';}}</style>")
+            with st.popover(f"{name}{' · ' + role if role else ''}", width="stretch"), st.container(key="me_menu"):
+                master = is_master(uid)  # 요금제는 초안이라 테스트용 관리자에게만 보인다
+                plan = f"<br><span>{PLANS[0]['name']} 플랜</span>" if master else ""
+                st.html(f'<div class="ps-me-email">{html.escape(my_email(uid) or name)}{plan}</div>')
+                st.button("내 계정", key="me_account", type="tertiary", on_click=from_menu, args=(pick, "내 계정"), width="stretch")
+                if master:
+                    st.button("요금제", key="me_plans", type="tertiary", on_click=from_menu, args=(pick, "요금제"), width="stretch")
+                st.button("로그아웃", key="me_logout", type="tertiary", on_click=from_menu, args=(logout,), width="stretch")
+
+if n := st.session_state.pop("_close_menu", 0):
+    # 계정 메뉴에서 고른 뒤 열린 메뉴를 닫는다. 메뉴를 열 때마다 앱을 다시 돌리지 않으려고 Streamlit 상태 대신 Esc 키를 보낸다
+    st.container(key="close_menu").iframe(f"""<script>/* {n} */
+window.parent.document.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true}}));
+</script>""", height=1)
 
 if n := st.session_state.pop("_close_sidebar", 0):
     # 좁은 화면(휴대폰)에서 메뉴를 고르면 사이드바를 접는다. 넓은 화면은 그대로 둔다. n(고른 시각)은 매번 새로 실행되게 붙인다
@@ -2602,6 +2824,8 @@ if demo:  # 활용 사례: 화면 위에 어떤 사례인지와 내 계정으로
     hint.caption(f"다음에 눌러 볼 것 · {nxt[0]} — {nxt[1]}")
     if nxt[0] != st.session_state.page:
         nxt_col.button(f"{nxt[0]}로 가기", key="demo_next", on_click=pick, args=(nxt[0],), width="stretch")
+if st.session_state.page == "요금제" and not is_master(uid):  # 요금제 초안은 관리자만
+    st.session_state.page = "홈"
 page = st.session_state.page
 if page == "홈" and K["types"]:
     st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
@@ -2619,6 +2843,8 @@ elif page == "모두 보기" and uid:
     all_spaces(uid)
 elif page == "내 계정" and uid:
     my_account(uid)
+elif page == "요금제" and uid and is_master(uid):
+    plans()
 elif not tenant:
     st.header(TITLE.get(page, page))
     empty()

@@ -154,6 +154,7 @@ create table public.source_inputs (          -- 올린 사진이나 파일 1개,
   channel text not null check (channel in ('사진', '파일', '직접 입력')),
   name text,
   storage_path text,
+  spans jsonb not null default '{}',          -- 읽은 칸 이름 → 원본 어디에 적혔나 [{page, quote, value, box}]. box 는 AI가 적은 자리(쪽의 0~1000 비율). 확인 화면이 원본 위에 상자로 보여 준다
   created_by bigint references public.users(id),
   created_at timestamptz not null default now()
 );

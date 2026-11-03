@@ -65,7 +65,7 @@ def array(s):
     return {"type": "array", "items": s}
 
 
-CELL = obj(label=S, value=S, uncertain=B)
+CELL = obj(label=S, value=S, uncertain=B, page={"type": "integer"}, quote=S, box=array({"type": "integer"}))
 COND = obj(prop=S, op={"type": "string", "enum": OPS}, value=nullable(S), value_prop=nullable(S))
 LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}, "reason": S})
 
@@ -82,7 +82,10 @@ EXTRACT_PROMPT = (
     "  행이 무엇에 대한 것인지 가리키는 칸(품목, 설비, 제품, 고객 등)도 cells 에 넣으세요.\n"
     "- label 은 종이에 인쇄되거나 적힌 칸 이름 그대로. 표에서는 열 이름을 쓰고 행 이름을 붙이지 마세요.\n"
     "- value 는 적힌 그대로. 숫자는 단위 없이 숫자만. 인쇄된 값(기준, 최소 재고 등)도 칸이면 넣으세요.\n"
-    "- 값이 없다는 표시(-, 빈칸)는 넣지 마세요. 글씨가 흐리거나 헷갈리면 uncertain 을 true. 없는 값을 지어내지 마세요."
+    "- 값이 없다는 표시(-, 빈칸)는 넣지 마세요. 글씨가 흐리거나 헷갈리면 uncertain 을 true. 없는 값을 지어내지 마세요.\n"
+    "- page: 그 값이 적힌 쪽 번호(1부터). 사진 한 장이면 1.\n"
+    "- quote: 그 값이 종이에 적힌 부분을 글자 그대로 짧게(40자 안). 칸 이름과 값이 함께 보이게. 고치거나 요약하지 마세요.\n"
+    "- box: 그 값이 적힌 곳을 감싸는 상자 [x0, y0, x1, y1]. 그 쪽의 왼쪽 위가 0, 0, 오른쪽 아래가 1000, 1000 인 비율 좌표."
 )
 
 
