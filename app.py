@@ -365,7 +365,10 @@ def link_sentence(P):
 
 def show_photo(path, note="원본 사진이 없는 기록이에요(파일로 올린 기록)."):
     if path and (engine.DATA / path).exists():
-        st.image(str(engine.DATA / path), alt="원본 사진")
+        if path.lower().endswith(".pdf"):  # PDF 는 그림이 아니라 여기서 그리지 않는다
+            st.caption("PDF로 올린 기록이에요. 원본은 미리 보지 않아요.")
+        else:
+            st.image(str(engine.DATA / path), alt="원본 사진")
     else:
         st.caption(note)
 
