@@ -12,6 +12,7 @@ from . import db
 
 KEY = db.env.get("ANTHROPIC_API_KEY", "").strip()
 MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"]
+DEFAULT = "claude-sonnet-5-5"  # 모든 AI 호출의 기본. 올리기·[다시 읽기]·묻기에서는 다른 모델로 바꿀 수 있다
 # 모델 → (입력, 출력) 100만 토큰당 달러. 공식 가격표 기준, 바뀌면 여기만 고친다.
 PRICE = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00), "claude-haiku-5-5": (0.10, 0.50)}
 LINK_KINDS = ["연결", "함께 움직임", "최소 기준", "최대 기준", "의존", "영향", "대체"]

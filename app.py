@@ -1169,7 +1169,7 @@ def suggest(fn, t):
     """[새로 추천받기]: Claude 에게 제안을 받아 제안 카드로 올린다."""
     with st.spinner("제안을 고르는 중이에요..."):
         try:
-            fn(t, llm.MODELS[0])
+            fn(t, llm.DEFAULT)
         except ERRORS as e:
             fail("제안을 받지 못했어요", e)
             return
@@ -1534,7 +1534,7 @@ def week(t, K):
     if st.session_state.pop("_make_week", False):
         with st.spinner("이번 주 기록을 세는 중이에요..."):
             try:
-                st.session_state[key] = engine.week_summary(t, llm.MODELS[0], K)
+                st.session_state[key] = engine.week_summary(t, llm.DEFAULT, K)
             except ERRORS as e:
                 fail("요약하지 못했어요", e)
     if key not in st.session_state:
@@ -1641,7 +1641,7 @@ def paper_row(t, K, s, show_type):
         mine = engine.can_delete(t, s)
         if s["wait"] and not s["rows"] and th["found"] and mine and not isinstance(t, Demo):  # 활용 사례는 종이를 새로 읽지 않는다
             with row.popover("다시 읽기"):
-                model = st.selectbox("읽는 모델", llm.MODELS, index=1, format_func=lambda m: MODEL_KO.get(m, m), key=f"prm{sid}")
+                model = st.selectbox("읽는 모델", llm.MODELS, index=llm.MODELS.index(llm.DEFAULT), format_func=lambda m: MODEL_KO.get(m, m), key=f"prm{sid}")
                 st.caption("저장된 원본을 이 모델로 다시 읽어요. 지금 확인 중인 카드는 새 카드로 바뀌어요.")
                 if st.button("읽기 시작", key=f"prr{sid}", type="primary"):
                     with st.spinner("다시 읽는 중이에요..."):
@@ -1730,7 +1730,7 @@ def write_form(t, K):
         saved = st.form_submit_button("저장", type="primary")
     if saved:
         try:
-            engine.write_record(t, llm.MODELS[0], T, day.isoformat(), values)
+            engine.write_record(t, llm.DEFAULT, T, day.isoformat(), values)
         except ERRORS as e:
             fail("저장하지 못했어요", e)
             return
@@ -1745,7 +1745,7 @@ def read_file(t, key="up"):
     if f and f.name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
         st.image(f, caption=f.name, alt="올린 사진")
     with st.expander("모델 고르기"):
-        model = st.selectbox("읽는 모델", llm.MODELS, index=1, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
+        model = st.selectbox("읽는 모델", llm.MODELS, index=llm.MODELS.index(llm.DEFAULT), format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
     if st.button("읽기 시작", type="primary", key=f"{key}read"):
         if not f:
             st.error("사진이나 파일을 먼저 넣어 주세요.")
@@ -2180,7 +2180,7 @@ def ask(t, K):
         compare = st.toggle("나란히 보기", help="같은 질문을 구조를 확정하기 전(종이에서 읽은 그대로)과 지금 지식으로 함께 답해요. "
                                                 "고르기 전에는 어느 쪽인지 가려 둬요.")
         with st.expander("모델 고르기"):
-            model = st.selectbox("답하는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m))
+            model = st.selectbox("답하는 모델", llm.MODELS, index=llm.MODELS.index(llm.DEFAULT), format_func=lambda m: MODEL_KO.get(m, m))
     if sent and not question.strip():
         st.warning("질문을 적어 주세요.")  # 13
     if sent and question.strip():
@@ -2930,7 +2930,7 @@ def cal_write(t, K, spec, day, key, sel_key):
     if saved:
         values[prop] = f"{d.isoformat()} {tm:%H:%M}" if tm else d.isoformat()
         try:
-            engine.write_record(t, llm.MODELS[0], T, date.today().isoformat(), values)
+            engine.write_record(t, llm.DEFAULT, T, date.today().isoformat(), values)
         except (*ERRORS, db.NotAllowed) as e:
             fail("저장하지 못했어요", e)
             return
@@ -3129,7 +3129,7 @@ def build_chat(t, K, kind):
             msgs.append({"role": "user", "text": req})
             with st.spinner("확정한 기록으로 만드는 중이에요..."):
                 try:
-                    out = engine.build_chat(t, llm.MODELS[0], kind, history, req)
+                    out = engine.build_chat(t, llm.DEFAULT, kind, history, req)
                 except ERRORS as e:
                     out = {"text": f"만들지 못했어요: {e}", "spec": None}
             msgs.append({"role": "assistant", "request": req, **out})
@@ -4402,7 +4402,7 @@ tenant = Demo(tid) if demo else db.Tenant(tid, uid, role) if tid else None
 if tenant and not demo and role in (None, *db.ANSWER) and st.session_state.get("_space_seen") != tid:
     # 워크스페이스 설정 카드는 이 접속에서 워크스페이스마다 한 번, 그리고 종이를 새로 읽은 뒤에만 살핀다(화면마다 DB 3번을 줄인다)
     if tenant.get("source_inputs", select="id", limit=1):
-        engine.suggest_space(tenant, llm.MODELS[0])
+        engine.suggest_space(tenant, llm.DEFAULT)
     st.session_state._space_seen = tid
 K = know(tenant)
 waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
