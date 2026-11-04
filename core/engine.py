@@ -1267,7 +1267,9 @@ def rename_spec(spec, T, old, new):
     for c in s.get("conditions") or []:
         c["prop"] = new if c.get("prop") == old else c.get("prop")
         c["value_prop"] = new if c.get("value_prop") == old else c.get("value_prop")
-    s["prop"] = new if s.get("prop") == old else s.get("prop")
+    for k in ("prop", "by", "color"):
+        if k in s or k == "prop":
+            s[k] = new if s.get(k) == old else s.get(k)
     s["props"] = [new if p == old else p for p in s.get("props") or []]
     return s
 
@@ -1863,6 +1865,8 @@ def valid_spec(K, s):
         return False
     if s.get("kind") == "view":
         return not view_problems(K, s)
+    if s.get("kind") == "pick":
+        return pick_ok(K, s)
     nums = prop_names(K, T, "number")
     if s.get("kind") == "kpi":
         return s.get("fn") == "count" or s.get("prop") in nums
@@ -2082,7 +2086,7 @@ def run_widget(K, spec, today=None):
     if not valid_spec(K, spec):
         return (pd.DataFrame() if spec.get("kind") == "trend" else None), pd.DataFrame()
     df = match(frame(K, spec["type"]), spec.get("conditions"), today)
-    if spec["kind"] == "view":
+    if spec["kind"] in ("view", "pick"):
         return df, df
     if spec["kind"] == "count_where":
         return len(df), df
@@ -2123,9 +2127,9 @@ VIEW_STYLE = {
 VIEW_HEIGHT = 300
 
 
-def to_iso(v):
-    """날짜 칸 값 → ISO. '오후 2시', '14:30' 처럼 시각이 적혀 있으면 함께 쓴다."""
-    d = to_date(v)
+def to_iso(v, year=None):
+    """날짜 칸 값 → ISO. '오후 2시', '14:30' 처럼 시각이 적혀 있으면 함께 쓴다. 해가 안 적혔으면 year(없으면 올해)."""
+    d = to_date(v, year)
     if not d:
         return None
     s, h, mi = str(v), None, 0
@@ -2236,6 +2240,227 @@ def auto_widgets(K):
         for n in own(K, T, "number")[:3]:
             specs.append({"title": f"{T} · {n} 추이", "kind": "trend", "type": T, "props": [n], "conditions": []})
     return specs
+
+
+# ---- 대시보드: 만들기(보기 고르기 · 골라서 만들기) ----
+# 고른 기록 종류 · 칸 · 셀 방법 · 나눌 칸 · 모양으로 코드가 보기를 짓고 센다. Claude 를 부르지 않는다.
+# 모양 목록은 값의 종류(날짜 · 숫자 · 고르는 값 · 대상)로만 고르고, 업종 규칙은 없다.
+
+FNS = {"count": "건수", "sum": "합계", "avg": "평균", "max": "가장 큰 값", "min": "가장 작은 값"}
+SHAPES = ("막대", "선", "표", "상태별", "달력", "목록")  # 숫자 하나는 kpi 지표로 만든다
+GROUP_MAX = 15  # 글 칸은 서로 다른 값이 이만큼 이하이고 같은 값이 되풀이될 때만 나눌 칸으로 쓴다
+LIST_MAX = 5    # 목록 보기에 보이는 줄 수
+
+
+def group_cols(K, T):
+    """나눌 수 있는 칸: 주 대상 칸, 고르는 값 칸(대상의 분류 포함), 같은 값이 되풀이되는 글 칸."""
+    df, ent, out = frame(K, T), entity(K, T), []
+    for n, d in col_defs(K, T):
+        vals = df[n].dropna() if n in df else pd.Series(dtype=object)
+        if n == ent or d == "choice" or (d == "text" and 1 < vals.nunique() <= GROUP_MAX and len(vals) > vals.nunique()):
+            out.append(n)
+    return sorted(out, key=lambda n: n != ent)
+
+
+def useful_groups(K, T, repeat=False):
+    """값이 둘 이상인 나눌 칸. repeat: 줄마다 다른 칸(이름 · 연락처처럼)도 뺀다."""
+    df = frame(K, T)
+    return [n for n in group_cols(K, T) if 1 < df[n].nunique() and (not repeat or df[n].nunique() < df[n].notna().sum())]
+
+
+def date_cols(K, T):
+    """나눌 수 있는 날짜: 기록 날짜와 날짜 칸."""
+    return ["날짜"] + own(K, T, "date")
+
+
+def ahead_dates(K, T):
+    """앞날이 적히는 날짜 칸(미팅 · 예정일처럼): 기록 날짜보다 늦은 날이 적힌 줄이 절반이 넘는 칸."""
+    df, out = frame(K, T), []
+    for n in own(K, T, "date"):
+        pairs = [(to_date(v, int(str(d)[:4])), date.fromisoformat(str(d)[:10])) for v, d in zip(df[n], df["날짜"]) if filled(v) and d]
+        pairs = [(a, b) for a, b in pairs if a]
+        if pairs and sum(a > b for a, b in pairs) * 2 > len(pairs):
+            out.append(n)
+    return out
+
+
+def pick_ok(K, s):
+    T, names = s["type"], prop_names(K, s["type"]) + ["날짜"]
+    fn, prop, shape = s.get("fn") or "count", s.get("prop"), s.get("shape")
+    if shape not in SHAPES or fn not in FNS or any(s.get(k) and s[k] not in names for k in ("by", "color", "prop")):
+        return False
+    if shape in ("달력", "목록"):
+        return prop in own(K, T, "date")
+    if fn != "count" and prop not in prop_names(K, T, "number"):
+        return False
+    return bool(s.get("by")) and (shape != "선" or s["by"] in date_cols(K, T))
+
+
+def shapes_for(K, T, fn, by):
+    """고른 셀 방법 · 나눌 칸으로 그릴 수 있는 모양과, 못 그리면 무엇을 바꾸면 되는지: [(모양, 까닭 또는 None)]."""
+    dates, groups = date_cols(K, T), group_cols(K, T)
+    why = {"숫자 하나": None if not by else "'나누지 않음'이면",
+           "막대": None if by else "나눌 칸을 고르면",
+           "선": None if by in dates else "날짜로 나누면",
+           "표": None if by else "나눌 칸을 고르면",
+           "상태별": None if by in groups and fn == "count" else "고르는 값 칸의 건수를 셀 때",
+           "달력": None if by in own(K, T, "date") else "날짜 칸으로 나누면",
+           "목록": None if by in own(K, T, "date") else "날짜 칸으로 나누면"}
+    return list(why.items())
+
+
+def pick_title(s):
+    """골라서 만든 보기의 제목. 코드가 고른 것으로 짓는다."""
+    fn, prop, by, shape = s.get("fn") or "count", s.get("prop"), s.get("by"), s.get("shape")
+    what = f"{s['type']} 기록 수" if fn == "count" else f"{prop} {FNS[fn]}"
+    if s.get("kind") == "kpi":
+        base = what
+    elif shape == "달력":
+        base = f"{prop} 달력"
+    elif shape == "목록":
+        base = f"다가오는 {prop}"
+    elif shape == "상태별":
+        base = f"{by}별 {s['type']}"
+    else:
+        base = f"{by}별 {'건수' if fn == 'count' else what}"
+    vals = [str(c.get("value")) for c in s.get("conditions") or [] if c.get("op") == "="]
+    return f"{base} · {', '.join(vals)}만" if vals else base
+
+
+def when_of(v, day):
+    """날짜 칸 값 → datetime(시각이 없으면 0시)과 시각이 적혔는지. 해가 안 적혔으면 그 기록 날짜의 해."""
+    iso = to_iso(v, int(str(day)[:4]) if day else None)
+    if not iso:
+        return None, False
+    return datetime.fromisoformat(iso), "T" in iso
+
+
+def pick_values(K, spec, name=None, today=None):
+    """골라서 만든 보기(막대 · 선 · 표 · 상태별)의 값: (표[나눈 값, 값, 줄], 근거 기록).
+    name(보는 기간)을 주면 그 기간의 기록만 센다. 날짜로 나누면 기간에 맞춰 일 · 주 · 달로 묶는다."""
+    T, by, prop = spec["type"], spec["by"], spec.get("prop")
+    fn = spec.get("fn") or "count"
+    if name:
+        a, b, _, _ = period_range(name, today)
+        K = in_period(K, a, b)
+    df = unsorted(K, T, match(frame(K, T), spec.get("conditions"), today))
+    if fn != "count":
+        df = df[df[prop].notna()]
+    dated = by in date_cols(K, T)
+    if dated:
+        unit = PERIODS[name][1] if name else "D"
+        day = df["날짜"].map(lambda d: date.fromisoformat(str(d)[:10]) if d else None) if by == "날짜" else \
+            pd.Series([w.date() if (w := when_of(v, d)[0]) else None for v, d in zip(df[by], df["날짜"])], index=df.index, dtype=object)
+        key = day.map(lambda d: None if d is None else d if unit == "D" else d - timedelta(days=d.weekday()) if unit == "W" else d.replace(day=1))
+    else:
+        key = df[by].map(lambda v: str(v) if filled(v) else UNSORTED)
+    df = df.assign(_k=key)
+    df = df[df["_k"].notna()]
+    if not len(df):
+        return pd.DataFrame(columns=[by, "값", "줄"]), df
+    g = df.groupby("_k")
+    vals = g.size() if fn == "count" else getattr(g[prop], {"avg": "mean"}.get(fn, fn))()
+    out = pd.DataFrame({by: vals.index, "값": vals.values, "줄": g.size().reindex(vals.index).values})
+    if dated:
+        out = out.sort_values(by)
+    else:
+        out = out.sort_values("값", ascending=False, kind="stable")
+        out = pd.concat([out[out[by] != UNSORTED], out[out[by] == UNSORTED]])
+    return out.reset_index(drop=True), df.drop(columns="_k")
+
+
+def color_map(values):
+    """색을 칠할 칸의 값마다 차트 색(많이 나온 값부터)."""
+    order = pd.Series([str(v) for v in values if filled(v)]).value_counts().index
+    palette = [c for c in CHART if c != "#1F1F1F"] + ["#1F1F1F"]
+    return {v: palette[i % len(palette)] for i, v in enumerate(order)}
+
+
+def schedule(K, spec, today=None):
+    """일정 보기(달력 · 목록)의 줄: 날짜 칸(prop)에 적힌 날과 시각, 이름(주 대상), 곁 글(나눌 칸 하나), 색 칸 값."""
+    T, prop, color = spec["type"], spec["prop"], spec.get("color")
+    df = match(frame(K, T), spec.get("conditions"), today)
+    ent = entity(K, T)
+    side = next((n for n in group_cols(K, T) if n not in (ent, color) and not n.endswith(".분류")), None)
+    texts = [n for n in own(K, T, "text") if n not in (side,)]
+    name = ent or (texts[0] if texts else None)
+    rows = []
+    for _, r in df.iterrows():
+        at, timed = when_of(r[prop], r["날짜"])
+        if at:
+            rows.append({"_id": r["_id"], "at": at, "timed": timed, "name": str(r[name]) if name and filled(r[name]) else T,
+                         "side": str(r[side]) if side and filled(r[side]) else "", "tone": str(r[color]) if color and filled(r[color]) else ""})
+    rows.sort(key=lambda x: x["at"])
+    return rows, df, color_map(df[color]) if color and color in df else {}
+
+
+def calendar(K, spec, mode, offset=0, today=None):
+    """일정 달력의 날들. mode week: 오늘이 든 주(일~토)에서 offset 주 옮긴 주, month: offset 달 옮긴 달(일요일 시작, 앞뒤 달 날 포함).
+    (날들 [{day, out, events}], 보이는 날의 근거 기록, 색 이름표 {값: 색}, 제목 글)."""
+    today = today or date.today()
+    rows, df, tones = schedule(K, spec, today)
+    if mode == "week":
+        start = today - timedelta(days=(today.weekday() + 1) % 7) + timedelta(days=7 * offset)
+        days, month = [start + timedelta(days=i) for i in range(7)], None
+        label = f"{days[0].month}월 {days[0].day}일 ~ {days[-1].month}월 {days[-1].day}일"
+    else:
+        y, m = divmod(today.year * 12 + today.month - 1 + offset, 12)
+        first = date(y, m + 1, 1)
+        last = (first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        start = first - timedelta(days=(first.weekday() + 1) % 7)
+        end = last + timedelta(days=(5 - last.weekday()) % 7)
+        days, month = [start + timedelta(days=i) for i in range((end - start).days + 1)], first.month
+        label = f"{first.year}년 {first.month}월"
+    on = {}
+    for r in rows:
+        on.setdefault(r["at"].date(), []).append(r)
+    out = [{"day": d, "out": month is not None and d.month != month, "events": on.get(d, [])} for d in days]
+    ids = {r["_id"] for d in out for r in d["events"]}
+    return out, df[df["_id"].isin(ids)], tones, label
+
+
+def coming(K, spec, today=None):
+    """일정 보기의 오늘 건수 · 이번 주(오늘~토요일) 남은 건수 · 오늘부터 다가오는 줄."""
+    today = today or date.today()
+    rows = schedule(K, spec, today)[0]
+    sat = today + timedelta(days=(5 - today.weekday()) % 7)
+    ahead = [r for r in rows if r["at"].date() >= today]
+    return sum(r["at"].date() == today for r in rows), sum(r["at"].date() <= sat for r in ahead), ahead
+
+
+def gallery(K, taken=()):
+    """보기 고르기: 확정한 칸으로 그릴 수 있는 보기 후보와, 칸이 모자라 못 그리는 모양의 까닭.
+    (보기 명세들, [(모양, 까닭)]). taken 은 이미 올렸거나 묻는 중인 제목."""
+    specs, missing = [], {}
+    for T in K["types"]:
+        ent, nums = entity(K, T), own(K, T, "number")
+        groups = useful_groups(K, T, repeat=True)  # 값이 하나뿐이거나 줄마다 다른 칸은 뺀다
+        choices = [n for n in groups if n != ent and dict(col_defs(K, T)).get(n) == "choice" and not n.endswith(".분류")]
+        base = {"kind": "pick", "type": T, "conditions": []}
+        for d in ahead_dates(K, T)[:2]:
+            specs.append({**base, "shape": "달력", "fn": "count", "prop": d, "by": None, "color": choices[0] if choices else None})
+            specs.append({**base, "shape": "목록", "fn": "count", "prop": d, "by": None, "color": choices[0] if choices else None})
+        if choices:
+            specs.append({**base, "shape": "상태별", "fn": "count", "prop": None, "by": choices[0]})
+        for g in [n for n in groups if n not in choices[:1]][:2]:
+            specs.append({**base, "shape": "막대", "fn": "count", "prop": None, "by": g})
+        if nums and groups:
+            specs.append({**base, "shape": "막대", "fn": "avg", "prop": nums[0], "by": groups[0]})
+        if nums:
+            specs.append({"kind": "kpi", "type": T, "fn": "avg", "prop": nums[0], "props": [], "conditions": []})
+        specs.append({**base, "shape": "선", "fn": "count", "prop": None, "by": "날짜"})
+        if not ahead_dates(K, T):
+            missing["달력"] = "앞날이 적히는 날짜 칸(미팅 · 예정일 등)이 있으면 생겨요"
+        if not nums:
+            missing["평균 · 합계"] = "숫자 칸이 있는 기록 종류에서 생겨요"
+        if not groups:
+            missing["비교"] = "대상이나 고르는 값 칸이 있으면 생겨요"
+    out = []
+    for s in specs:
+        s["title"] = pick_title(s)
+        if s["title"] not in taken and valid_spec(K, s) and s["title"] not in {x["title"] for x in out}:
+            out.append(s)
+    return out, list(missing.items())
 
 
 def week_facts(t, K):

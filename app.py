@@ -392,7 +392,7 @@ def ref_text(ref):
     return f"{p}({T})" if p else T
 
 
-def line(df, alt):
+def line(df, alt, height=None):
     """날짜별 추이 선. 대화로 만든 보기와 같은 꾸밈(VIEW_STYLE)으로, 날짜는 '10/12'처럼 짧게 가로로."""
     d = df.copy()
     d.index = pd.to_datetime(d.index, errors="coerce")
@@ -404,7 +404,7 @@ def line(df, alt):
         "encoding": {"x": {"field": "날짜", "type": "temporal", "title": None, "axis": {"format": "%-m/%-d", "labelAngle": 0, "tickCount": {"interval": "day", "step": 1}}},
                      "y": {"field": "값", "type": "quantitative", "title": None},
                      "color": {"field": "계열", "type": "nominal", "title": None}},
-        "height": engine.VIEW_HEIGHT, "config": engine.VIEW_STYLE}, width="stretch", alt=alt)
+        "height": height or engine.VIEW_HEIGHT, "config": engine.VIEW_STYLE}, width="stretch", alt=alt)
 
 
 def fmtv(v):
@@ -1032,8 +1032,11 @@ def card(t, K, q, label=True):
         elif kind == "지표":
             st.write(f"**'{P['title']}'을(를) 대시보드에 올릴까요?**")
             value, rows = engine.run_widget(K, P)
-            now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] in ("trend", "view") else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
-            st.caption(f"{asked_for(ev)}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} {now_}.")
+            now_ = f"지금 기록으로 그리면 {len(rows)}줄" if P["kind"] in ("trend", "view", "pick") else f"지금 값 {fmt(value)} (근거 기록 {len(rows)}줄)"
+            made = "[만들기]에서 고른 보기예요. " if ev.get("made") else ""
+            st.caption(f"{asked_for(ev)}{made}{P.get('reason') or '쌓인 기록에서 뽑아 보여 줘요.'} {now_}.")
+            if P["kind"] == "pick":
+                draw_pick(K, P, f"q{q['id']}", small=True)
             if P["kind"] in ("kpi", "count_where"):
                 now_v, prev, _ = engine.period_values(K, P, period())
                 st.caption(f"{engine.PERIODS[period()][0]} {fmt(prev)} → {period()} {fmt(now_v)}")
@@ -2535,7 +2538,12 @@ def graph(t, K):
 
 
 def is_chart(spec):
-    return spec["kind"] in ("view", "trend")
+    return spec["kind"] in ("view", "trend", "pick")
+
+
+def is_wide(spec):
+    """한 줄을 다 쓰는 지표: 일정 달력."""
+    return spec.get("kind") == "pick" and spec.get("shape") == "달력"
 
 
 def grid(items, draw):
@@ -2549,16 +2557,23 @@ def grid(items, draw):
         n += 1
 
 
-def widget(K, spec, key, remove=None):
+def widget(K, spec, key, remove=None, t=None):
     """지표 카드. 말로 만든 보기 말고는 보는 기간의 값과 같은 길이 앞 기간의 값을 함께 보인다."""
+    if spec["kind"] == "pick" and spec.get("shape") == "달력":
+        calendar_card(t, K, spec, key, remove)
+        return
     if spec["kind"] == "view":
         value, ev = engine.run_widget(K, spec)
         prev = None
+    elif spec["kind"] == "pick":
+        value, prev, ev = None, None, None
     else:
         value, prev, ev = engine.period_values(K, spec, period())
     with st.container(border=True, height="stretch"):  # 같은 줄 카드는 높이를 맞춘다
         st.caption(spec["title"])
-        if spec["kind"] == "view":
+        if spec["kind"] == "pick":
+            ev = draw_pick(K, spec, f"pick{key}")
+        elif spec["kind"] == "view":
             draw_view(K, spec, f"view{key}")
         elif spec["kind"] == "trend":
             if len(ev):
@@ -2577,6 +2592,298 @@ def widget(K, spec, key, remove=None):
                 pick_table(ev, f"ev{key}")
         if remove:
             st.button("내리기", key=f"rm{key}", on_click=act, args=remove, kwargs={"done": "대시보드에서 내렸어요."})
+
+
+# ---- 골라서 만든 보기: 막대 · 선 · 표 · 상태별 · 목록 · 달력. 값은 engine 이 기록에서 센다 ----
+
+DAY_KO = "월화수목금토일"
+
+
+def hm(at):
+    """'오후 3시', '오전 10시 30분'."""
+    h, m = at.hour, at.minute
+    return f"{'오전' if h < 12 else '오후'} {h % 12 or 12}시" + (f" {m}분" if m else "")
+
+
+def day_ko(d):
+    return f"{d.month}/{d.day}({DAY_KO[d.weekday()]})"
+
+
+def bar_chart(out, alt, height=None):
+    """나눈 값마다 가로 막대와 값. 나눈 이름은 '묶음' 열로 바꿔 넣어 점이 든 칸 이름도 그린다."""
+    d = pd.DataFrame({"묶음": out.iloc[:, 0].astype(str), "값": out["값"]})
+    enc = {"y": {"field": "묶음", "type": "nominal", "sort": None, "title": None, "axis": {"labelOverlap": False}},
+           "x": {"field": "값", "type": "quantitative", "title": None, "axis": None, "scale": {"nice": False}}}
+    st.vega_lite_chart(d, {"layer": [{"mark": {"type": "bar"}}, {"mark": {"type": "text", "align": "left", "dx": 4},
+                                      "encoding": {"text": {"field": "값", "type": "quantitative", "format": ",.4~f"}}}],
+                           "encoding": enc, "padding": {"right": 48}, "config": engine.VIEW_STYLE},
+                       width="stretch", height=height or max(80, 28 * len(d)), alt=alt)
+
+
+def upcoming_list(rows, tones, prop, more=True):
+    if not rows:
+        st.caption(f"오늘부터 적힌 {josa(prop, '이가')} 없어요.")
+        return
+    lines = "".join(
+        f'<div class="ps-up"><span class="ps-dot" style="background:{tones.get(r["tone"], "#A1A1AA")}"></span>'
+        f'<span class="ps-up-at">{day_ko(r["at"])}{" " + hm(r["at"]) if r["timed"] else ""}</span>'
+        f'<b>{html.escape(r["name"])}</b><span class="ps-up-side">{html.escape(r["side"])}</span></div>'
+        for r in rows[:engine.LIST_MAX])
+    st.html(lines)
+    if more and len(rows) > engine.LIST_MAX:
+        st.caption(f"그 뒤 {len(rows) - engine.LIST_MAX}건 더")
+
+
+def draw_pick(K, spec, key, small=False):
+    """골라서 만든 보기를 그리고 근거 기록을 돌려준다. small: 보기 고르기의 작은 미리보기."""
+    shape, T = spec["shape"], spec["type"]
+    if shape == "달력":
+        days, ev, tones, _ = engine.calendar(K, spec, "month")
+        CAL(data=cal_data(days, tones, "mini"), key=f"cal{key}")
+        return ev
+    if shape == "목록":
+        _, _, rows = engine.coming(K, spec)
+        _, ev, tones = engine.schedule(K, spec)
+        upcoming_list(rows, tones, spec["prop"], more=not small)
+        return ev[ev["_id"].isin({r["_id"] for r in rows})]
+    out, ev = engine.pick_values(K, spec, period())
+    if not len(out):
+        st.caption(f"{period()}에는 셀 기록이 없어요.")
+        return ev
+    if shape == "막대":
+        bar_chart(out.head(8) if small else out, spec["title"])
+    elif shape == "선":
+        line(out.set_index(spec["by"])[["값"]].rename(columns={"값": spec["title"]}), spec["title"], height=160 if small else None)
+    elif shape == "표":
+        st.dataframe(out.assign(값=out["값"].round(1)).rename(columns={"값": engine.FNS[spec.get("fn") or "count"], "줄": "근거 줄"}),
+                     hide_index=True)
+    else:  # 상태별: 값마다 건수와 최근 대상 두 개
+        ent = engine.entity(K, T)
+        for col, r in zip(st.columns(min(len(out), 4)), out.head(4).itertuples(index=False)):
+            with col, st.container(border=True):
+                st.metric(str(r[0]), fmt(r[1]))
+                names = ev[ev[spec["by"]].astype(str) == str(r[0])][ent].dropna().astype(str).head(2) if ent else []
+                if len(names):
+                    st.caption(", ".join(names))
+    return ev
+
+
+CAL_JS = """
+// 일정 달력. 날짜 칸에 적힌 날로 기록을 놓는다. 일정을 누르면 'r기록번호', 빈 날을 누르면 'd날짜'를 돌려준다.
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component
+  const root = parentElement.querySelector(".cal")
+  root.className = `cal ${data.mode}`
+  root.replaceChildren()
+  if (data.mode !== "week") {
+    for (const h of data.heads) {
+      const e = document.createElement("div")
+      e.className = "hd" + (h === "일" ? " sun" : "")
+      e.textContent = h
+      root.appendChild(e)
+    }
+  }
+  for (const d of data.days) {
+    const cell = document.createElement("div")
+    cell.className = "day" + (d.out ? " out" : "") + (d.today ? " today" : "") + (d.past ? " past" : "") + (d.wd === 0 ? " sun" : "")
+    const num = document.createElement("div")
+    num.className = "num"
+    num.textContent = data.mode === "week" ? `${d.n} ${d.wdk}${d.today ? " · 오늘" : ""}` : `${d.n}`
+    cell.appendChild(num)
+    for (const ev of d.events) {
+      if (data.mode === "mini") {
+        const dot = document.createElement("span")
+        dot.className = "dot"
+        dot.style.background = ev.color
+        cell.appendChild(dot)
+        continue
+      }
+      const b = document.createElement("button")
+      b.type = "button"
+      b.className = "ev" + (ev.sel ? " sel" : "")
+      b.style.borderLeftColor = ev.color
+      const tm = document.createElement("span")
+      tm.className = "tm"
+      tm.textContent = ev.time
+      const nm = document.createElement("b")
+      nm.textContent = ev.name
+      b.append(tm, nm)
+      if (data.mode === "week" && ev.side) {
+        const sd = document.createElement("span")
+        sd.className = "sd"
+        sd.textContent = ev.side
+        b.appendChild(sd)
+      }
+      b.title = `${ev.time} ${ev.name} ${ev.side}`.trim()
+      b.onclick = (e) => { e.stopPropagation(); setTriggerValue("clicked", "r" + ev.id) }
+      cell.appendChild(b)
+    }
+    if (data.mode !== "mini") {
+      if (!d.events.length && data.mode === "week") {
+        const none = document.createElement("div")
+        none.className = "none"
+        none.textContent = data.none
+        cell.appendChild(none)
+      }
+      if (data.pick === d.iso) {
+        const add = document.createElement("div")
+        add.className = "add"
+        add.textContent = "이 날로 직접 적기"
+        cell.appendChild(add)
+      }
+      cell.onclick = () => setTriggerValue("clicked", "d" + d.iso)
+    }
+    root.appendChild(cell)
+  }
+}
+"""
+CAL = st.components.v2.component("papersolve_calendar", html='<div class="cal"></div>', css="""
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid #E4E4E7; border-left: 1px solid #F0F0F2;
+  font: 13px/1.4 var(--st-font, sans-serif); color: #1F1F1F; }
+.hd { padding: 6px 8px; font-size: 12px; color: #71717A; border-bottom: 1px solid #E4E4E7; border-right: 1px solid #F0F0F2; }
+.hd.sun, .day.sun .num { color: #B91C1C; }
+.day { border-right: 1px solid #F0F0F2; border-bottom: 1px solid #F0F0F2; padding: 6px; min-height: 96px; cursor: pointer; min-width: 0; }
+.day:hover { background: #FAFAFA; }
+.day.out { background: #FAFAFA; } .day.out .num { color: #D4D4D8; }
+.day.today { background: #F0FDFA; } .day.today .num { color: #0F766E; font-weight: 600; }
+.num { font-size: 12.5px; color: #3F3F46; margin-bottom: 2px; }
+.ev { display: block; width: 100%; text-align: left; margin: 3px 0 0; padding: 2px 6px; background: #FFFFFF; border: 1px solid #E4E4E7;
+  border-left: 3px solid #A1A1AA; border-radius: 5px; font: inherit; font-size: 11.5px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: inherit; }
+.ev:hover, .ev:focus-visible { outline: 2px solid #111827; outline-offset: 1px; }
+.ev.sel { box-shadow: 0 0 0 2px #0F766E; }
+.ev .tm { color: #71717A; margin-right: 4px; } .ev b { font-weight: 600; }
+.week .day { min-height: 150px; } .week .num { font-size: 14px; font-weight: 600; padding-bottom: 4px; border-bottom: 1px solid #F0F0F2; margin-bottom: 4px; }
+.week .day.past { opacity: .55; }
+.week .ev { white-space: normal; padding: 4px 7px; font-size: 12.5px; } .week .ev .tm { display: block; font-size: 11.5px; }
+.week .ev .sd { color: #71717A; font-size: 12px; margin-left: 4px; }
+.none { color: #A1A1AA; font-size: 12px; padding: 4px 2px; }
+.add { margin-top: 6px; border: 1.5px dashed #0F766E; border-radius: 6px; padding: 4px 6px; font-size: 11.5px; color: #0F766E; text-align: center; background: #F0FDFA; }
+.mini { border: none; } .mini .hd { border: none; padding: 2px; text-align: center; font-size: 10.5px; color: #A1A1AA; }
+.mini .day { min-height: 30px; padding: 2px; border: none; text-align: center; cursor: default; } .mini .day:hover { background: none; }
+.mini .num { font-size: 11px; } .mini .day.today .num { background: #0F766E; color: #FFFFFF; border-radius: 4px; display: inline-block; padding: 0 4px; }
+.mini .day.today { background: none; }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin: 0 1px; }
+""", js=CAL_JS)
+
+
+def cal_data(days, tones, mode, sel=None):
+    today = date.today()
+    pick = sel[1:] if sel and sel[0] == "d" else ""
+    return {"mode": mode, "heads": list("일월화수목금토"), "none": "없음", "pick": pick,
+            "days": [{"iso": d["day"].isoformat(), "n": d["day"].day, "wd": (d["day"].weekday() + 1) % 7, "wdk": DAY_KO[d["day"].weekday()],
+                      "today": d["day"] == today, "past": d["day"] < today, "out": d["out"],
+                      "events": [{"id": int(r["_id"]), "time": hm(r["at"]).replace(" ", "") if r["timed"] else "", "name": r["name"],
+                                  "side": r["side"], "color": tones.get(r["tone"], "#A1A1AA"), "sel": sel == f"r{r['_id']}"}
+                                 for r in d["events"]]} for d in days]}
+
+
+def cal_click(key, sel_key):
+    """달력에서 누른 것: 'r기록번호'(일정) 또는 'd날짜'(빈 날)."""
+    if v := st.session_state[key].clicked:
+        st.session_state[sel_key] = v
+
+
+def cal_move(key, step, sel_key):
+    """[지난주] · [다음 주] · [지난달] · [다음 달]: 달력만 넘기고 위의 보는 기간은 그대로. 열어 둔 일정은 닫는다."""
+    st.session_state[key] = st.session_state.get(key, 0) + step
+    st.session_state.pop(sel_key, None)
+
+
+def calendar_card(t, K, spec, key, remove=None):
+    """일정 달력 카드. 보는 기간이 오늘 · 이번 주면 주 달력, 이번 달 · 올해면 달 달력. 일정을 누르면 오른쪽에 그 기록,
+    빈 날을 누르면 그 날짜로 채운 직접 적기가 열린다. 화면은 그대로 대시보드다."""
+    T, prop, color = spec["type"], spec["prop"], spec.get("color")
+    mode = "week" if period() in ("오늘", "이번 주") else "month"
+    off_key, sel_key = f"calo{key}{mode}", f"calsel{key}{mode}"
+    days, ev, tones, label = engine.calendar(K, spec, mode, st.session_state.get(off_key, 0))
+    today_n, week_n, _ = engine.coming(K, spec)
+    sel = st.session_state.get(sel_key)
+    with st.container(border=True):
+        head = st.container(horizontal=True, vertical_alignment="center")
+        head.markdown(f"**{spec['title']}**")
+        nav = ("지난주", "다음 주") if mode == "week" else ("지난달", "다음 달")
+        head.space("stretch")
+        head.button(nav[0], key=f"cp{key}{mode}", on_click=cal_move, args=(off_key, -1, sel_key))
+        head.markdown(f"**{label}**", width="content")
+        head.button(nav[1], key=f"cn{key}{mode}", on_click=cal_move, args=(off_key, 1, sel_key))
+        legend = "".join(f'<span class="ps-legend"><span class="ps-dot" style="background:{c}"></span>{html.escape(v)}</span>' for v, c in tones.items())
+        st.html(f'<div class="ps-calsum"><span>오늘 {html.escape(prop)} <b>{today_n}건</b> · 이번 주 남은 {html.escape(prop)} <b>{week_n}건</b></span>'
+                f'<span class="ps-legends">{legend}</span></div>')
+        if sel:
+            left, side = st.columns([2.5, 1], gap="medium")
+        else:
+            left, side = st.container(), None
+        with left:
+            CAL(data=cal_data(days, tones, mode, sel), key=f"cal{key}{mode}", on_clicked_change=lambda: cal_click(f"cal{key}{mode}", sel_key))
+        if sel and side:
+            with side:
+                (cal_detail if sel[0] == "r" else cal_write)(t, K, spec, sel[1:], key, sel_key)
+        st.caption(f"{T}의 {prop} 칸{' · 색은 ' + color + ' 칸' if color else ''} · 근거 기록 {len(ev)}줄 · {until(K, T)}")
+        with st.expander(f"근거 기록 {len(ev)}줄"):
+            if len(ev):
+                pick_table(ev, f"ev{key}")
+        if remove:
+            st.button("내리기", key=f"rm{key}", on_click=act, args=remove, kwargs={"done": "대시보드에서 내렸어요."})
+
+
+def cal_close(sel_key):
+    st.session_state.pop(sel_key, None)
+
+
+def cal_detail(t, K, spec, rid, key, sel_key):
+    """달력에서 누른 일정: 그 기록 한 줄, 날짜 칸이 적힌 손글씨 조각, 원본 사진, 묻기로 가기."""
+    T, prop = spec["type"], spec["prop"]
+    df = engine.frame(K, T)
+    hit = df[df["_id"] == int(rid)]
+    if hit.empty:
+        st.caption("이 기록을 찾지 못했어요.")
+        return
+    r = hit.iloc[0]
+    at, timed = engine.when_of(r[prop], r["날짜"])
+    ent = engine.entity(K, T)
+    name = str(r[ent]) if ent and engine.filled(r[ent]) else T
+    head = st.container(horizontal=True, vertical_alignment="center")
+    head.caption(f"{at.month}월 {at.day}일 {DAY_KO[at.weekday()]}요일{' · ' + hm(at) if timed else ''}" if at else prop)
+    head.space("stretch")
+    head.button("닫기", key=f"cx{key}", type="tertiary", on_click=cal_close, args=(sel_key,))
+    st.markdown(f"**{name}**")
+    rows = [(n, fmtv(r[n])) for n in engine.own(K, T) if n in r and engine.filled(r[n])]
+    st.dataframe(pd.DataFrame(rows, columns=["칸", "값"]), hide_index=True, width="stretch")
+    if crop := hit_crop(t, K, prop, r):
+        st.image(crop, caption=f"원본에 적힌 {prop}")
+    with st.expander("원본 사진 보기"):
+        show_photo(r["_photo"])
+    if ent and engine.filled(r[ent]):
+        st.button(f"이 {ent} 기록 묻기", key=f"ca{key}", on_click=ask_about, args=(name,))
+
+
+def cal_write(t, K, spec, day, key, sel_key):
+    """달력의 빈 날: 그 날짜로 채운 직접 적기. 저장하면 묻지 않고 바로 기록이 되어 달력에 보인다."""
+    T, prop = spec["type"], spec["prop"]
+    d0 = date.fromisoformat(day)
+    head = st.container(horizontal=True, vertical_alignment="center")
+    head.markdown(f"**{d0.month}월 {d0.day}일 {DAY_KO[d0.weekday()]}요일 · 직접 적기**")
+    head.space("stretch")
+    head.button("닫기", key=f"cx{key}", type="tertiary", on_click=cal_close, args=(sel_key,))
+    st.caption(f"{T} 칸 그대로 적어요. {prop} 날짜는 채워 뒀어요.")
+    df = engine.frame(K, T)
+    with st.form(f"cw{key}{day}", clear_on_submit=True, border=False):
+        d = st.date_input(prop, value=d0)
+        tm = st.time_input("시각", value=None, step=1800)
+        values = {p["name"]: field(K, p, df[p["name"]].dropna() if p["name"] in df else pd.Series(dtype=object))
+                  for p in K["props"][T] if p["name"] not in ("날짜", prop)}
+        saved = st.form_submit_button("저장", type="primary")
+    if saved:
+        values[prop] = f"{d.isoformat()} {tm:%H:%M}" if tm else d.isoformat()
+        try:
+            engine.write_record(t, llm.MODELS[0], T, date.today().isoformat(), values)
+        except (*ERRORS, db.NotAllowed) as e:
+            fail("저장하지 못했어요", e)
+            return
+        forget(t)
+        st.session_state.pop(sel_key, None)
+        st.session_state._toast = "저장했어요. 달력에 보여요."
+        st.rerun()
 
 
 def draw_view(K, spec, key):
@@ -2644,21 +2951,270 @@ def build_chat(t, K, kind):
             st.rerun()
 
 
+def put_up(t, spec):
+    """보기 고르기 · 골라서 만들기의 [올리기]: 다른 제안과 같은 확인 기록(proposals)을 지나 대시보드에 올린다."""
+    q = engine.propose(t, "지표", spec, {"made": True})
+    try:
+        engine.answer_widget(t, q, True)
+    except db.NotAllowed:  # 올리는 사람: 카드로 남겨 확인하는 사람이 답한다
+        forget(t)
+        st.toast("카드로 올렸어요. 확인하는 사람이 답해요.")
+        return
+    forget(t)
+    st.session_state._making = False
+    st.toast("대시보드에 올렸어요.")
+
+
+MAKE = ["보기 고르기", "골라서 만들기", "말로 만들기"]
+
+
+def make_tab(tab):
+    st.session_state.make_tab = tab
+
+
+def taken_titles(t):
+    """이미 올렸거나 묻는 중인 지표 제목. 보기 고르기에 다시 내놓지 않는다."""
+    return {w["spec"].get("title") for w in t.get("widgets", select="spec", status="eq.올림")} | \
+        {q["payload"].get("title") for q in engine.pending(t, ["지표"])}
+
+
+def preview(K, spec, key, small=False):
+    """만들기의 미리보기 한 장: 골라서 만든 보기는 draw_pick, 숫자 하나는 보는 기간 값과 앞 기간 값."""
+    if spec["kind"] == "pick":
+        return draw_pick(K, spec, key, small)
+    v, pv, ev = engine.period_values(K, spec, period())
+    st.metric(spec["title"], fmt(v), label_visibility="collapsed")
+    st.caption(f"{period()} · {engine.PERIODS[period()][0]} {fmt(pv)}")
+    return ev
+
+
+SHAPE_OF = lambda s: "숫자 하나" if s["kind"] == "kpi" else s["shape"]
+
+
+def cols_of(s):
+    """보기가 쓰는 칸 이름(타일 아래 한 줄)."""
+    names = [s.get("prop"), s.get("by")]
+    return " · ".join(f"{n} 칸" for n in dict.fromkeys(n for n in names if n and n != "날짜")) or "기록 날짜"
+
+
+def gallery_view(t, K):
+    """보기 고르기: 확정한 칸으로 그릴 수 있는 보기를 내 기록으로 미리 그려 늘어놓는다. [올리기]를 누른 것만 대시보드에 들어간다."""
+    st.caption("확정한 칸으로 그릴 수 있는 보기를 내 기록으로 미리 그렸어요. 숫자는 기록에서 셌어요. [올리기]를 누른 것만 대시보드에 들어가요.")
+    specs, missing = engine.gallery(K, taken_titles(t))
+    if not specs:
+        st.info("지금 칸으로 그릴 수 있는 보기는 모두 올렸어요. [골라서 만들기]나 [말로 만들기]로 더 만들 수 있어요.")
+    shapes = list(dict.fromkeys(SHAPE_OF(s) for s in specs))
+    row = st.container(horizontal=True, vertical_alignment="center")
+    if st.session_state.get("gal_shape") not in ["전체"] + shapes:
+        st.session_state.gal_shape = "전체"
+    only = row.segmented_control("모양", ["전체"] + shapes, required=True, key="gal_shape", label_visibility="collapsed")
+    kinds = K["types"] if len(K["types"]) > 1 else []
+    T = row.segmented_control("기록 종류", kinds, key="gal_type", label_visibility="collapsed") if kinds else None
+    shown = [s for s in specs if (only == "전체" or SHAPE_OF(s) == only) and (not T or s["type"] == T)]
+    row.caption(f"보기 {len(shown)}개", width="content")
+    for i in range(0, len(shown), 2):
+        for col, s in zip(st.columns(2), shown[i:i + 2]):
+            with col, st.container(border=True, height="stretch"):
+                st.markdown(f"**{s['title']}**")
+                st.caption(SHAPE_OF(s))
+                ev = preview(K, s, f"g{i}{s['title']}", small=True)
+                st.space("stretch")
+                foot = st.container(horizontal=True, vertical_alignment="center")
+                foot.caption(f"{s['type']} · {cols_of(s)} · 근거 {len(ev)}줄")
+                foot.button("올리기", key=f"gup{s['title']}", type="primary", on_click=put_up, args=(t, s))
+    for shape, why in missing:
+        st.caption(f"{shape}: {why}")
+    with st.container(border=True):
+        foot = st.container(horizontal=True, vertical_alignment="center")
+        foot.markdown("**찾는 모양이 없나요?** 칸을 골라 만들거나, 말로 청해요.")
+        foot.button("골라서 만들기", key="gal_pick", on_click=make_tab, args=(MAKE[1],))
+        foot.button("말로 만들기", key="gal_chat", on_click=make_tab, args=(MAKE[2],))
+
+
+DTYPE_SHORT = {"number": "숫자", "date": "날짜", "choice": "고르는 값", "text": "글"}
+
+
+def built_spec(K, T, prop, fn, by, shape, cond):
+    """골라서 만들기에서 고른 것 → 보기 명세. 숫자 하나는 kpi 지표, 나머지는 골라서 만든 보기."""
+    conds = [{"prop": cond[0], "op": "=", "value": cond[1], "value_prop": None}] if cond else []
+    if shape == "숫자 하나":
+        s = {"kind": "kpi", "type": T, "fn": fn, "prop": prop if fn != "count" else None, "props": [], "conditions": conds}
+    elif shape in ("달력", "목록"):
+        s = {"kind": "pick", "type": T, "shape": shape, "fn": "count", "prop": by, "by": None, "conditions": conds,
+             "color": next((n for n in engine.group_cols(K, T) if dict(engine.col_defs(K, T)).get(n) == "choice" and not n.endswith(".분류")), None)}
+    else:
+        s = {"kind": "pick", "type": T, "shape": shape, "fn": fn, "prop": prop if fn != "count" else None, "by": by, "conditions": conds}
+    s["title"] = engine.pick_title(s)
+    return s
+
+
+def how_text(K, s):
+    """이렇게 셌어요: 고른 것을 쉬운 말로."""
+    what = "기록 수" if (s.get("fn") or "count") == "count" else f"{s['prop']}의 {engine.FNS[s['fn']]}"
+    if SHAPE_OF(s) in ("달력", "목록"):
+        what = f"{s['prop']} 칸에 적힌 날"
+    by = f" · {s['by']}{'마다' if s['by'] not in engine.date_cols(K, s['type']) else '별로'}" if s.get("by") else ""
+    cond = "".join(f" · {c['prop']}이(가) {c['value']}인 기록만" for c in s.get("conditions") or [])
+    when = "" if SHAPE_OF(s) in ("달력", "목록") else f" · {period()}"
+    return f"{s['type']}에서 {what}{by}{cond}{when}"
+
+
+def ask_more(t, K, s, say):
+    """말로 더 고치기: 고른 보기를 말로 이어서 다듬는다. 말로 만들기 대화로 넘긴다."""
+    st.session_state[f"chat{t.id}지표chip"] = f"{how_text(K, s)}를 {SHAPE_OF(s)} 모양으로 보여 주는 보기를 만들어 줘. {say}"
+    st.session_state.make_tab = MAKE[2]
+
+
+def ask_more_typed(t, K, s):
+    if say := st.session_state.get("pick_more", "").strip():
+        ask_more(t, K, s, say)
+        st.session_state.pick_more = ""
+
+
+def reset_pick():
+    for k in ("pk_prop", "pk_fn", "pk_by", "pk_shape", "pk_cond"):
+        st.session_state.pop(k, None)
+
+
+def set_by_for(K, T):
+    """칸을 고르면 나눌 칸을 알맞게 채운다: 날짜 · 고르는 값 · 대상 칸은 그 칸으로, 숫자 칸은 그대로."""
+    prop = st.session_state.get("pk_prop")
+    if prop and (prop in engine.date_cols(K, T) or prop in engine.group_cols(K, T)):
+        st.session_state.pk_by = prop
+        st.session_state.pk_fn = "count"
+    elif prop:
+        st.session_state.pk_fn = "avg"
+
+
+def builder(t, K):
+    """골라서 만들기: 무엇을 · 어떻게 셀지 · 무엇으로 나눌지 · 어떤 모양으로를 눌러 고르면 오른쪽에 내 기록으로 바로 그린다."""
+    left, right = st.columns([1.05, 1], gap="large")
+    with left:
+        st.markdown("**무엇을 볼까요**")
+        T = st.pills("기록 종류", K["types"], default=K["types"][0], key="pk_type", label_visibility="collapsed", width="stretch",
+                     on_change=reset_pick) or K["types"][0]
+        defs = dict(engine.col_defs(K, T))
+        props = [n for n in engine.own(K, T) if defs.get(n) in DTYPE_SHORT]
+        st.pills("칸", props, key="pk_prop", label_visibility="collapsed", width="stretch", on_change=set_by_for, args=(K, T),
+                 format_func=lambda n: f"{n} · {DTYPE_SHORT[defs[n]]}")
+        prop = st.session_state.get("pk_prop")
+        number = prop and defs.get(prop) == "number"
+        fns = list(engine.FNS) if number else ["count"]
+        st.markdown("**어떻게 셀까요**")
+        if st.session_state.get("pk_fn") not in fns:
+            st.session_state.pk_fn = fns[0]
+        fn = st.pills("셀 방법", fns, key="pk_fn", label_visibility="collapsed", width="stretch", format_func=engine.FNS.get) or fns[0]
+        if not number:
+            st.caption("숫자 칸을 고르면 합계 · 평균 · 가장 큰 값 · 가장 작은 값도 셀 수 있어요.")
+        st.markdown("**무엇으로 나눌까요**")
+        groups = engine.useful_groups(K, T)
+        bys = [""] + groups + engine.date_cols(K, T)
+        if st.session_state.get("pk_by") not in bys:
+            st.session_state.pk_by = ""
+        by = st.pills("나눌 칸", bys, key="pk_by", label_visibility="collapsed", width="stretch",
+                      format_func=lambda n: "나누지 않음" if not n else f"{n}별" if n in groups else "기록 날짜별" if n == "날짜" else f"{n} 날짜별") or None
+        st.markdown("**어떤 모양으로 볼까요**")
+        shapes = engine.shapes_for(K, T, fn, by)
+        ok = [n for n, why in shapes if why is None]
+        if st.session_state.get("pk_shape") not in ok:
+            st.session_state.pk_shape = ok[0]
+        shape = st.pills("모양", ok, key="pk_shape", label_visibility="collapsed", width="stretch") or ok[0]
+        no = [f"{n}: {why}" for n, why in shapes if why]
+        if no:
+            st.caption(" · ".join(no))
+        choices = [n for n in groups if defs.get(n) == "choice"]
+        df = engine.frame(K, T)
+        opts = [(n, str(v)) for n in choices for v in df[n].dropna().astype(str).value_counts().index[:8]]
+        st.markdown("**어떤 기록만**")
+        cond = st.pills("고를 기록", opts, key="pk_cond", label_visibility="collapsed", width="stretch", format_func=lambda o: f"{o[0]} · {o[1]}")
+        st.caption(f"고르지 않으면 모두 · 기간은 위의 [{period()}]를 따라요" if opts else f"기간은 위의 [{period()}]를 따라요")
+    spec = built_spec(K, T, prop, fn, by, shape, cond)
+    with right:
+        with st.container(border=True):
+            st.caption("미리보기 · 아직 대시보드에 없어요")
+            st.markdown(f"**{spec['title']}**")
+            if spec["kind"] == "pick" and spec["shape"] == "달력":
+                days, ev, tones, _ = engine.calendar(K, spec, "week" if period() in ("오늘", "이번 주") else "month")
+                CAL(data=cal_data(days, tones, "week" if period() in ("오늘", "이번 주") else "month"), key="pk_cal")
+            else:
+                ev = preview(K, spec, "pk_view")
+            st.caption(f"근거 기록 {len(ev)}줄 · {until(K, T)}")
+            st.info(f"**이렇게 셌어요** · {how_text(K, spec)}")
+        with st.container(border=True):
+            st.caption("말로 더 고치기 · 다 고른 뒤 다듬을 때만")
+            ent = engine.entity(K, T)
+            row = st.container(horizontal=True)
+            for say in ([f"{ent}별로 나눠줘"] if ent and spec.get("by") != ent else []) + ["지난달만", "표로 보여줘"]:
+                row.button(say, key=f"pkm{say}", on_click=ask_more, args=(t, K, spec, say))
+            st.text_input("말로 더 고치기", key="pick_more", placeholder="예: 완료는 빼 줘", label_visibility="collapsed",
+                          on_change=ask_more_typed, args=(t, K, spec))
+        foot = st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center")
+        foot.caption("[올리기]를 누르면 '올린 지표'에 들어가요")
+        foot.button("처음부터", key="pk_reset", on_click=reset_pick)
+        foot.button("올리기", key="pk_up", type="primary", on_click=put_up, args=(t, spec), disabled=not engine.valid_spec(K, spec))
+
+
+def make_page(t, K):
+    """[만들기]: 보기 고르기 · 골라서 만들기 · 말로 만들기. 무엇을 청할지 몰라도 내 기록으로 그린 보기 중에서 고른다."""
+    head = st.container(horizontal=True, vertical_alignment="center")
+    tab = head.segmented_control("만들기 방법", MAKE, default=MAKE[0], required=True, key="make_tab", label_visibility="collapsed")
+    head.space("stretch")
+    with head:
+        period_bar("period_make")
+    if tab == MAKE[0]:
+        gallery_view(t, K)
+    elif tab == MAKE[1]:
+        builder(t, K)
+    else:
+        build_chat(t, K, "지표")
+
+
+def making(on):
+    st.session_state._making = on
+
+
+DASH_CSS = """<style>
+/* 대시보드: 일정 목록 · 달력 위 한 줄 · 색 이름표 */
+.ps-up {display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid #F4F4F5; font-size: 13.5px;}
+.ps-up b {font-weight: 600;} .ps-up-at {color: #52525B; min-width: 128px;} .ps-up-side {color: #71717A;}
+.ps-dot {display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none;}
+.ps-calsum {display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 14px; flex-wrap: wrap;}
+.ps-legends {display: flex; gap: 14px; flex-wrap: wrap;} .ps-legend {display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: #52525B;}
+</style>"""
+
+
 def dashboard(t, K):
-    title("대시보드", t, K["types"] and engine.suggest_widgets)
+    st.html(DASH_CSS)
+    left, right = st.columns([3, 2], vertical_alignment="bottom")
+    left.header("대시보드")
+    bar = right.container(horizontal=True, horizontal_alignment="right")
+    if msg := st.session_state.pop("_toast", None):
+        st.toast(msg)
     if not K["types"]:
         empty()
         return
+    if st.session_state.get("_making"):
+        bar.button("대시보드로", key="make_back", on_click=making, args=(False,))
+    else:
+        bar.button("만들기", key="make_open", type="primary", on_click=making, args=(True,))
+    if bar.button("새로 추천받기"):
+        suggest(engine.suggest_widgets, t)
     rules_once(t, K)
+    if st.session_state.get("_making"):
+        make_page(t, K)
+        return
     period_bar("period_dash")
-    build_chat(t, K, "지표")
     for q in engine.pending(t, ["지표"]):
         card(t, K, q)
     ws = t.get("widgets", select="id,spec", status="eq.올림", order="id")
     if ws:
-        st.subheader("올린 지표")
-        grid([(w["spec"], f"w{w['id']}", (set_status, t, "widgets", w["id"], "내림")) for w in ws],
-             lambda spec, key, rm: widget(K, spec, key, rm))
+        st.subheader(f"올린 지표 {len(ws)}")
+        items = [(w["spec"], f"w{w['id']}", (set_status, t, "widgets", w["id"], "내림")) for w in ws]
+        for spec, key, rm in [x for x in items if is_wide(x[0])]:
+            widget(K, spec, key, rm, t=t)
+        grid([x for x in items if not is_wide(x[0])], lambda spec, key, rm: widget(K, spec, key, rm, t=t))
+    else:
+        st.caption("올린 지표가 없어요. [만들기]에서 내 기록으로 그린 보기를 골라 올려요.")
     st.subheader("자동으로 만든 현황")
     grid([(spec, f"a{i}") for i, spec in enumerate(engine.auto_widgets(K))], lambda spec, key: widget(K, spec, key))
 
