@@ -637,12 +637,17 @@ def pick_table(df, key, notes=None):
 
 # ---- 확인 카드 (모든 예/아니오가 이 한 곳에서 그려진다) ----
 
-def start_edit(q):
+def start_edit(q, part=None):
+    """part: [이 부분만 고치기]로 긴 값에서 AI가 헷갈린 부분만 고칠 때 그 부분."""
     st.session_state.editing = q["id"]
+    st.session_state.edit_part = part
 
 
 def save_fix(t, q):
-    engine.answer_value(t, q, " ".join(st.session_state[f"fix{q['id']}"].split()))  # 여러 줄 칸에서 넣은 줄바꿈은 띄어쓰기로
+    new = " ".join(st.session_state[f"fix{q['id']}"].split())  # 여러 줄 칸에서 넣은 줄바꿈은 띄어쓰기로
+    if part := st.session_state.pop("edit_part", None):
+        new = q["payload"]["value"].replace(part, new, 1)
+    engine.answer_value(t, q, new)
     st.session_state.editing = None
     forget(t)
     st.toast("고친 값을 저장했어요.")
@@ -738,12 +743,15 @@ def value_card(t, q):
     if len(P.get("record_ids") or []) > 1:
         st.caption(f"종이 전체에 한 번 적힌 칸이라, 고치면 이 종이의 기록 {len(P['record_ids'])}줄이 함께 바뀌어요.")
     if st.session_state.get("editing") == q["id"]:
-        if long_value(P["value"]):
+        if part := st.session_state.get("edit_part"):
+            st.text_input("고칠 부분", value=part, key=f"fix{q['id']}")
+            st.caption("칠한 부분만 바뀌고 나머지 글은 그대로예요.")
+        elif long_value(P["value"]):
             st.text_area("고친 값", value=P["value"] or "", key=f"fix{q['id']}", height=140)
         else:
             st.text_input("고친 값", value=P["value"] or "", key=f"fix{q['id']}")
         row = st.container(horizontal=True, horizontal_alignment="right")
-        row.button("아니요", key=f"ne{q['id']}", on_click=lambda: st.session_state.update(editing=None))
+        row.button("아니요", key=f"ne{q['id']}", on_click=lambda: st.session_state.update(editing=None, edit_part=None))
         row.button("저장", key=f"s{q['id']}", type="primary", shortcut=key_of("yes"), on_click=save_fix, args=(t, q))
         return
     cand = candidates(t, q)
@@ -755,7 +763,7 @@ def value_card(t, q):
         if part:
             st.caption("AI가 헷갈린 곳: " + ", ".join(part) + ". 맞지 않으면 [아니요, 고칠게요]로 고쳐 주세요.")
         cand = [c for c in cand if c not in part]
-    if cand:
+    if cand or frag:
         st.caption((f"AI가 '{frag}' 자리에서 본 다른 후보예요. 누르면 그 부분만 고쳐요." if frag else
                     "AI가 본 다른 후보예요. 누르면 그 값으로 고쳐요.") + (" 숫자 키로도 골라요." if KEYS else ""))
         row = st.container(horizontal=True)
@@ -763,9 +771,13 @@ def value_card(t, q):
             new = P["value"].replace(frag, v, 1) if frag else v
             row.button(v, key=f"c{q['id']}_{j}", shortcut=str(j + 1) if KEYS else None, on_click=act,
                        args=(engine.answer_value, t, q, new), kwargs={"done": f"'{v}'{pp(v, ('으로', '로'))} 고쳤어요."})
+        if frag:
+            row.button("이 부분만 고치기", key=f"pe{q['id']}", on_click=start_edit, args=(q, frag))
     row = st.container(horizontal=True, horizontal_alignment="right")
     if KEYS:
         row.button("나중에", key=f"w{q['id']}", type="tertiary", shortcut="L", on_click=later, args=(q,))
+    row.button("해당 없음", key=f"x{q['id']}", help="빈칸이나 사선처럼 적힌 것이 없는 칸이면 눌러요. 이 칸의 값을 기록에서 빼요.",
+               on_click=act, args=(lambda t, q: engine.answer_value(t, q, empty=True), t, q), kwargs={"done": "적힌 것이 없는 칸으로 두었어요."})
     row.button("아니요, 고칠게요", key=f"n{q['id']}", shortcut=key_of("no"), on_click=start_edit, args=(q,))
     row.button("네, 맞아요", key=f"y{q['id']}", type=first_fill(), shortcut=key_of("yes"), on_click=act,
                args=(engine.answer_value, t, q), kwargs={"done": "반영했어요."})

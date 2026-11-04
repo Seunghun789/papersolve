@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import db, llm
+from . import db, llm, ocr
 
 DATA = db.ROOT / "data"
 try:  # 올린 파일 폴더. 코드 폴더에 쓸 수 없는 서버(Streamlit Cloud)에서는 임시 폴더에 둔다
@@ -576,8 +576,16 @@ def ingest(t, model, name, content):
 
 
 def ingest_photo(t, model, name, photo):
-    """사진 1장(또는 PDF 1개) → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안."""
-    sheet = llm.extract(t, model, name, photo)
+    """사진 1장(또는 PDF 1개) → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안.
+    사진은 Claude 가 값을 읽는 동안 OCR 이 글줄 위치를 찾고, 읽은 값마다 OCR 글줄에 짝지어 정확한 상자를 쓴다(core/ocr.py)."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(1) as pool:
+        seen = pool.submit(ocr.lines, photo) if not name.lower().endswith(".pdf") and ocr.ready() else None
+        sheet = llm.extract(t, model, name, photo)
+        try:
+            found = seen.result() if seen else []
+        except Exception:  # OCR 이 실패해도 읽기는 계속한다. 상자는 Claude 가 눈금을 보고 적은 것을 쓴다
+            found = []
     sid, path = save_source(t, "사진", name, photo)
     spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 위에 읽은 값을 겹쳐 보이고, 고른 카드의 자리를 짚는다
 
@@ -588,6 +596,10 @@ def ingest_photo(t, model, name, photo):
         if not ok:
             c["uncertain"] = True
             c["candidates"] = [c["normal"].strip(), *(c.get("candidates") or [])]
+    if found:
+        cells = [c for c in [*sheet["doc_fields"], *(c for row in sheet["rows"] for c in row["cells"])] if filled(c["written"])]
+        for c, b in zip(cells, ocr.place_all([(c["written"], box(c.get("box")), c["label"].strip()) for c in cells], found)):
+            c["box"] = [round(v) for v in b] if b else None
 
     def keep(c, rec):
         """rec: 이 종이의 몇 번째 기록(종이 전체에 한 번 적힌 칸은 None). 애매한 칸은 AI가 본 다른 후보도 둔다."""
@@ -596,7 +608,7 @@ def ingest_photo(t, model, name, photo):
             return
         b, unsure = box(c.get("box")), bool(c["uncertain"])
         cand = list(dict.fromkeys(x.strip() for x in c.get("candidates") or [] if filled(x) and x.strip() != value))[:3] if unsure else []
-        spans[label].append({"page": c["page"], "quote": c["quote"].strip(), "value": value,
+        spans[label].append({"page": c["page"], "quote": f"{label}: {c.get('written') or value}", "value": value,
                              **({"written": c["written"]} if c.get("written") and c["written"] != value else {}), **({"box": b} if b else {}),
                              **({"rec": rec} if rec is not None else {}), **({"unsure": True} if unsure else {}),
                              **({"cand": cand} if cand else {})})
@@ -949,9 +961,17 @@ def answer_same(t, q, same):
     done(t, q, "거절", made=name)
 
 
-def answer_value(t, q, value=None):
-    """value 가 없거나 읽은 값과 같으면 [네, 맞아요]. 종이 전체에 한 번 적힌 칸(record_ids)은 그 종이의 기록 모두를 고친다."""
+def answer_value(t, q, value=None, empty=False):
+    """value 가 없거나 읽은 값과 같으면 [네, 맞아요]. 종이 전체에 한 번 적힌 칸(record_ids)은 그 종이의 기록 모두를 고친다.
+    empty: [해당 없음]. 빈칸·사선처럼 적힌 것이 없는 칸이라 기록에서 그 칸의 값을 뺀다."""
     P = q["payload"]
+    if empty:
+        for rid in P.get("record_ids") or [P["record_id"]]:
+            rec = (t.get("records", select="data,uncertain", id=f"eq.{rid}") or [None])[0]
+            if rec is not None:
+                t.patch("records", {"data": {k: v for k, v in rec["data"].items() if k != P["label"]},
+                                    "uncertain": [u for u in rec["uncertain"] if u != P["label"]]}, id=f"eq.{rid}")
+        return done(t, q, "고침", value="")
     if value is not None and str(value).strip() == str(P["value"] or "").strip():
         value = None
     for rid in P.get("record_ids") or [P["record_id"]]:

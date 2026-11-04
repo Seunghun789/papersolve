@@ -66,7 +66,7 @@ def array(s):
     return {"type": "array", "items": s}
 
 
-CELL = obj(label=S, value=S, normal=S, uncertain=B, candidates=array(S), page={"type": "integer"}, quote=S, box=array({"type": "integer"}))
+CELL = obj(label=S, value=S, normal=S, uncertain=B, candidates=array(S), page={"type": "integer"}, box=array({"type": "integer"}))
 KINDS = ["숫자", "날짜", "글", "고르는 값"]
 COND = obj(prop=S, op={"type": "string", "enum": OPS}, value=nullable(S), value_prop=nullable(S))
 LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}, "reason": S})
@@ -87,26 +87,46 @@ EXTRACT_PROMPT = (
     "- normal: 그 값을 읽은 뜻. 날짜면 YYYY-MM-DD(시각도 적혀 있으면 YYYY-MM-DD HH:MM, 해가 안 적혔으면 occurred_at 의 해), "
     "'2026년 12월 14일'·'12/14(월) 오후 3시'·'26.12.14'처럼 어떻게 적혀 있어도. 숫자면 쉼표·단위 없는 숫자(예: '1억 3,950만원' → 139500000). "
     "날짜도 숫자도 아니면 빈 글. 적힌 것만 바꿔 쓰고 계산하거나 지어내지 마세요.\n"
-    "- 값이 없다는 표시(-, 빈칸)는 넣지 마세요. 글씨가 흐리거나 헷갈리면 uncertain 을 true. 없는 값을 지어내지 마세요.\n"
+    "- 값이 없다는 표시(-, 빈칸, 칸을 가로지르는 사선·X, 줄을 그어 지운 칸)는 넣지 마세요. 빈 칸에 이웃 칸의 값을 옮겨 적지 마세요. 글씨가 흐리거나 헷갈리면 uncertain 을 true. 없는 값을 지어내지 마세요.\n"
     "- candidates: uncertain 이 true 일 때만, 그 글씨가 달리 읽힐 수 있는 값 1~3개(value 와 다른 것, 그럴 법한 순서로). "
     "또렷하면 빈 목록. 글씨 모양으로만 고르고 계산하거나 지어내지 마세요.\n"
     "- page: 그 값이 적힌 쪽 번호(1부터). 사진 한 장이면 1.\n"
-    "- quote: 그 값이 종이에 적힌 부분을 글자 그대로 짧게(40자 안). 칸 이름과 값이 함께 보이게. 고치거나 요약하지 마세요.\n"
     "- box: 그 값이 적힌 곳을 감싸는 상자 [x0, y0, x1, y1]. 그 쪽의 왼쪽 위가 0, 0, 오른쪽 아래가 1000, 1000 인 비율 좌표."
 )
 
 
+RULER = 44  # 사진 둘레에 붙이는 눈금 자의 폭(px)
+
+
 def as_image(photo):
-    """휴대폰 사진처럼 큰 사진은 긴 변 1568px JPEG 로 줄인다. Claude 는 그보다 큰 사진을 줄여 읽고, 한 장 5MB 를 넘으면 받지 않는다."""
-    from PIL import Image, ImageOps, UnidentifiedImageError
+    """휴대폰 사진처럼 큰 사진은 줄이고, 둘레에 0~1000 눈금 자를 붙여 JPEG 로 보낸다. Claude 는 긴 변 1568px 보다 큰 사진을 줄여 읽고,
+    한 장 5MB 를 넘으면 받지 않는다. 눈금은 AI가 상자 위치를 어림하지 않고 눈금을 보고 적게 하려는 것이고, 사진 내용은 가리지 않는다."""
+    from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
     try:
         img = ImageOps.exif_transpose(Image.open(io.BytesIO(photo)))
     except UnidentifiedImageError:
         raise ValueError("이 사진을 열지 못했어요. 다른 사진으로 다시 올려 주세요.") from None
-    img.thumbnail((1568, 1568))
+    img.thumbnail((1568 - 2 * RULER, 1568 - 2 * RULER))
+    w, h = img.size
+    out_img = Image.new("RGB", (w + 2 * RULER, h + 2 * RULER), "white")
+    out_img.paste(img.convert("RGB"), (RULER, RULER))
+    d, font = ImageDraw.Draw(out_img), ImageFont.load_default(size=13)
+    for v in range(0, 1001, 50):
+        x, y, long = RULER + round(w * v / 1000), RULER + round(h * v / 1000), v % 100 == 0
+        n = 14 if long else 7
+        for a, b in (((x, RULER - n), (x, RULER)), ((x, RULER + h), (x, RULER + h + n)),
+                     ((RULER - n, y), (RULER, y)), ((RULER + w, y), (RULER + w + n, y))):
+            d.line([a, b], fill="black", width=2 if long else 1)
+        if long:
+            for xy, anchor in (((x, 2), "mt"), ((x, RULER * 2 + h - 2), "mb"), ((2, y), "lm"), ((RULER * 2 + w - 2, y), "rm")):
+                d.text(xy, str(v), fill="black", font=font, anchor=anchor)
     out = io.BytesIO()
-    img.convert("RGB").save(out, "JPEG", quality=90)
+    out_img.save(out, "JPEG", quality=90)
     return out.getvalue()
+
+
+RULER_NOTE = ("\n- 사진 둘레의 흰 띠에 0~1000 눈금 자가 있어요. 숫자가 붙은 눈금은 100 단위, 짧은 눈금은 그 사이 50 자리예요. "
+              "box 는 흰 띠 안쪽 사진의 왼쪽 위를 0, 0 으로 해서 이 눈금을 보고 적어 주세요. 표라면 줄의 위아래 선이 눈금 어디에 닿는지 보고 적으세요.")
 
 
 def extract(t, model, name, photo):
@@ -117,7 +137,7 @@ def extract(t, model, name, photo):
     else:
         part = {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                             "data": base64.standard_b64encode(as_image(photo)).decode()}}
-    content = [part, {"type": "text", "text": EXTRACT_PROMPT}]
+    content = [part, {"type": "text", "text": EXTRACT_PROMPT + ("" if part["type"] == "document" else RULER_NOTE)}]
     return ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}")
 
 
