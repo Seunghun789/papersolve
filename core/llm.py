@@ -65,7 +65,8 @@ def array(s):
     return {"type": "array", "items": s}
 
 
-CELL = obj(label=S, value=S, uncertain=B, candidates=array(S), page={"type": "integer"}, quote=S, box=array({"type": "integer"}))
+CELL = obj(label=S, value=S, normal=S, uncertain=B, candidates=array(S), page={"type": "integer"}, quote=S, box=array({"type": "integer"}))
+KINDS = ["숫자", "날짜", "글", "고르는 값"]
 COND = obj(prop=S, op={"type": "string", "enum": OPS}, value=nullable(S), value_prop=nullable(S))
 LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}, "reason": S})
 
@@ -82,6 +83,9 @@ EXTRACT_PROMPT = (
     "  행이 무엇에 대한 것인지 가리키는 칸(품목, 설비, 제품, 고객 등)도 cells 에 넣으세요.\n"
     "- label 은 종이에 인쇄되거나 적힌 칸 이름 그대로. 표에서는 열 이름을 쓰고 행 이름을 붙이지 마세요.\n"
     "- value 는 적힌 그대로. 숫자는 단위 없이 숫자만. 인쇄된 값(기준, 최소 재고 등)도 칸이면 넣으세요.\n"
+    "- normal: 그 값을 읽은 뜻. 날짜면 YYYY-MM-DD(시각도 적혀 있으면 YYYY-MM-DD HH:MM, 해가 안 적혔으면 occurred_at 의 해), "
+    "'2026년 12월 14일'·'12/14(월) 오후 3시'·'26.12.14'처럼 어떻게 적혀 있어도. 숫자면 쉼표·단위 없는 숫자(예: '1억 3,950만원' → 139500000). "
+    "날짜도 숫자도 아니면 빈 글. 적힌 것만 바꿔 쓰고 계산하거나 지어내지 마세요.\n"
     "- 값이 없다는 표시(-, 빈칸)는 넣지 마세요. 글씨가 흐리거나 헷갈리면 uncertain 을 true. 없는 값을 지어내지 마세요.\n"
     "- candidates: uncertain 이 true 일 때만, 그 글씨가 달리 읽힐 수 있는 값 1~3개(value 와 다른 것, 그럴 법한 순서로). "
     "또렷하면 빈 목록. 글씨 모양으로만 고르고 계산하거나 지어내지 마세요.\n"
@@ -118,8 +122,8 @@ def extract(t, model, name, photo):
 
 # ---- B 스키마 추천 ----
 
-SCHEMA = obj(type_name=S, props=array(obj(label=S, name=S, unit=nullable(S), is_entity=B, ref_class=nullable(S),
-                                          similar_to=nullable(S))), links=array(LINK))
+SCHEMA = obj(type_name=S, props=array(obj(label=S, name=S, kind={"type": "string", "enum": KINDS}, unit=nullable(S), is_entity=B,
+                                          ref_class=nullable(S), similar_to=nullable(S))), links=array(LINK))
 
 
 def propose_schema(t, model, title, columns, known, pending_types, space=""):
@@ -127,12 +131,14 @@ def propose_schema(t, model, title, columns, known, pending_types, space=""):
         "손으로 적은 기록을 표로 정리하려 합니다. 이 기록을 담을 '종류'와 '칸'을 제안해 주세요.\n"
         + (f"이 워크스페이스(사용자가 확정한 설명, 이름 짓기에만 참고): {space}\n" if space else "") +
         f"기록 이름: {title}\n"
-        f"읽은 칸(값의 종류는 서비스가 값을 보고 정했습니다):\n{columns}\n"
+        f"읽은 칸과 적힌 값 예:\n{columns}\n"
         f"이미 확정된 종류와 칸:\n{known or '(아직 없음)'}\n"
         f"확인을 기다리는 종류: {pending_types or '(없음)'}\n"
         "규칙:\n"
         "- type_name: 이미 있거나 확인을 기다리는 종류와 같은 기록이면 그 이름 그대로, 아니면 짧은 새 이름(예: '재고 점검', '고객 요청').\n"
         "- props: 읽은 칸마다 하나. label 은 읽은 이름 그대로. name 은 표에 쓸 칸 이름(단위·괄호는 빼고 unit 에).\n"
+        "- kind: 적힌 값을 보고 정한 값의 종류. 날짜(어떻게 적혔든 날이 적힌 칸: 명도일·예정일·미팅 등), 숫자(재거나 센 값), "
+        "고르는 값(정해진 몇 가지 중 하나: 상태·판정·합격 여부 등), 글(이름·주소·설명 등). 전화번호·사건번호·비밀번호처럼 숫자로 적혀도 셈하지 않는 값은 글.\n"
         "- is_entity: 행이 가리키는 대상 칸(품목·설비·제품·고객 등)이면 true. 하나만.\n"
         "- ref_class: 칸의 값이 따로 관리할 대상(사람·물건·설비·장소·거래처 등)의 이름이면 그 대상 분류 이름"
         "(예: 품목, 거래처, 고객, 설비, 담당자). 이미 확정된 대상 분류가 있으면 그 이름을 쓰세요. 숫자·날짜·설명 글이면 null.\n"
@@ -260,7 +266,7 @@ def propose_automations(t, model, types, schema_text, links_text, stats, taken):
 # ---- 빌드: 말로 만들기(대화) ----
 
 def view_schema(types):
-    return obj(title=S, record_type=kinds_of(types), conditions=array(COND), vega=S, reason=S)
+    return obj(title=S, record_type=kinds_of(types), conditions=array(COND), vega=S, calendar=nullable(S), reason=S)
 
 
 VIEW_RULES = (
@@ -270,8 +276,10 @@ VIEW_RULES = (
     "- 날짜 칸 값은 ISO 날짜(시각이 적혀 있으면 날짜와 시각)로 들어가고, 적힌 그대로의 글은 '칸 이름(원문)' 칸에 있다.\n"
     "- 비율·합계·평균·건수는 Vega-Lite 의 transform(calculate·aggregate·joinaggregate)이나 encoding 의 aggregate 로 센다. "
     "숫자를 직접 적지 마세요. 예: 날짜별 합격률 = calculate \"datum['판정'] == '합격' ? 1 : 0\" as 합격, "
-    "날짜별로 그 평균(format '%')을 선으로. 달력 = 사용자가 말한 일정 칸(예: 미팅)의 주(yearweek)를 x, 요일(day)을 y 로 두고, "
-    "rect 의 color 와 text 에 모두 건수(count)를 넣어 겹친다. 일정 달력에는 기록 날짜('날짜')가 아니라 일정이 적힌 칸을 쓴다.\n"
+    "날짜별로 그 평균(format '%')을 선으로.\n"
+    "- 달력 · 캘린더 · 일정을 청하면 vega 는 빈 글로 두고 calendar 에 그 날이 적힌 칸 이름을 쓴다(기록 날짜 '날짜'가 아니라 미팅 · 예정일처럼 일정이 적힌 칸). "
+    "서비스가 그 칸에 적힌 날마다 기록을 놓는 달력을 그린다. 날짜로 읽히는 글 칸(예: '2026년 12월 14일'이 적힌 칸)도 쓸 수 있다. 달력이 아니면 calendar 는 null.\n"
+    "- 사용자가 말한 칸 이름이 목록에 없으면 뜻이 가장 가까운 칸(예: '명도이전일' → '명도일')을 쓰고, reply 에 어느 칸으로 만들었는지 밝힌다.\n"
     "- 모양은 사용자가 말한 것(선, 막대, 달력, 표 등)을 따른다.\n"
     "- 색·색 묶음·크기·글꼴·제목·config 같은 꾸밈은 쓰지 않는다. 서비스가 모든 보기에 같은 꾸밈을 입힌다. 축과 범례의 이름(title)은 한국어로 쓴다."
 )

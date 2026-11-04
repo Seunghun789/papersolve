@@ -2638,8 +2638,11 @@ def draw_pick(K, spec, key, small=False):
     """골라서 만든 보기를 그리고 근거 기록을 돌려준다. small: 보기 고르기의 작은 미리보기."""
     shape, T = spec["shape"], spec["type"]
     if shape == "달력":
-        days, ev, tones, _ = engine.calendar(K, spec, "month")
-        CAL(data=cal_data(days, tones, "mini"), key=f"cal{key}")
+        off = engine.first_month(K, spec)
+        days, ev, tones, label = engine.calendar(K, spec, "month", off)
+        if off:
+            st.caption(f"{label} · {'다음' if off > 0 else '마지막'} {josa(spec['prop'], '이가')} 있는 달")
+        CAL(data=cal_data(days, tones, "mini" if small else "month"), key=f"cal{key}")
         return ev
     if shape == "목록":
         _, _, rows = engine.coming(K, spec)
@@ -2796,7 +2799,7 @@ def calendar_card(t, K, spec, key, remove=None):
     mode = "week" if period() in ("오늘", "이번 주") else "month"
     off_key, sel_key = f"calo{key}{mode}", f"calsel{key}{mode}"
     days, ev, tones, label = engine.calendar(K, spec, mode, st.session_state.get(off_key, 0))
-    today_n, week_n, _ = engine.coming(K, spec)
+    today_n, week_n, ahead = engine.coming(K, spec)
     sel = st.session_state.get(sel_key)
     with st.container(border=True):
         head = st.container(horizontal=True, vertical_alignment="center")
@@ -2807,7 +2810,9 @@ def calendar_card(t, K, spec, key, remove=None):
         head.markdown(f"**{label}**", width="content")
         head.button(nav[1], key=f"cn{key}{mode}", on_click=cal_move, args=(off_key, 1, sel_key))
         legend = "".join(f'<span class="ps-legend"><span class="ps-dot" style="background:{c}"></span>{html.escape(v)}</span>' for v, c in tones.items())
-        st.html(f'<div class="ps-calsum"><span>오늘 {html.escape(prop)} <b>{today_n}건</b> · 이번 주 남은 {html.escape(prop)} <b>{week_n}건</b></span>'
+        nxt = next((r for r in ahead if r["at"].date() > date.today()), None) if not week_n else None
+        after = f' · 다음 {html.escape(prop)} {day_ko(nxt["at"])} {html.escape(nxt["name"])}' if nxt else ""
+        st.html(f'<div class="ps-calsum"><span>오늘 {html.escape(prop)} <b>{today_n}건</b> · 이번 주 남은 {html.escape(prop)} <b>{week_n}건</b>{after}</span>'
                 f'<span class="ps-legends">{legend}</span></div>')
         if sel:
             left, side = st.columns([2.5, 1], gap="medium")
@@ -2905,7 +2910,135 @@ def adopt(t, kind, m):
         return
     m["done"] = True
     forget(t)
+    keep_chat(t, kind)
     st.toast("대시보드에 올렸어요." if kind == "지표" else "켰어요. 홈에 보여요.")
+
+
+# ---- 말로 만들기 대화 목록: 사람마다 따로 저장하고, 다시 열고, 지우고, 되돌린다 ----
+
+KIND_KEY = {"지표": "w", "업무": "a"}  # 화면 열쇠(CSS 이름)에 쓰는 짧은 이름
+
+
+def chat_keys(t, kind):
+    return f"chat{t.id}{kind}", f"chatsid{t.id}{kind}"
+
+
+def keep_chat(t, kind):
+    """지금 대화를 저장한다(처음 말하면 대화가 생긴다)."""
+    key, sid_key = chat_keys(t, kind)
+    if st.session_state.get(key):
+        st.session_state[sid_key] = engine.save_chat(t, kind, st.session_state.get(sid_key), st.session_state[key])
+
+
+def new_chat(t, kind):
+    key, sid_key = chat_keys(t, kind)
+    st.session_state[key] = []
+    st.session_state.pop(sid_key, None)
+    st.session_state.pop(f"chatren{t.id}{kind}", None)
+
+
+def open_chat(t, kind, c):
+    key, sid_key = chat_keys(t, kind)
+    st.session_state[key] = c["messages"]
+    st.session_state[sid_key] = c["id"]
+    st.session_state.pop(f"chatren{t.id}{kind}", None)
+
+
+def drop_chat(t, kind, c):
+    engine.drop_chat(t, c["id"])
+    if st.session_state.get(chat_keys(t, kind)[1]) == c["id"]:
+        new_chat(t, kind)
+    st.session_state[f"chatundo{t.id}{kind}"] = (c["id"], engine.chat_title(c))
+
+
+def restore_chat(t, kind, sid):
+    engine.restore_chat(t, sid)
+    st.session_state.pop(f"chatundo{t.id}{kind}", None)
+    st.toast("대화를 되돌렸어요.")
+
+
+def rename_chat(t, kind, sid):
+    engine.rename_chat(t, sid, st.session_state.get(f"chatname{t.id}{kind}", ""))
+    st.session_state.pop(f"chatren{t.id}{kind}", None)
+
+
+def chat_day(iso):
+    """대화 목록의 묶음: 오늘 · 어제 · 지난 7일 · 그 전(한국 시간)."""
+    try:
+        days = (local_now().date() - datetime.datetime.fromisoformat(str(iso).replace("Z", "+00:00")).astimezone(KST).date()).days
+    except ValueError:
+        return "그 전"
+    return "오늘" if days <= 0 else "어제" if days == 1 else "지난 7일" if days <= 7 else "그 전"
+
+
+def chat_list(t, kind, rows):
+    """왼쪽 대화 목록: [새 대화], 대화 검색, 오늘 · 어제 · 지난 7일로 묶은 내 대화, 지운 대화와 [되돌리기]."""
+    k, sid = KIND_KEY[kind], st.session_state.get(chat_keys(t, kind)[1])
+    st.button("새 대화", key=f"cnew{k}", type="primary", width="stretch", on_click=new_chat, args=(t, kind))
+    find = st.text_input("대화 검색", key=f"cfind{k}", placeholder="대화 검색", label_visibility="collapsed").strip()
+    if undo := st.session_state.get(f"chatundo{t.id}{kind}"):
+        with st.container(border=True):
+            st.caption(f"'{undo[1]}' 대화를 지웠어요.")
+            st.button("되돌리기", key=f"cundo{k}", on_click=restore_chat, args=(t, kind, undo[0]))
+    live = [c for c in rows if not c["deleted_at"]]
+    if find:
+        live = [c for c in live if find in engine.chat_title(c) or any(find in str(m.get("text", "")) for m in c["messages"])]
+    if not live:
+        st.caption("찾는 대화가 없어요." if find else "아직 대화가 없어요. 오른쪽에 보고 싶은 것을 말해 보세요.")
+    done_word = "올림" if kind == "지표" else "켬"
+    for group in ("오늘", "어제", "지난 7일", "그 전"):
+        mine = [c for c in live if chat_day(c["updated_at"]) == group]
+        if not mine:
+            continue
+        st.caption(group)
+        for c in mine:
+            first = next((m["text"] for m in c["messages"] if m["role"] == "user"), "")
+            st.button(engine.chat_title(c) + (f" · {done_word}" if engine.chat_made(c) else ""), key=f"cs{k}{c['id']}",
+                      type="secondary" if c["id"] == sid else "tertiary", width="stretch", on_click=open_chat, args=(t, kind, c))
+            st.caption(f"{first[:30]}{'…' if len(first) > 30 else ''} · {when(c['updated_at'])}")
+    gone = [c for c in rows if c["deleted_at"]]
+    if gone:
+        with st.expander(f"지운 대화 {len(gone)}"):
+            for c in gone:
+                row = st.container(horizontal=True, vertical_alignment="center")
+                row.caption(f"{engine.chat_title(c)} · {engine.days_left(c)}일 남음")
+                row.button("되돌리기", key=f"crs{k}{c['id']}", on_click=restore_chat, args=(t, kind, c["id"]))
+            st.caption(f"{engine.KEEP_DAYS}일이 지나면 사라져요. 대화를 지워도 올린 지표와 켜 둔 자동화는 그대로예요.")
+
+
+def chat_head(t, kind, rows):
+    """열린 대화 위쪽: 이름, 시작한 때와 말한 수, [이름 바꾸기] · [지우기]."""
+    sid = st.session_state.get(chat_keys(t, kind)[1])
+    c = next((c for c in rows if c["id"] == sid and not c["deleted_at"]), None)
+    if not c:
+        return
+    k, ren = KIND_KEY[kind], f"chatren{t.id}{kind}"
+    head = st.container(horizontal=True, vertical_alignment="center")
+    said = sum(m["role"] == "user" for m in c["messages"])
+    head.markdown(f"**{engine.chat_title(c)}**")
+    head.caption(f"{when(c['created_at'])} 시작 · 말 {said}번")
+    head.space("stretch")
+    head.button("이름 바꾸기", key=f"cren{k}", type="tertiary", on_click=st.session_state.__setitem__, args=(ren, True))
+    head.button("지우기", key=f"cdel{k}", type="tertiary", on_click=drop_chat, args=(t, kind, c))
+    if st.session_state.get(ren):
+        row = st.container(horizontal=True, vertical_alignment="bottom")
+        row.text_input("대화 이름", value=engine.chat_title(c), key=f"chatname{t.id}{kind}")
+        row.button("저장", key=f"crensave{k}", type="primary", on_click=rename_chat, args=(t, kind, sid))
+
+
+def chat_page(t, K, kind):
+    """말로 만들기: 왼쪽에 내 대화 목록, 오른쪽에 열린 대화."""
+    st.html(DASH_CSS)
+    if st.session_state.get("_chat_purged") != t.id:
+        engine.purge_chats(t)
+        st.session_state._chat_purged = t.id
+    rows = engine.chats(t, kind)
+    left, right = st.columns([1, 2.8], gap="medium")
+    with left, st.container(border=True):
+        chat_list(t, kind, rows)
+    with right:
+        chat_head(t, kind, rows)
+        build_chat(t, K, kind)
 
 
 def build_chat(t, K, kind):
@@ -2919,7 +3052,10 @@ def build_chat(t, K, kind):
             st.markdown(m["text"])
             if not m.get("spec"):
                 continue
-            if kind == "지표":
+            if kind == "지표" and m["spec"].get("kind") == "pick":  # 달력을 청하면 일정 달력
+                st.caption(m["spec"]["title"])
+                st.caption(f"근거 기록 {len(draw_pick(K, m['spec'], f'{key}v{i}'))}줄")
+            elif kind == "지표":
                 st.caption(m["spec"]["title"])
                 draw_view(K, m["spec"], f"{key}v{i}")
                 st.caption(f"근거 기록 {len(engine.view_rows(K, m['spec']))}줄")
@@ -2948,6 +3084,7 @@ def build_chat(t, K, kind):
                 except ERRORS as e:
                     out = {"text": f"만들지 못했어요: {e}", "spec": None}
             msgs.append({"role": "assistant", "request": req, **out})
+            keep_chat(t, kind)
             st.rerun()
 
 
@@ -3061,6 +3198,7 @@ def how_text(K, s):
 
 def ask_more(t, K, s, say):
     """말로 더 고치기: 고른 보기를 말로 이어서 다듬는다. 말로 만들기 대화로 넘긴다."""
+    new_chat(t, "지표")
     st.session_state[f"chat{t.id}지표chip"] = f"{how_text(K, s)}를 {SHAPE_OF(s)} 모양으로 보여 주는 보기를 만들어 줘. {say}"
     st.session_state.make_tab = MAKE[2]
 
@@ -3093,10 +3231,10 @@ def builder(t, K):
         st.markdown("**무엇을 볼까요**")
         T = st.pills("기록 종류", K["types"], default=K["types"][0], key="pk_type", label_visibility="collapsed", width="stretch",
                      on_change=reset_pick) or K["types"][0]
-        defs = dict(engine.col_defs(K, T))
+        defs, days = dict(engine.col_defs(K, T)), engine.date_like(K, T)
         props = [n for n in engine.own(K, T) if defs.get(n) in DTYPE_SHORT]
         st.pills("칸", props, key="pk_prop", label_visibility="collapsed", width="stretch", on_change=set_by_for, args=(K, T),
-                 format_func=lambda n: f"{n} · {DTYPE_SHORT[defs[n]]}")
+                 format_func=lambda n: f"{n} · {DTYPE_SHORT[defs[n]]}" + (" · 날짜" if n in days and defs[n] != "date" else ""))
         prop = st.session_state.get("pk_prop")
         number = prop and defs.get(prop) == "number"
         fns = list(engine.FNS) if number else ["count"]
@@ -3133,11 +3271,7 @@ def builder(t, K):
         with st.container(border=True):
             st.caption("미리보기 · 아직 대시보드에 없어요")
             st.markdown(f"**{spec['title']}**")
-            if spec["kind"] == "pick" and spec["shape"] == "달력":
-                days, ev, tones, _ = engine.calendar(K, spec, "week" if period() in ("오늘", "이번 주") else "month")
-                CAL(data=cal_data(days, tones, "week" if period() in ("오늘", "이번 주") else "month"), key="pk_cal")
-            else:
-                ev = preview(K, spec, "pk_view")
+            ev = preview(K, spec, "pk_view")
             st.caption(f"근거 기록 {len(ev)}줄 · {until(K, T)}")
             st.info(f"**이렇게 셌어요** · {how_text(K, spec)}")
         with st.container(border=True):
@@ -3166,7 +3300,7 @@ def make_page(t, K):
     elif tab == MAKE[1]:
         builder(t, K)
     else:
-        build_chat(t, K, "지표")
+        chat_page(t, K, "지표")
 
 
 def making(on):
@@ -3179,7 +3313,9 @@ DASH_CSS = """<style>
 .ps-up b {font-weight: 600;} .ps-up-at {color: #52525B; min-width: 128px;} .ps-up-side {color: #71717A;}
 .ps-dot {display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none;}
 .ps-calsum {display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 14px; flex-wrap: wrap;}
-.ps-legends {display: flex; gap: 14px; flex-wrap: wrap;} .ps-legend {display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: #52525B;}
+.ps-legends {display: flex; gap: 14px; flex-wrap: wrap;}
+[class*="st-key-csw"] button, [class*="st-key-csa"] button {justify-content: flex-start; text-align: left;}
+[class*="st-key-csw"] button > div, [class*="st-key-csa"] button > div {justify-content: flex-start;} .ps-legend {display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: #52525B;}
 </style>"""
 
 
@@ -3226,7 +3362,7 @@ def automation(t, K):
         empty()
         return
     rules_once(t, K)
-    build_chat(t, K, "업무")
+    chat_page(t, K, "업무")
     for q in engine.pending(t, ["업무"]):
         card(t, K, q)
     autos = t.get("automations", select="id,spec,status", order="id")

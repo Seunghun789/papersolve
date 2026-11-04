@@ -7,6 +7,7 @@
 - 기록: 날짜별 한 행. 대상을 가리키는 칸은 property_defs.ref_class. records
 관계는 칸·분류 사이(link_types)이고, 대상 쌍마다 관계 속성 값(entity_links)을 가질 수 있다."""
 import copy
+import difflib
 import io
 import json
 import re
@@ -48,11 +49,12 @@ def to_number(v):
 
 
 def to_date(v, year=None):
-    """'2026-10-14', '2026. 10. 14', '10/17(토) 오후 3시' 를 날짜로. 아니면 None."""
+    """'2026-10-14', '2026. 10. 14', '2026년 12월 14일', '10/17(토) 오후 3시', '12월 14일' 을 날짜로. 아니면 None."""
     s = str(v).strip() if v is not None else ""
-    if m := re.match(r"^(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})", s):
+    if m := re.match(r"^(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})", s) or \
+            re.match(r"^(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", s):
         y, mo, d = map(int, m.groups())
-    elif m := re.match(r"^(\d{1,2})\s*/\s*(\d{1,2})(?!\d)", s):
+    elif m := re.match(r"^(\d{1,2})\s*/\s*(\d{1,2})(?!\d)", s) or re.match(r"^(\d{1,2})\s*월\s*(\d{1,2})\s*일", s):
         y, (mo, d) = year or date.today().year, map(int, m.groups())
     else:
         return None
@@ -81,14 +83,63 @@ def plain(v):
     return n if n is not None else (str(v).strip() if filled(v) else None)
 
 
+def korean_number(v):
+    """'1억 3,950만원' 같은 한국어 단위 숫자를 코드가 센다. 숫자가 없으면 None."""
+    parts = re.findall(r"(\d+(?:\.\d+)?)\s*(억|만|천)?", str(v).replace(",", ""))
+    return sum(float(n) * {"억": 1e8, "만": 1e4, "천": 1e3, "": 1}[u] for n, u in parts) if parts else None
+
+
+def checked(raw, normal):
+    """AI가 읽은 뜻(normal)을 적힌 글(raw)과 맞춰 본다. (넣을 값, 맞았나).
+    날짜: 달 · 날(적혔으면 해 · 시각)이 적힌 글의 숫자와 같으면 'YYYY-MM-DD'(시각이 있으면 'YYYY-MM-DD HH:MM').
+    숫자: 코드가 적힌 글을 읽을 수 있으면 적힌 글 그대로, '1억 3,950만원'처럼 단위로 적혀 코드가 센 값과 같으면 그 숫자.
+    날짜가 맞지 않으면 적힌 글을 넣고 False(읽기 애매한 칸으로 묻는다). 기간처럼 날짜가 둘 적혔거나 normal 이 비면 적힌 글 그대로 True."""
+    raw, normal = str(raw).strip(), str(normal or "").strip()
+    nums = [int(x) for x in re.findall(r"\d+", raw)]
+    if not normal or normal == raw or sum(n >= 1000 for n in nums) >= 2:
+        return raw, True
+    if (d := to_date(normal)) and re.match(r"^\d{4}-\d{2}-\d{2}", normal):
+        hm = re.search(r"(\d{1,2}):(\d{2})$", normal)
+        ok = d.month in nums and d.day in nums and (not any(n >= 1000 for n in nums) or d.year in nums)
+        if hm:
+            h, mi = int(hm.group(1)), int(hm.group(2))
+            ok &= (h in nums or h - 12 in nums or (h == 0 and 12 in nums)) and (mi == 0 or mi in nums)
+        if ok:
+            return d.isoformat() + (f" {int(hm.group(1)):02d}:{hm.group(2)}" if hm else ""), True
+        return raw, False
+    if (n := to_number(normal)) is not None and to_number(raw) is None and re.search(r"\d\s*(억|만|천)", raw):
+        return (normal, True) if korean_number(raw) == n else (raw, False)
+    return raw, True
+
+
+def two_dates(v):
+    """기간처럼 해가 둘 적힌 값('2024. 2. 16.부터 2026. 2. 15.까지')."""
+    return sum(int(n) >= 1000 for n in re.findall(r"\d+", str(v))) >= 2
+
+
+def fit_dtype(kind, values):
+    """AI가 고른 값의 종류가 적힌 값과 맞으면 그 종류, 아니면 None(코드가 값을 보고 정한다).
+    날짜 · 숫자는 모든 값이 날짜 · 숫자로 읽혀야 하고, 고르는 값은 서로 다른 값이 12개 이하이고 짧은 글(20자 이하)일 때."""
+    vals = [str(v).strip() for v in values if filled(v)]
+    if not vals or kind not in ("숫자", "날짜", "글", "고르는 값"):
+        return None
+    if kind == "날짜":
+        return "date" if all(to_date(v) and not two_dates(v) for v in vals) else None
+    if kind == "숫자":
+        return "number" if all(to_number(v) is not None for v in vals) else None
+    if kind == "고르는 값":
+        return "choice" if len(set(vals)) <= 12 and all(len(v) <= 20 for v in vals) else None
+    return "text"
+
+
 def infer_dtype(values):
-    """값을 보고 칸의 종류를 정한다. 규칙이 정하고, Claude 는 이름만 붙인다."""
+    """값을 보고 칸의 종류를 정한다. AI가 고른 종류가 적힌 값과 맞지 않을 때(fit_dtype 가 None)와 표 파일의 날짜 칸 찾기에 쓴다."""
     vals = [str(v).strip() for v in values if filled(v)]
     if not vals:
         return "text"
     if all(to_number(v) is not None for v in vals):
         return "number"
-    if all(to_date(v) is not None for v in vals):
+    if all(to_date(v) is not None and not two_dates(v) for v in vals):
         return "date"
     if len(vals) >= 4 and len(set(vals)) <= max(2, len(vals) // 3):
         return "choice"
@@ -530,14 +581,23 @@ def ingest_photo(t, model, name, photo):
     sid, path = save_source(t, "사진", name, photo)
     spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 위에 읽은 값을 겹쳐 보이고, 고른 카드의 자리를 짚는다
 
+    for c in [*sheet["doc_fields"], *(c for row in sheet["rows"] for c in row["cells"])]:
+        # AI가 읽은 뜻(날짜 · 숫자)을 적힌 글과 코드가 맞춰 본다. 맞으면 그 값을, 아니면 적힌 글을 넣고 읽기 애매한 칸으로 묻는다
+        c["written"] = c["value"].strip()
+        c["value"], ok = checked(c["value"], c.get("normal"))
+        if not ok:
+            c["uncertain"] = True
+            c["candidates"] = [c["normal"].strip(), *(c.get("candidates") or [])]
+
     def keep(c, rec):
         """rec: 이 종이의 몇 번째 기록(종이 전체에 한 번 적힌 칸은 None). 애매한 칸은 AI가 본 다른 후보도 둔다."""
         label, value = c["label"].strip(), c["value"].strip()
         if len(spans.setdefault(label, [])) >= 40:
             return
         b, unsure = box(c.get("box")), bool(c["uncertain"])
-        cand = [x.strip() for x in c.get("candidates") or [] if filled(x) and x.strip() != value][:3] if unsure else []
-        spans[label].append({"page": c["page"], "quote": c["quote"].strip(), "value": value, **({"box": b} if b else {}),
+        cand = list(dict.fromkeys(x.strip() for x in c.get("candidates") or [] if filled(x) and x.strip() != value))[:3] if unsure else []
+        spans[label].append({"page": c["page"], "quote": c["quote"].strip(), "value": value,
+                             **({"written": c["written"]} if c.get("written") and c["written"] != value else {}), **({"box": b} if b else {}),
                              **({"rec": rec} if rec is not None else {}), **({"unsure": True} if unsure else {}),
                              **({"cand": cand} if cand else {})})
 
@@ -678,10 +738,11 @@ def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_uns
     doc_unsure: 종이 전체에 한 번 적힌 애매한 칸. 기록마다 묻지 않고 카드 한 장으로 묻는다."""
     K = load(t)
     labels = list(dict.fromkeys(l for r in rows for l in r))
-    dtypes = {l: infer_dtype([r.get(l) for r in rows]) for l in labels}
-    columns = "\n".join(f"- {l}: {DTYPE_KO[dtypes[l]]}, 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
+    columns = "\n".join(f"- {l}: 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
     waiting = {q["payload"]["type"]: q for q in pending(t, ["종류"])}
     plan = llm.propose_schema(t, model, title, columns, schema_text(K), list(waiting), space_text(t))
+    kinds = {p["label"].strip(): p.get("kind") for p in plan["props"]}
+    dtypes = {l: fit_dtype(kinds.get(l), [r.get(l) for r in rows]) or infer_dtype([r.get(l) for r in rows]) for l in labels}
     T = plan["type_name"].strip() or title
     if T in K["classes"]:
         T = f"{T} 기록"
@@ -1907,11 +1968,15 @@ def build_chat(t, model, kind, history, request):
     raw = json.dumps(out, ensure_ascii=False)
     s, text = draft(K, kind, out), out["reply"]
     if s and not valid_spec(K, s):
-        s, text = None, "만든 그림에 기록에 없는 칸이 들어가서 그리지 못했어요. 쓰고 싶은 칸 이름을 넣어 다시 말해 주세요."
+        text = (f"'{s['prop']}' 칸에 적힌 값이 날짜로 읽히지 않아 달력을 그리지 못했어요. 날짜가 적힌 칸 이름을 넣어 다시 말해 주세요."
+                if s.get("kind") == "pick" else "만든 그림에 기록에 없는 칸이 들어가서 그리지 못했어요. 쓰고 싶은 칸 이름을 넣어 다시 말해 주세요.")
+        s = None
     names = {n for T in K["types"] for n in view_cols(K, T)}
     absent = [m for m in out["missing"] if m not in names]
     if absent and not s:
-        text = f"{', '.join(absent)} 칸은 아직 기록에 없어요. 그 값이 적힌 사진이나 CSV를 올리면 만들 수 있어요."
+        near = list(dict.fromkeys(c for m in absent for c in difflib.get_close_matches(m, sorted(names), n=2, cutoff=0.5)))
+        text = (f"{', '.join(absent)} 칸은 기록에 없어요. 비슷한 칸: {', '.join(near)}. 이 칸 이름으로 다시 말해 주세요." if near else
+                f"{', '.join(absent)} 칸은 아직 기록에 없어요. 그 값이 적힌 사진이나 CSV를 올리면 만들 수 있어요.")
     return {"text": text, "spec": s, "raw": raw}
 
 
@@ -1919,8 +1984,14 @@ def draft(K, kind, out):
     """AI 답의 초안을 서비스 형식으로: 지표는 보기(kind 'view'), 업무는 조건 규칙."""
     if not out["spec"]:
         return None
-    s = {k: v for k, v in out["spec"].items() if k != "record_type"}
-    return {**s, "type": out["spec"]["record_type"], **({"kind": "view"} if kind == "지표" else {})}
+    s = {k: v for k, v in out["spec"].items() if k not in ("record_type", "calendar")}
+    T = out["spec"]["record_type"]
+    if kind == "지표" and (prop := out["spec"].get("calendar")):  # 달력은 일정 달력으로(보기 고르기와 같은 것)
+        color = next((n for n in group_cols(K, T) if dict(col_defs(K, T)).get(n) == "choice" and not n.endswith(".분류")), None) \
+            if T in K["types"] else None
+        return {"title": s.get("title") or f"{prop} 달력", "kind": "pick", "type": T, "shape": "달력", "fn": "count", "prop": prop,
+                "by": None, "color": color, "conditions": s.get("conditions") or [], "reason": s.get("reason")}
+    return {**s, "type": T, **({"kind": "view"} if kind == "지표" else {})}
 
 
 def view_problems(K, s):
@@ -1937,8 +2008,11 @@ def view_problems(K, s):
 
 
 def cols_text(K):
-    return "\n".join(f"- {T}: " + ", ".join(f"{n}({DTYPE_KO[d]})" for n, d in [("날짜", "date")] + col_defs(K, T))
-                     for T in K["types"])
+    """AI에 보이는 칸 목록. 날짜로 읽히는 글 칸은 그렇다고 붙인다(달력에 쓸 수 있다)."""
+    def one(T):
+        days = date_like(K, T)
+        return ", ".join(f"{n}({DTYPE_KO[d]}{', 날짜로 읽힘' if d == 'text' and n in days else ''})" for n, d in [("날짜", "date")] + col_defs(K, T))
+    return "\n".join(f"- {T}: {one(T)}" for T in K["types"])
 
 
 # ---- A 수집: 직접 입력 ----
@@ -2242,6 +2316,72 @@ def auto_widgets(K):
     return specs
 
 
+# ---- 말로 만들기 대화 목록 ----
+# 대화는 사람마다 따로 둔다(chat_sessions.user_id). 확정한 지식이 아니라 만들 때 쓴 메모라 지우기 · 되돌리기는 카드 없이 바로 한다.
+# 대화를 지워도 올린 지표 · 켜 둔 자동화 · 기록은 그대로다. 지운 대화는 KEEP_DAYS 동안 되돌릴 수 있다.
+
+KEEP_DAYS = 30
+
+
+def _mine(t):
+    return {"user_id": f"eq.{t.user}"} if t.user else {"user_id": "is.null"}
+
+
+def chats(t, kind):
+    """내 대화(지운 것 포함), 최근에 말한 것부터."""
+    return t.get("chat_sessions", select="id,title,messages,created_at,updated_at,deleted_at", kind=f"eq.{kind}",
+                 order="updated_at.desc", **_mine(t))
+
+
+def purge_chats(t):
+    """지운 지 KEEP_DAYS 일이 지난 내 대화를 지운다."""
+    cut = (datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)).isoformat()
+    t.delete("chat_sessions", deleted_at=f"lt.{cut}", **_mine(t))
+
+
+def save_chat(t, kind, sid, messages):
+    """대화 한 턴을 저장한다. 처음 말하면 대화가 생긴다. 대화 번호를 돌려준다."""
+    body = {"messages": messages, "updated_at": now()}
+    if sid:
+        t.patch("chat_sessions", body, id=f"eq.{sid}", **_mine(t))
+        return sid
+    return t.post("chat_sessions", {**body, "kind": kind, "user_id": t.user})["id"]
+
+
+def chat_title(c):
+    """대화 이름: 사용자가 붙인 이름, 없으면 그 대화에서 만든 마지막 보기 · 규칙의 이름, 없으면 첫 말."""
+    if c.get("title"):
+        return c["title"]
+    made = [m["spec"]["title"] for m in c["messages"] if m.get("spec") and m["spec"].get("title")]
+    if made:
+        return made[-1]
+    first = next((m["text"] for m in c["messages"] if m["role"] == "user"), "새 대화")
+    return first if len(first) <= 24 else first[:24] + "…"
+
+
+def chat_made(c):
+    """이 대화에서 [올리기] · [켜기]로 반영한 것이 있나."""
+    return any(m.get("done") for m in c["messages"])
+
+
+def rename_chat(t, sid, title):
+    t.patch("chat_sessions", {"title": title.strip() or None}, id=f"eq.{sid}", **_mine(t))
+
+
+def drop_chat(t, sid):
+    t.patch("chat_sessions", {"deleted_at": now()}, id=f"eq.{sid}", **_mine(t))
+
+
+def restore_chat(t, sid):
+    t.patch("chat_sessions", {"deleted_at": None, "updated_at": now()}, id=f"eq.{sid}", **_mine(t))
+
+
+def days_left(c, today=None):
+    """지운 대화가 사라지기까지 남은 날."""
+    gone = datetime.fromisoformat(str(c["deleted_at"]).replace("Z", "+00:00"))
+    return max(0, KEEP_DAYS - ((today or datetime.now(timezone.utc)) - gone).days)
+
+
 # ---- 대시보드: 만들기(보기 고르기 · 골라서 만들기) ----
 # 고른 기록 종류 · 칸 · 셀 방법 · 나눌 칸 · 모양으로 코드가 보기를 짓고 센다. Claude 를 부르지 않는다.
 # 모양 목록은 값의 종류(날짜 · 숫자 · 고르는 값 · 대상)로만 고르고, 업종 규칙은 없다.
@@ -2254,8 +2394,10 @@ LIST_MAX = 5    # 목록 보기에 보이는 줄 수
 
 def group_cols(K, T):
     """나눌 수 있는 칸: 주 대상 칸, 고르는 값 칸(대상의 분류 포함), 같은 값이 되풀이되는 글 칸."""
-    df, ent, out = frame(K, T), entity(K, T), []
+    df, ent, out, days = frame(K, T), entity(K, T), [], date_like(K, T)
     for n, d in col_defs(K, T):
+        if n in days:
+            continue
         vals = df[n].dropna() if n in df else pd.Series(dtype=object)
         if n == ent or d == "choice" or (d == "text" and 1 < vals.nunique() <= GROUP_MAX and len(vals) > vals.nunique()):
             out.append(n)
@@ -2268,15 +2410,25 @@ def useful_groups(K, T, repeat=False):
     return [n for n in group_cols(K, T) if 1 < df[n].nunique() and (not repeat or df[n].nunique() < df[n].notna().sum())]
 
 
+def date_like(K, T):
+    """날짜 칸과, 적힌 값이 날짜로 읽히는 글 칸('2026년 12월 14일'처럼). 칸의 값 종류는 바꾸지 않고 날짜로만 읽는다."""
+    df, out = frame(K, T), own(K, T, "date")
+    for n in own(K, T, "text"):
+        vals = [v for v in df[n] if filled(v)] if n in df else []
+        if vals and sum(to_date(v) is not None for v in vals) * 5 >= len(vals) * 4:
+            out.append(n)
+    return out
+
+
 def date_cols(K, T):
-    """나눌 수 있는 날짜: 기록 날짜와 날짜 칸."""
-    return ["날짜"] + own(K, T, "date")
+    """나눌 수 있는 날짜: 기록 날짜, 날짜 칸, 날짜로 읽히는 글 칸."""
+    return ["날짜"] + date_like(K, T)
 
 
 def ahead_dates(K, T):
     """앞날이 적히는 날짜 칸(미팅 · 예정일처럼): 기록 날짜보다 늦은 날이 적힌 줄이 절반이 넘는 칸."""
     df, out = frame(K, T), []
-    for n in own(K, T, "date"):
+    for n in date_like(K, T):
         pairs = [(to_date(v, int(str(d)[:4])), date.fromisoformat(str(d)[:10])) for v, d in zip(df[n], df["날짜"]) if filled(v) and d]
         pairs = [(a, b) for a, b in pairs if a]
         if pairs and sum(a > b for a, b in pairs) * 2 > len(pairs):
@@ -2290,7 +2442,7 @@ def pick_ok(K, s):
     if shape not in SHAPES or fn not in FNS or any(s.get(k) and s[k] not in names for k in ("by", "color", "prop")):
         return False
     if shape in ("달력", "목록"):
-        return prop in own(K, T, "date")
+        return prop in date_like(K, T)
     if fn != "count" and prop not in prop_names(K, T, "number"):
         return False
     return bool(s.get("by")) and (shape != "선" or s["by"] in date_cols(K, T))
@@ -2298,14 +2450,14 @@ def pick_ok(K, s):
 
 def shapes_for(K, T, fn, by):
     """고른 셀 방법 · 나눌 칸으로 그릴 수 있는 모양과, 못 그리면 무엇을 바꾸면 되는지: [(모양, 까닭 또는 None)]."""
-    dates, groups = date_cols(K, T), group_cols(K, T)
+    dates, groups, days = date_cols(K, T), group_cols(K, T), date_like(K, T)
     why = {"숫자 하나": None if not by else "'나누지 않음'이면",
            "막대": None if by else "나눌 칸을 고르면",
            "선": None if by in dates else "날짜로 나누면",
            "표": None if by else "나눌 칸을 고르면",
            "상태별": None if by in groups and fn == "count" else "고르는 값 칸의 건수를 셀 때",
-           "달력": None if by in own(K, T, "date") else "날짜 칸으로 나누면",
-           "목록": None if by in own(K, T, "date") else "날짜 칸으로 나누면"}
+           "달력": None if by in days else "날짜 칸으로 나누면",
+           "목록": None if by in days else "날짜 칸으로 나누면"}
     return list(why.items())
 
 
@@ -2417,6 +2569,18 @@ def calendar(K, spec, mode, offset=0, today=None):
     out = [{"day": d, "out": month is not None and d.month != month, "events": on.get(d, [])} for d in days]
     ids = {r["_id"] for d in out for r in d["events"]}
     return out, df[df["_id"].isin(ids)], tones, label
+
+
+def first_month(K, spec, today=None):
+    """미리보기 달력에 보일 달: 이번 달에 일정이 없으면 다음 일정이 있는 달, 다음 일정도 없으면 마지막 일정이 있는 달까지
+    몇 달 옮기는지(앞으로 +, 뒤로 -). 일정이 하나도 없으면 0."""
+    today = today or date.today()
+    rows = schedule(K, spec, today)[0]
+    if not rows or any((r["at"].year, r["at"].month) == (today.year, today.month) for r in rows):
+        return 0
+    ahead = [r["at"] for r in rows if r["at"].date() > today]
+    at = ahead[0] if ahead else rows[-1]["at"]
+    return (at.year - today.year) * 12 + at.month - today.month
 
 
 def coming(K, spec, today=None):

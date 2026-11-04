@@ -155,7 +155,7 @@ create table public.source_inputs (          -- 올린 사진이나 파일 1개,
   channel text not null check (channel in ('사진', '파일', '직접 입력')),
   name text,
   storage_path text,
-  spans jsonb not null default '{}',          -- 읽은 칸 이름 → 원본 어디에 적혔나 [{page, quote, value, box, rec, unsure, cand}]. box 는 AI가 적은 자리(쪽의 0~1000 비율), rec 는 이 종이의 몇 번째 기록(0부터, 종이 전체 칸은 없음), unsure 는 읽기 애매한 칸, cand 는 AI가 본 다른 후보 값. 확인 화면이 원본 위에 겹쳐 보여 준다
+  spans jsonb not null default '{}',          -- 읽은 칸 이름 → 원본 어디에 적혔나 [{page, quote, value, written, box, rec, unsure, cand}]. value 는 넣은 값(AI가 읽은 날짜 · 숫자를 코드가 적힌 글과 맞춰 본 것), written 은 그와 다를 때 적힌 글 그대로. box 는 AI가 적은 자리(쪽의 0~1000 비율), rec 는 이 종이의 몇 번째 기록(0부터, 종이 전체 칸은 없음), unsure 는 읽기 애매한 칸, cand 는 AI가 본 다른 후보 값. 확인 화면이 원본 위에 겹쳐 보여 준다
   auto boolean not null default false,        -- '애매한 것만 묻기'로 맡긴 종류라 [맞아요] 없이 바로 반영한 종이. 7일 동안 되돌릴 수 있다
   created_by bigint references public.users(id),
   created_at timestamptz not null default now()
@@ -201,6 +201,19 @@ create table public.widgets (                -- 대시보드에 올린 지표
   created_at timestamptz not null default now()
 );
 
+create table public.chat_sessions (          -- 말로 만들기 대화. 사람마다 따로. 지운 대화는 30일 동안 되돌린다
+  id bigint generated always as identity primary key,
+  tenant_id bigint not null references public.tenants(id) on delete cascade,
+  user_id bigint references public.users(id) on delete cascade,
+  kind text not null check (kind in ('지표', '업무')),  -- 대시보드 · 자동화의 말로 만들기
+  title text,                                 -- 사용자가 붙인 이름. 없으면 만든 보기 이름이나 첫 말
+  messages jsonb not null default '[]'::jsonb,  -- [{role, text, spec, raw, request, done}]
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz                      -- 지운 때. 30일이 지나면 줄을 지운다
+);
+create index chat_sessions_mine on public.chat_sessions (tenant_id, user_id, kind, updated_at desc);
+
 create table public.automations (            -- 켜 둔 업무 규칙. 홈의 "오늘 먼저 볼 것"을 채운다
   id bigint generated always as identity primary key,
   tenant_id bigint not null references public.tenants(id) on delete cascade,
@@ -244,5 +257,6 @@ alter table public.records enable row level security;
 alter table public.proposals enable row level security;
 alter table public.widgets enable row level security;
 alter table public.automations enable row level security;
+alter table public.chat_sessions enable row level security;
 alter table public.eval_votes enable row level security;
 alter table public.ai_logs enable row level security;
