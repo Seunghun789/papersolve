@@ -639,7 +639,7 @@ def start_edit(q):
 
 
 def save_fix(t, q):
-    engine.answer_value(t, q, st.session_state[f"fix{q['id']}"].strip())
+    engine.answer_value(t, q, " ".join(st.session_state[f"fix{q['id']}"].split()))  # 여러 줄 칸에서 넣은 줄바꿈은 띄어쓰기로
     st.session_state.editing = None
     forget(t)
     st.toast("고친 값을 저장했어요.")
@@ -706,28 +706,60 @@ def candidates(t, q):
     return []
 
 
+def long_value(v):
+    """제목 한 줄에 다 안 들어가는 값: 따로 상자에 보이고, 고칠 때도 여러 줄 칸을 쓴다."""
+    return len(str(v or "")) > 30
+
+
+def unsure_part(value, cand):
+    """긴 값에서 AI가 헷갈린 부분: 후보 중 값 안에 그대로 든 조각(AI가 읽은 쪽). 짧은 값이나 못 찾으면 None."""
+    if not long_value(value):
+        return None
+    return next((c for c in cand if c and len(c) < len(value) and c in value), None)
+
+
 def value_card(t, q):
     """읽기 애매한 칸(또는 맡긴 종이에서 확정한 기준을 넘은 값): AI가 본 후보를 한 번 눌러 고르거나, 직접 고친다."""
     P = q["payload"]
     if P.get("over"):
         st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 확정한 기준을 넘어요({P['over']}). 맞게 읽었나요?**")
         st.caption("바로 반영하기로 한 종이라도 기준을 넘은 값은 한 번 더 물어요.")
+    elif long_value(P["value"]):
+        st.write(f"**'{P['label']}'{pp(P['label'], '을를')} 이렇게 읽었어요. 맞나요?**")
+        text = html.escape(P["value"])
+        if frag := unsure_part(P["value"], candidates(t, q)):
+            text = text.replace(html.escape(frag), f"<mark>{html.escape(frag)}</mark>", 1)
+        st.markdown(f'<div class="ps-read">{text}</div>', unsafe_allow_html=True)
     else:
         st.write(f"**'{P['label']}' 칸이 '{P['value']}'(으)로 읽혔어요. 맞나요?**")
     if len(P.get("record_ids") or []) > 1:
         st.caption(f"종이 전체에 한 번 적힌 칸이라, 고치면 이 종이의 기록 {len(P['record_ids'])}줄이 함께 바뀌어요.")
     if st.session_state.get("editing") == q["id"]:
-        st.text_input("고친 값", value=P["value"] or "", key=f"fix{q['id']}")
+        if long_value(P["value"]):
+            st.text_area("고친 값", value=P["value"] or "", key=f"fix{q['id']}", height=140)
+        else:
+            st.text_input("고친 값", value=P["value"] or "", key=f"fix{q['id']}")
         row = st.container(horizontal=True, horizontal_alignment="right")
         row.button("아니요", key=f"ne{q['id']}", on_click=lambda: st.session_state.update(editing=None))
         row.button("저장", key=f"s{q['id']}", type="primary", shortcut=key_of("yes"), on_click=save_fix, args=(t, q))
         return
-    if cand := candidates(t, q):
-        st.caption("AI가 본 다른 후보예요. 누르면 그 값으로 고쳐요." + (" 숫자 키로도 골라요." if KEYS else ""))
+    cand = candidates(t, q)
+    frag = unsure_part(P["value"], cand)
+    if frag:  # 긴 값에서 AI가 헷갈린 곳: 후보는 그 부분만 바꾼다
+        cand = [c for c in cand if c != frag]
+    elif long_value(P["value"]):  # 어디인지 못 찾은 짧은 조각은 값 전체를 바꾸지 않게 보여 주기만
+        part = [c for c in cand if len(c) * 2 < len(P["value"])]
+        if part:
+            st.caption("AI가 헷갈린 곳: " + ", ".join(part) + ". 맞지 않으면 [아니요, 고칠게요]로 고쳐 주세요.")
+        cand = [c for c in cand if c not in part]
+    if cand:
+        st.caption((f"AI가 '{frag}' 자리에서 본 다른 후보예요. 누르면 그 부분만 고쳐요." if frag else
+                    "AI가 본 다른 후보예요. 누르면 그 값으로 고쳐요.") + (" 숫자 키로도 골라요." if KEYS else ""))
         row = st.container(horizontal=True)
         for j, v in enumerate(cand):
+            new = P["value"].replace(frag, v, 1) if frag else v
             row.button(v, key=f"c{q['id']}_{j}", shortcut=str(j + 1) if KEYS else None, on_click=act,
-                       args=(engine.answer_value, t, q, v), kwargs={"done": f"'{v}'(으)로 고쳤어요."})
+                       args=(engine.answer_value, t, q, new), kwargs={"done": f"'{v}'{pp(v, ('으로', '로'))} 고쳤어요."})
     row = st.container(horizontal=True, horizontal_alignment="right")
     if KEYS:
         row.button("나중에", key=f"w{q['id']}", type="tertiary", shortcut="L", on_click=later, args=(q,))
@@ -944,12 +976,14 @@ def card_spans(t, q):
     return mine or spans[:1]
 
 
-def where(t, q):
-    """카드가 묻는 칸이 원본 어디에 적혔는지: 원문 글귀와 쪽. 카드를 누르면(카드를 덮은 투명 버튼) 왼쪽 원본이 그곳을 보여 준다."""
+def where(t, q, quote=True):
+    """카드가 묻는 칸이 원본 어디에 적혔는지: 원문 글귀와 쪽. 카드를 누르면(카드를 덮은 투명 버튼) 왼쪽 원본이 그곳을 보여 준다.
+    quote=False: 글귀는 빼고 누르는 버튼만 둔다(원본 그림의 상자가 같은 곳을 짚는다)."""
     spans = card_spans(t, q)
     if not spans:
         return
-    st.caption("원본에 적힌 곳: " + " · ".join(f"{spot(s, spans)}‘{s['quote']}’" for s in spans[:2]))
+    if quote:
+        st.caption("원본에 적힌 곳: " + " · ".join(f"{spot(s, spans)}‘{s['quote']}’" for s in spans[:2]))
     st.button("이 카드가 가리키는 곳을 원본에서 보기", key=f"look{q['id']}", on_click=pick_card, args=(q["id"],))
 
 
@@ -972,6 +1006,10 @@ def spot(s, spans):
     return f"{s['page']}쪽 " if len({x.get('page', 1) for x in spans}) > 1 or s.get("page", 1) > 1 else ""
 
 
+KIND_USE = {"number": "숫자로 모아 두면 더하고 평균 낼 수 있어요.", "date": "날짜로 모아 두면 달력에 보여요.",
+            "choice": "정해진 값 중 하나로 모아 두면 값마다 셀 수 있어요."}
+
+
 def card(t, K, q, label=True):
     """label: 카드 맨 위 종류 이름표. 같은 이름의 소제목 아래에서는 빼서 겹치지 않게 한다."""
     P, kind = q["payload"], q["kind"]
@@ -985,7 +1023,7 @@ def card(t, K, q, label=True):
         if q.get("created_by"):
             st.caption(f"올린 사람: {person_name(q['created_by'])}")
         if kind in ("칸", "같은 칸", "애매한 값"):
-            where(t, q)
+            where(t, q, quote=kind != "칸" and not (kind == "애매한 값" and long_value(P.get("value"))))
         elif kind in ("읽은 값", "종류") and q.get("source_input_id"):
             look(q)
         if kind == "워크스페이스 설정":
@@ -1006,11 +1044,15 @@ def card(t, K, q, label=True):
             buttons(q, ("아니요", (engine.answer_type, t, q, "아니요")), ("맞아요", (engine.answer_type, t, q, "맞아요")),
                     ("하나씩 볼게요", (engine.answer_type, t, q, "하나씩")), note=note)
         elif kind == "칸":
-            st.write(f"**'{P['label']}' 칸이 처음 보여요. '{P['type']}'에 '{P['name']}'({engine.DTYPE_KO[P['dtype']]}) 칸을 추가할까요?**")
-            st.caption(f"읽은 값 예: {samples(t, q)}. 추가하면 지난 기록에는 빈칸으로 들어가요.")
+            st.write(f"**이 종이에 '{P['name']}'{pp(P['name'], '이가')} 적혀 있어요. 앞으로 '{P['type']}'마다 {P['name']}도 모아 둘까요?**")
+            if P["label"] != P["name"]:
+                st.caption(f"종이에는 '{P['label']}'{pp(P['label'], ('으로', '로'))} 적혀 있어요.")
+            st.caption(f"읽은 것: {samples(t, q)} · 전에 올린 {P['type']}에서는 {josa(P['name'], '이가')} 비어 있어요.")
+            if use := KIND_USE.get(P["dtype"]):
+                st.caption(use)
             buttons(q, ("아니요", (engine.answer_prop, t, q, False)), ("추가", (engine.answer_prop, t, q, True)))
         elif kind == "같은 칸":
-            st.write(f"**'{P['label']}'은(는) '{P['type']}'의 '{P['similar_to']}' 칸과 같은 칸인가요?**")
+            st.write(f"**이 종이의 '{P['label']}'{pp(P['label'], '은는')} 전에 모아 둔 '{P['similar_to']}'{pp(P['similar_to'], '과와')} 같은 것인가요?**")
             st.caption(f"읽은 값 예: {samples(t, q)}. 지난 기록과 이름만 달라요.")
             n = sum(P["label"] in r["data"] for r in t.get("records", select="data", source_input_id=f"eq.{q['source_input_id']}"))
             st.caption(f"같은 칸이면 이 종이의 기록 {n}줄의 '{P['label']}' 값이 '{P['similar_to']}' 칸으로 들어가요.")
@@ -1220,6 +1262,8 @@ HOME_CSS = """<style>
 [class*="st-key-alert_under"] {border-left: 4px solid #DC2626 !important;}
 [class*="st-key-alert_gap"], [class*="st-key-alert_due"] {border-left: 4px solid #D97706 !important;}
 [class*="st-key-alert_hit"] {border-left: 4px solid #0F766E !important;}
+.ps-read mark {background: #FED7AA; color: inherit; padding: 1px 2px; border-radius: 3px;}
+.ps-read {background: #FFFFFF; border: 1px solid #D4D4D8; border-radius: 8px; padding: 12px 14px; font-size: 16px; line-height: 26px; margin: 4px 0 8px; white-space: pre-wrap;}
 .ps-alert-head {display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717A;}
 .ps-tag {font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid;}
 .ps-tag.over, .ps-tag.under {color: #B91C1C; background: #FEF2F2; border-color: #FECACA;}
@@ -1244,6 +1288,11 @@ def space_name(tid):
 @st.cache_data(max_entries=200, show_spinner=False)
 def crop_png(path, page, b):
     return engine.snippet(path, page, b)
+
+
+def pp(word, pair):
+    """따옴표로 감싼 말 뒤에 붙일 조사만: f"'{w}'{pp(w, '이가')}"."""
+    return josa(word, pair)[len(str(word)):]
 
 
 def josa(word, pair):
@@ -1696,7 +1745,7 @@ def read_file(t, key="up"):
     if f and f.name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
         st.image(f, caption=f.name, alt="올린 사진")
     with st.expander("모델 고르기"):
-        model = st.selectbox("읽는 모델", llm.MODELS, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
+        model = st.selectbox("읽는 모델", llm.MODELS, index=1, format_func=lambda m: MODEL_KO.get(m, m), key=f"{key}model")
     if st.button("읽기 시작", type="primary", key=f"{key}read"):
         if not f:
             st.error("사진이나 파일을 먼저 넣어 주세요.")
