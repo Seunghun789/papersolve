@@ -32,6 +32,9 @@ MARK = {"solid": "#0F766E", "fill": "#14B8A62D", "dashed": "#D97706"}  # 원본 
 st.markdown(f"""<style>:root {{--ps-accent-bg: {COLOR["accent_bg"]}; --ps-accent-text: {COLOR["accent_text"]};
 --ps-text-muted: {COLOR["text_muted"]}; --ps-hover-bg: {COLOR["hover_bg"]};}}</style>""", unsafe_allow_html=True)
 st.markdown("""<style>
+/* 읽기 애매한 칸 카드의 긴 값: 상자에 보이고, AI가 헷갈린 부분은 주황으로 칠한다 */
+.ps-read mark {background: #FED7AA; color: inherit; padding: 1px 2px; border-radius: 3px;}
+.ps-read {background: #FFFFFF; border: 1px solid #D4D4D8; border-radius: 8px; padding: 12px 14px; font-size: 16px; line-height: 26px; margin: 4px 0 8px; white-space: pre-wrap;}
 /* 넓은 화면은 사이드바를 늘 펴 두고, 좁은 화면(휴대폰)은 Streamlit 기본대로 접고 펼 수 있게 둔다 */
 .st-key-close_sidebar, .st-key-close_menu, .st-key-remember {display: none;}
 /* 메뉴: 단계 이름 아래 왼쪽 정렬 버튼, 고른 메뉴는 메뉴 폭 전체를 칠한다 */
@@ -1262,8 +1265,6 @@ HOME_CSS = """<style>
 [class*="st-key-alert_under"] {border-left: 4px solid #DC2626 !important;}
 [class*="st-key-alert_gap"], [class*="st-key-alert_due"] {border-left: 4px solid #D97706 !important;}
 [class*="st-key-alert_hit"] {border-left: 4px solid #0F766E !important;}
-.ps-read mark {background: #FED7AA; color: inherit; padding: 1px 2px; border-radius: 3px;}
-.ps-read {background: #FFFFFF; border: 1px solid #D4D4D8; border-radius: 8px; padding: 12px 14px; font-size: 16px; line-height: 26px; margin: 4px 0 8px; white-space: pre-wrap;}
 .ps-alert-head {display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717A;}
 .ps-tag {font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid;}
 .ps-tag.over, .ps-tag.under {color: #B91C1C; background: #FEF2F2; border-color: #FECACA;}
