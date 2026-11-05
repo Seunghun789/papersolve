@@ -580,11 +580,12 @@ def ingest_photo(t, model, name, photo):
     사진은 Claude 가 값을 읽는 동안 OCR 이 글줄 위치를 찾고, 읽은 값마다 OCR 글줄에 짝지어 정확한 상자를 쓴다(core/ocr.py)."""
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(1) as pool:
-        seen = pool.submit(ocr.lines, photo) if not name.lower().endswith(".pdf") and ocr.ready() else None
+        seen = pool.submit(ocr.lines, photo) if not name.lower().endswith(".pdf") else None
         sheet = llm.extract(t, model, name, photo)
         try:
             found = seen.result() if seen else []
-        except Exception:  # OCR 이 실패해도 읽기는 계속한다. 상자는 Claude 가 눈금을 보고 적은 것을 쓴다
+        except Exception as e:  # OCR 이 실패해도 읽기는 계속한다. 상자는 Claude 가 눈금을 보고 적은 것을 쓴다
+            print(f"OCR 실패: {type(e).__name__}: {e}", flush=True)  # 서버 로그에 남긴다
             found = []
     sid, path = save_source(t, "사진", name, photo)
     spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 위에 읽은 값을 겹쳐 보이고, 고른 카드의 자리를 짚는다

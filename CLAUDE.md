@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 papersolve(손으로 적은 종이 → 구조 제안 → 예/아니오 확정 → 묻기·대시보드·자동화)의 기획 문서와 웹 프로토타입이 있다.
 
 - 실행: `.venv/bin/python -m streamlit run app.py` (`.env`에 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`)
-- 처음 한 번 `.venv/bin/python -m core.ocr`로 사진 위치를 찾는 OCR 모델을 `models/ocr/`(git 제외)에 받는다. 없으면 위치는 Claude가 어림한 상자로 그려진다.
+- 사진 위치를 찾는 OCR 모델은 서버가 처음 사진을 읽을 때 `models/ocr/`(git 제외)에 받는다. 받지 못하면 서버 로그에 남기고, 위치는 Claude가 어림한 상자로 그려진다.
 - 코드를 바꾸면 `app.py`든 `core/`든 켜 둔 Streamlit 서버를 껐다 다시 켠다. 파일 감시를 꺼 둬서(`fileWatcherType = "none"`) 새로고침만으로는 예전 코드가 그대로 돈다.
 - 코드: `app.py`(화면), `core/db.py`(Supabase, 계정별), `core/llm.py`(모든 Claude 호출), `core/ocr.py`(사진 속 위치), `core/engine.py`(규칙·계산·제안 적용)
 - DB 스키마: `db/schema.sql`. 새 DB에서는 이 파일을 한 번 실행한다. 이전 표는 `legacy` 스키마에 있다.

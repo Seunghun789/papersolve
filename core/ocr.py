@@ -1,6 +1,9 @@
 """사진 속 글줄의 정확한 위치(OCR). PP-OCRv5 검출 + 한국어 인식 ONNX 모델을 onnxruntime 으로 CPU에서 돌린다.
 값은 Claude 가 읽고, 여기서는 글줄마다 상자와 대략 읽은 글을 돌려준다. 모델 파일은 models/ocr/ 에 둔다(git 제외)."""
 import io
+import shutil
+import threading
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
@@ -10,8 +13,30 @@ DIR = Path(__file__).resolve().parent.parent / "models" / "ocr"
 DET, REC, DICT = DIR / "detection_v5_det.onnx", DIR / "languages_korean_rec.onnx", DIR / "languages_korean_dict.txt"
 
 
+SOURCE = "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/"
+FILES = {DET: "detection/v5/det.onnx", REC: "languages/korean/rec.onnx", DICT: "languages/korean/dict.txt"}
+FETCHING = threading.Lock()  # 여러 사람이 동시에 읽어도 한 번만 받는다
+
+
 def ready():
-    return DET.exists() and REC.exists() and DICT.exists()
+    return all(path.exists() for path in FILES)
+
+
+def fetch():
+    """없는 모델 파일을 Hugging Face(monkt/paddleocr-onnx, Apache-2.0)에서 받아 models/ocr/ 에 둔다.
+    git 에 넣지 않아서 Streamlit Cloud 처럼 새로 켠 서버에는 없다. 다 받은 뒤에 이름을 바꿔, 받다 끊겨도 깨진 파일이 남지 않는다."""
+    with FETCHING:
+        DIR.mkdir(parents=True, exist_ok=True)
+        for path, rel in FILES.items():
+            if path.exists():
+                continue
+            part = path.with_suffix(path.suffix + ".part")
+            try:
+                with urllib.request.urlopen(SOURCE + rel, timeout=60) as res, open(part, "wb") as out:
+                    shutil.copyfileobj(res, out)
+                part.replace(path)
+            finally:
+                part.unlink(missing_ok=True)
 
 
 @lru_cache(maxsize=1)
@@ -89,6 +114,7 @@ def _recognize(img, boxes):
 def lines(photo):
     """사진(바이트) → [{"text", "conf", "box": [x0, y0, x1, y1] 0~1000}]. 사진은 휴대폰 방향대로 돌려서 본다."""
     from PIL import Image, ImageOps
+    fetch()
     img = ImageOps.exif_transpose(Image.open(io.BytesIO(photo))).convert("RGB")
     W, H = img.size
     boxes = _detect(img)
@@ -221,20 +247,6 @@ def _place(cells, found):
             out[ci] = box
     sure = [ci for ci, li in pick.items() if cells[ci][1] and sims.get((ci, li), 0) >= 0.8 and len(_norm(cells[ci][0])) > 2]
     return out, sure
-
-
-SOURCE = "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/"
-FILES = {DET: "detection/v5/det.onnx", REC: "languages/korean/rec.onnx", DICT: "languages/korean/dict.txt"}
-
-
-def fetch():
-    """모델 파일을 Hugging Face(monkt/paddleocr-onnx, Apache-2.0)에서 받아 models/ocr/ 에 둔다. `python -m core.ocr`"""
-    import urllib.request
-    DIR.mkdir(parents=True, exist_ok=True)
-    for path, rel in FILES.items():
-        if not path.exists():
-            print("받는 중:", rel)
-            urllib.request.urlretrieve(SOURCE + rel, path)
 
 
 if __name__ == "__main__":
