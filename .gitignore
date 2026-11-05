@@ -32,3 +32,6 @@ dummy/db/6-*.json
 
 # OCR 모델 파일(Hugging Face monkt/paddleocr-onnx 에서 받는다)
 models/
+
+# 기획안 PDF(저장소에 넣지 않는다)
+papersolve_기획안.pdf

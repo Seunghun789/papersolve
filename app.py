@@ -3954,6 +3954,16 @@ def person_name(uid):
     return (rows[0]["name"] if rows else None) or f"이름 없음 {uid}"
 
 
+def is_admin():
+    """들어온 사람이 관리자인가: Google 로그인 메일(st.user)이 secrets 의 ADMIN_EMAILS 에 있으면.
+    DB 의 메일은 보지 않는다. 이메일 가입은 메일 주인을 확인하지 않아 남의 메일로 가입할 수 있다."""
+    if not (google_on() and st.user.is_logged_in):
+        return False
+    emails = st.secrets.get("ADMIN_EMAILS", [])
+    emails = emails.split(",") if isinstance(emails, str) else emails
+    return str(st.user.get("email") or "").strip().lower() in {str(e).strip().lower() for e in emails}
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def is_master(uid):
     """테스트용 관리자(users.is_master): 모든 워크스페이스를 주인으로 연다. 구성원 기록은 남기지 않는다."""
@@ -4360,6 +4370,11 @@ PLANS = [
 ]
 
 
+def admin_page():
+    st.header("관리")
+    st.write("관리자만 보는 화면입니다")
+
+
 def plans():
     """요금제: 플랜 셋을 나란히. 지금은 모두 무료 플랜이고, 다른 플랜 버튼은 막아 둔다."""
     st.header("요금제")
@@ -4458,6 +4473,9 @@ with st.sidebar:
         for p in items:
             st.button(f"{p}  {waiting}" if p == "확인" and waiting else p, key=f"{'navon' if p == st.session_state.page else 'nav'}_{p}", type="tertiary",
                       on_click=pick, args=(p,), width="stretch")
+    if is_admin():
+        st.button("관리", key=f"{'navon' if st.session_state.page == '관리' else 'nav'}_관리", type="tertiary",
+                  on_click=pick, args=("관리",), width="stretch")
     if uid:  # 맨 아래: 이름표와 이름·역할. 누르면 위로 이메일·[내 계정]·[로그아웃]
         name = person_name(uid)
         with st.container(key="me_row"):
@@ -4533,6 +4551,8 @@ if demo:  # 활용 사례: 화면 위에 어떤 사례인지와 내 계정으로
         nxt_col.button(f"{nxt[0]}로 가기", key="demo_next", on_click=pick, args=(nxt[0],), width="stretch")
 if st.session_state.page == "요금제" and not is_master(uid):  # 요금제 초안은 관리자만
     st.session_state.page = "홈"
+if st.session_state.page == "관리" and not is_admin():  # 버튼만 숨기지 않고, 관리자가 아니면 관리 화면을 돌리지 않는다
+    st.session_state.page = "홈"
 page = st.session_state.page
 if page == "홈" and K["types"]:
     st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
@@ -4558,6 +4578,8 @@ elif page == "내 계정" and uid:
     my_account(uid)
 elif page == "요금제" and uid and is_master(uid):
     plans()
+elif page == "관리" and is_admin():
+    admin_page()
 elif not tenant:
     st.header(TITLE.get(page, page))
     empty()
