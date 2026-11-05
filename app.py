@@ -4427,7 +4427,6 @@ def admin_spaces():
     """전체 워크스페이스: 숫자만 보고, 줄을 눌러도 워크스페이스로 들어가지 않는다. admin_page 안에서만 부른다."""
     st.button("← 관리로", key="ad_back", on_click=lambda: st.session_state.update(admin_spaces=False))
     st.header("전체 워크스페이스")
-    st.caption("숫자만 보여 줘요. 종이 내용과 AI에 보낸 글은 보여 주지 않아요. 구독 등급은 가정값이에요.")
     o, plan = engine.admin_overview(skip=DUMMY), engine.FREE_PLAN
     spaces = o["spaces"]
     used = [w for w in spaces if w["use"]]
@@ -4448,7 +4447,6 @@ def admin_spaces():
                 f'<th class="n">기록</th><th>최근 기록</th><th class="n">이번 달 금액</th></tr>{"".join(rows)}</table>')
     else:
         st.caption("찾는 워크스페이스가 없어요.")
-    st.caption("내부 계정과 활용 사례는 빼고 보여 줘요.")
 
 
 def admin_page():
