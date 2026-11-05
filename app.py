@@ -4480,7 +4480,7 @@ with st.sidebar:
         name = person_name(uid)
         with st.container(key="me_row"):
             st.html(f"<style>.st-key-me_row [data-testid='stPopover'] > div > button::before {{content: '{badge(name)}';}}</style>")
-            with st.popover(f"{name}{' · ' + role if role else ''}", width="stretch"), st.container(key="me_menu"):
+            with st.popover(f"{name}{' · ' + ('owner' if role == '주인' else role) if role else ''}", width="stretch"), st.container(key="me_menu"):
                 master = is_master(uid)  # 요금제는 초안이라 테스트용 관리자에게만 보인다
                 plan = f"<br><span>{PLANS[0]['name']} 플랜</span>" if master else ""
                 st.html(f'<div class="ps-me-email">{html.escape(my_email(uid) or name)}{plan}</div>')
