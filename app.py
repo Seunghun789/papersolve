@@ -3796,7 +3796,7 @@ def auth_form():
         st.text_input("비밀번호", type="password", key="su_pw" if up else "li_pw", placeholder="8자 이상" if up else "")
         if up:
             st.text_input("비밀번호 확인", type="password", key="su_pw2")
-        st.form_submit_button("회원가입" if up else "로그인", type="primary", on_click=signup if up else login, width="stretch")
+        st.form_submit_button("회원가입" if up else "로그인", on_click=signup if up else login, width="stretch")
     if err := st.session_state.pop("_auth_err", None):
         st.error(err)
     st.button("이미 계정이 있어요 · 로그인" if up else "처음이에요 · 회원가입", key="auth_switch", type="tertiary", width="stretch",
@@ -3817,9 +3817,7 @@ def landing():
                         unsafe_allow_html=True)
             _, mid, _ = st.columns([1, 3, 1])
             with mid:
-                auth_form()
-                st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
-                if st.button("Google로 계속하기", key="google", width="stretch"):
+                if st.button("Google로 계속하기", key="google", type="primary", width="stretch"):
                     if google_on():
                         st.login("google")  # Google 로그인 창으로 갔다가 이 앱으로 돌아온다
                     else:
@@ -3827,6 +3825,8 @@ def landing():
                 if st.button("카카오로 계속하기", key="kakao", width="stretch"):
                     st.toast("카카오 로그인은 준비 중이에요. 지금은 이메일이나 Google로 시작해요.")
                 st.markdown('<div class="ps-note">카카오 로그인은 준비 중이에요.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
+                auth_form()
         with right:
             st.markdown(step_cards(), unsafe_allow_html=True)
         st.stop()
@@ -4395,7 +4395,7 @@ ADMIN_CSS = """<style>
 
 
 def admin_page():
-    """관리자만 본다. 숫자는 기록에서 세고, 구독 등급과 한도는 아직 저장하지 않아 가정값(engine.FREE_PLAN)으로 보여 준다."""
+    """관리자만 본다. 숫자는 기록에서 세고, 구독 등급과 한도 막대는 실제로 막지 않는 목업이다(engine.FREE_PLAN)."""
     st.html(ADMIN_CSS)
     st.header("관리")
     st.caption("관리자만 보는 화면입니다. 내부 계정과 활용 사례는 세지 않아요. 종이 내용과 AI에 보낸 글은 보여 주지 않아요. 구독 등급과 한도는 가정값이에요.")
