@@ -102,7 +102,7 @@ PRD.md의 범위를 어떤 구조와 방법으로 만드는지 정한 결론이�
 
 - 프로토타입은 Streamlit(파이썬으로 웹 화면을 만드는 도구) 한 앱이다. 서버 쪽에서만 `.env`의 키를 읽는다. 웹 틀 Next.js와 배포 Vercel은 프로토타입으로 가설을 검증한 뒤 옮긴다.
 - 기록과 지식은 Supabase에, 올린 원본 파일은 `data/uploads/`에 둔다. Supabase Storage는 배포할 때 붙인다.
-- 로그인은 Google(Streamlit 내장 `st.login`, Authlib 필요)과 이메일·비밀번호다. 로그인하면 쿠키 `ps_login`에 표를 두어 다시 열어도 이어진다.
+- 로그인은 Google(Streamlit 내장 `st.login`, Authlib 필요)과 이메일·비밀번호다. 로그인하면 쿠키 `ps_login`에 표를 두어 다시 열어도 이어진다. 로그인 화면은 세 버튼을 먼저 보이고, [이메일로 로그인]을 누르면 칸이 열린다.
 - 화면에서는 역할 '주인'을 owner로 쓴다. DB와 코드의 역할 값은 '주인' 그대로다(`memberships`·`org_members`의 check 제약과 권한 판단). 사람은 이름으로 보이고, 이름이 없으면 메일로 보인다(`person_name`).
 - 관리자는 Google 로그인 메일(`st.user`)이 `st.secrets`의 `ADMIN_EMAILS`에 있는 사람이다(`is_admin`). DB의 메일은 보지 않는다. 이메일 가입은 메일 주인을 확인하지 않기 때문이다. `users.is_master`는 모든 워크스페이스를 주인으로 여는 별도 권한이다.
 - 관리 화면의 숫자는 `engine.admin_overview`가 센다. 관리자 계정과 활용 사례는 세지 않고, 계정의 숫자는 주인인 워크스페이스의 합이다. 묻기와 사진 읽기는 `ai_logs.prompt`의 `[묻기]`·`[사진 ` 앞머리로 가린다. 구독 등급과 한도 막대는 `engine.FREE_PLAN` 가정값으로 그린 목업이고, 구독을 저장하거나 실제로 막지는 않는다. 지표의 정의는 PRD §1 성공 지표에 둔다.

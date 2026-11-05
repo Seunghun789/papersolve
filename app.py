@@ -3665,6 +3665,12 @@ LOGIN = """<style>
 .stApp {background: linear-gradient(to right, #FFFFFF 50%, #E4E4E7 50%, #E4E4E7 calc(50% + 1px), #F7F7F8 calc(50% + 1px));}
 .ps-card {background: #FFFFFF; border: 1px solid #E4E4E7; margin-bottom: 14px;} .ps-card p {color: #71717A;} .ps-card.on {border: 2px solid #0F766E;}
 .ps-hero, .ps-note {text-align: center;} .ps-hero h1 {font-size: 2.4rem !important; margin-top: 6vh;} .ps-hero p {color: #52525B;} .ps-note {color: #A1A1AA;}
+.st-key-email_on button {border-color: #0F766E; color: #115E59; font-weight: 600;}
+@keyframes ps-open {from {max-height: 0; opacity: 0;} to {max-height: 270px; opacity: 1;}}
+.st-key-auth_fields {overflow: hidden; animation: ps-open 0.45s ease-in-out;}
+@media (prefers-reduced-motion: reduce) {.st-key-auth_fields {animation: none;}}
+:is(.st-key-google, .st-key-email_off, .st-key-email_on) button:is(:hover, :active, :focus-visible) {background: #F0FDFA !important; border-color: #0F766E !important; color: #115E59 !important;}
+:is(.st-key-google, .st-key-email_off, .st-key-email_on) button:is(:hover, :active, :focus-visible) p {color: #115E59 !important;}
 .st-key-google button {background: #FFFFFF;} .st-key-kakao button {background: #FEE500; color: #191919; border: none;}
 @media (max-width: 768px) {.stApp {background: #FFFFFF;}}
 </style>"""
@@ -3781,11 +3787,11 @@ def leave_case():
 
 
 def enter():
-    """[바로 써 보기]: 로그인해 있으면 바로 들어가고, 아니면 회원가입으로."""
+    """[바로 써 보기]: 로그인해 있으면 바로 들어가고, 아니면 로그인으로. 처음 온 사람은 거기서 회원가입으로 간다."""
     if me():
         st.session_state.update(entered=True, landing=None)
     else:
-        st.session_state.landing = "signup"
+        st.session_state.update(landing="login", auth_open=False)
 
 
 def auth_form():
@@ -3799,8 +3805,6 @@ def auth_form():
         st.form_submit_button("회원가입" if up else "로그인", type="primary", on_click=signup if up else login, width="stretch")
     if err := st.session_state.pop("_auth_err", None):
         st.error(err)
-    st.button("이미 계정이 있어요 · 로그인" if up else "처음이에요 · 회원가입", key="auth_switch", type="tertiary", width="stretch",
-              on_click=lambda: st.session_state.update(landing="login" if up else "signup"))
 
 
 def landing():
@@ -3817,8 +3821,12 @@ def landing():
                         unsafe_allow_html=True)
             _, mid, _ = st.columns([1, 3, 1])
             with mid:
-                auth_form()
-                st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
+                up, opened = st.session_state.landing == "signup", st.session_state.get("auth_open", False)
+                st.button("이메일로 회원가입" if up else "이메일로 로그인", key="email_on" if opened else "email_off", width="stretch",
+                          on_click=lambda: st.session_state.update(auth_open=not opened))
+                if opened:  # 누르면 칸이 자라며 열리고 Google·카카오는 아래로 밀린다
+                    with st.container(key="auth_fields"):
+                        auth_form()
                 if st.button("Google로 계속하기", key="google", width="stretch"):
                     if google_on():
                         st.login("google")  # Google 로그인 창으로 갔다가 이 앱으로 돌아온다
@@ -3827,6 +3835,8 @@ def landing():
                 if st.button("카카오로 계속하기", key="kakao", width="stretch"):
                     st.toast("카카오 로그인은 준비 중이에요. 지금은 이메일이나 Google로 시작해요.")
                 st.markdown('<div class="ps-note">카카오 로그인은 준비 중이에요.</div>', unsafe_allow_html=True)
+                st.button("이미 계정이 있어요 · 로그인" if up else "처음이에요 · 회원가입", key="auth_switch", type="tertiary", width="stretch",
+                          on_click=lambda: st.session_state.update(landing="login" if up else "signup", auth_open=not up))
         with right:
             st.markdown(step_cards(), unsafe_allow_html=True)
         st.stop()
