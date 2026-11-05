@@ -2050,29 +2050,6 @@ def ask_reopen(sid):
     toggle("auto_open", sid)
 
 
-def trust_panel(t, K):
-    """AI에게 맡기는 정도: 사진 종이가 있는 기록 종류마다 지금 정도와 근거. 바꾸는 것은 카드로만."""
-    info = {T: v for T, v in trust_info(t, K).items() if v["total"] or K["trust"].get(T) == engine.TRUST[1]}
-    if not info:
-        return
-    st.subheader("AI에게 맡기는 정도")
-    st.caption("기록 종류마다 정해요. 같은 양식의 종이를 고친 값 없이 이어서 맞게 읽으면, 바로 반영할지 카드로 물어요.")
-    with st.container(border=True):
-        for T, v in info.items():
-            on = K["trust"].get(T) == engine.TRUST[1]
-            a, b, c, d = st.columns([2, 2.2, 1.4, 2.4], vertical_alignment="center")
-            a.write(f"**{T}**")
-            b.caption(f"연속 {v['streak']}장 맞음 · 고친 종이 {v['fixes'] if on else v['unclean']}장")
-            c.html(f'<span class="ps-mode{" on" if on else ""}">{K["trust"].get(T, engine.TRUST[0])}</span>')
-            if on:
-                d.button("매번 묻기로", key=f"tdown{T}", on_click=act, args=(engine.user_trust_down, t, T),
-                         kwargs={"done": "카드로 올렸어요. [맞아요]를 누르면 바뀌어요."}, disabled=not answerable({"kind": "맡기기"}))
-            elif any(q["payload"]["type"] == T for q in engine.pending(t, ["맡기기"])):
-                d.caption("위 '맡기기 제안' 카드에 답하면 바뀌어요.")
-            else:
-                d.caption(f"{max(0, engine.TRUST_N - v['streak'])}장 더 맞으면 제안해요.")
-
-
 def auto_panel(t, K):
     """AI가 바로 반영한 것: 맡긴 종류의 종이는 7일 동안 [되돌리기]로 다시 확인 중으로 돌린다(바뀌는 것을 보고 [적용])."""
     rows = engine.auto_papers(t) if t else []
@@ -2124,10 +2101,9 @@ def check(t, K):
         st.html(CHECK_CSS)
         finished(t, K, done_n)
     else:
-        st.caption("AI가 읽고 제안한 것만 물어요. 원본과 맞는지 보고 답해 주세요. 한 번 답하면 다음부터 묻지 않아요.")
+        st.caption("AI가 판단해 반영했어요. 틀리면 위험한 값만 물어요. 답하지 않아도 기록은 쌓여요.")
         progress(done_n, total)
         (one_by_one if mode == MODES[0] else all_cards)(t, K, qs)
-    trust_panel(t, K)
     auto_panel(t, K)
     recent(t, K)
     if qs or not done_n:  # 다 답한 화면은 위 카드에 [홈으로]가 있다
@@ -4544,6 +4520,7 @@ if tenant and not demo and role in (None, *db.ANSWER) and st.session_state.get("
     # 워크스페이스 설정 카드는 이 접속에서 워크스페이스마다 한 번, 그리고 종이를 새로 읽은 뒤에만 살핀다(화면마다 DB 3번을 줄인다)
     if tenant.get("source_inputs", select="id", limit=1):
         engine.suggest_space(tenant, llm.DEFAULT)
+        engine.auto_settle(tenant)
     st.session_state._space_seen = tid
 K = know(tenant)
 waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0

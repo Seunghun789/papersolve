@@ -29,6 +29,8 @@ except OSError:
 ENTRY = ["종류", "칸", "같은 칸", "애매한 값", "읽은 값"]       # 답하기 전에는 기록이 확정되지 않는 제안
 ENTITY = ["대상 분류", "대상", "같은 대상", "대상 속성", "속성 값", "상위 분류", "관계 속성"]
 CHECK = ENTRY + ENTITY + ["연결", "워크스페이스 설정", "맡기기"]   # 확인 화면에서 묻는 것
+HOLD = [k for k in ENTRY if k != "애매한 값"]  # 끝나야 기록이 확정되는 제안. 애매한 값은 미확인으로 두고 기록은 쓴다
+AUTO = ["워크스페이스 설정", "종류", "칸", "같은 칸", "읽은 값", *ENTITY, "연결"]  # 사람에게 묻지 않고 AI 판단대로 반영하는 제안
 TRUST = ("매번 묻기", "애매한 것만 묻기")  # 사진 종이를 AI에게 맡기는 정도. 처음은 매번 묻기
 TRUST_N = 5      # 고친 값 없이 [맞아요]로 확정한 같은 종류의 종이가 이만큼 이어지면 '맡기기' 카드를 올린다
 TRUST_DOWN = 2   # 맡긴 뒤 바로 반영한 종이를 사람이 이만큼 고치면 스스로 '매번 묻기'로 돌아간다
@@ -566,13 +568,64 @@ PAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".pd
 
 
 def ingest(t, model, name, content):
-    """올린 파일 1개를 형식에 맞는 길로 읽는다. 읽을 길이 없는 형식은 안내 문장으로 멈춘다."""
+    """올린 파일 1개를 형식에 맞는 길로 읽고, 구조는 AI 판단대로 반영한다. 읽을 길이 없는 형식은 안내 문장으로 멈춘다."""
     ext = Path(name).suffix.lower()
     if ext in TABLES:
-        return ingest_table(t, model, name, content)
-    if ext in PAGES:
-        return ingest_photo(t, model, name, content)
-    raise ValueError("이 파일은 아직 읽지 못해요. 종이를 찍은 사진, PDF, 엑셀, CSV로 올려 주세요.")
+        sid = ingest_table(t, model, name, content)
+    elif ext in PAGES:
+        sid = ingest_photo(t, model, name, content)
+    else:
+        raise ValueError("이 파일은 아직 읽지 못해요. 종이를 찍은 사진, PDF, 엑셀, CSV로 올려 주세요.")
+    auto_settle(t, sid)
+    return sid
+
+
+def risky(K, q, spans):
+    """사람에게 물을 애매한 값인가: 틀리면 합계·기간이 틀어지는 숫자·날짜 칸, 또는 후보끼리 숫자가 다른 값(글 안의 금액)."""
+    P = q["payload"]
+    if P.get("over"):
+        return True
+    prop = K["alias"].get((P["type"], P["label"]))
+    if next((p["dtype"] for p in K["props"].get(P["type"], []) if p["name"] == prop), None) in ("number", "date"):
+        return True
+    digits = lambda v: "".join(c for c in str(v) if c.isdigit())
+    cand = [c for s in spans.get(P["label"], []) for c in s.get("cand") or []]
+    return any(digits(c) and digits(c) not in digits(P.get("value")) for c in cand)
+
+
+def auto_settle(t, sid=None):
+    """구조 카드는 사람에게 묻지 않고 AI 판단대로 반영한다. 숫자·날짜의 애매한 값과 지표·자동화만 남는다.
+    이름·글의 애매한 값은 묻지 않고 기록의 uncertain 에 미확인으로 남긴다. 사용자가 직접 올렸거나 되돌린 카드는 건드리지 않는다.
+    역할과 상관없이 반영하고, 반영이 실패한 카드는 그대로 두어 사람이 답하게 한다."""
+    a = db.Tenant(t.id, getattr(t, "user", None))
+    K = load(a)
+    same = lambda q: next((p["dtype"] for p in K["props"].get(q["payload"]["type"], []) if p["name"] == q["payload"]["similar_to"]), None) == q["payload"].get("dtype")
+    answers = {"워크스페이스 설정": lambda q: answer_space(a, q, True), "종류": lambda q: answer_type(a, q, "맞아요"),
+               "칸": lambda q: answer_prop(a, q, True), "같은 칸": lambda q: answer_same(a, q, same(q)), "읽은 값": lambda q: answer_read(a, q),
+               "대상 분류": lambda q: answer_class(a, q, True), "대상": lambda q: answer_entities(a, q, True),
+               "같은 대상": lambda q: answer_same_entity(a, q, True), "대상 속성": lambda q: answer_entity_attr(a, q, True),
+               "속성 값": lambda q: answer_attr_value(a, q, True), "상위 분류": lambda q: answer_hierarchy(a, q, True),
+               "관계 속성": lambda q: answer_link_attr(a, q, True), "연결": lambda q: answer_link(a, q, True)}
+    failed = set()
+    for _ in range(8):  # 답이 새 카드를 만들기도 한다
+        cards = sorted((q for q in pending(a, AUTO) if q["id"] not in failed and not (q.get("evidence") or {}).get("user")
+                        and not q["payload"].get("reopened")), key=lambda q: AUTO.index(q["kind"]))
+        if not cards:
+            break
+        for q in cards:
+            try:
+                answers[q["kind"]](q)
+            except Exception as e:
+                failed.add(q["id"])
+                print(f"자동 반영 실패: {q['kind']} {q['id']}: {type(e).__name__}: {e}", flush=True)
+    K = load(a)
+    spans = {}
+    for q in pending(a, ["애매한 값"]):
+        sp = spans.setdefault(q["source_input_id"], (a.get("source_inputs", select="spans", id=f"eq.{q['source_input_id']}") or [{}])[0].get("spans") or {})
+        if not risky(K, q, sp):
+            done(a, q, "승인", unconfirmed=True)
+    if sid and a.get("records", select="id", source_input_id=f"eq.{sid}", status="eq.확정", limit=1):
+        a.patch("source_inputs", {"auto": True}, id=f"eq.{sid}")
 
 
 def ingest_photo(t, model, name, photo):
@@ -880,13 +933,10 @@ def settle(t, sid):
                 status="eq.대기", type_name=f"eq.{T}")
     if waiting & types:
         suggest_entity_rules(t, load(t))
-        if (t.get("source_inputs", select="channel", id=f"eq.{sid}") or [{}])[0].get("channel") == "사진":
-            for T in waiting & types:
-                maybe_trust(t, T)
 
 
 def pending_of(t, sid):
-    quoted = ",".join(f'"{k}"' for k in ENTRY)
+    quoted = ",".join(f'"{k}"' for k in HOLD)
     return t.get("proposals", select="id", source_input_id=f"eq.{sid}", status="eq.대기", kind=f"in.({quoted})")
 
 
@@ -1135,22 +1185,6 @@ def trust_state(t, types):
                   "unclean": sum(1 for p in papers if not p["clean"]),
                   "fixes": sum(1 for p in papers if p["read"] and not p["clean"])}
     return out
-
-
-def maybe_trust(t, T):
-    """같은 종류의 사진 종이를 TRUST_N 장 이어서 고친 값 없이 확정했으면 '맡기기' 카드를 올린다(한 번에 한 장)."""
-    if trust_level(t, T) != TRUST[0] or any(q["payload"]["type"] == T for q in pending(t, ["맡기기"])):
-        return
-    state = trust_state(t, [T])[T]
-    if state["streak"] < TRUST_N:
-        return
-    sids = [p["sid"] for p in state["papers"]]
-    names = {s["id"]: s["name"] for s in t.get("source_inputs", select="id,name", id=f"in.({','.join(map(str, sids))})")}
-    days = {}
-    for r in t.get("records", select="source_input_id,occurred_at", source_input_id=f"in.({','.join(map(str, sids))})"):
-        days.setdefault(r["source_input_id"], r["occurred_at"])
-    propose(t, "맡기기", {"type": T, "streak": state["streak"],
-                       "papers": [{"sid": s, "name": names.get(s), "day": days.get(s)} for s in sids]})
 
 
 def answer_trust(t, q, ok):
