@@ -3796,7 +3796,7 @@ def auth_form():
         st.text_input("비밀번호", type="password", key="su_pw" if up else "li_pw", placeholder="8자 이상" if up else "")
         if up:
             st.text_input("비밀번호 확인", type="password", key="su_pw2")
-        st.form_submit_button("회원가입" if up else "로그인", on_click=signup if up else login, width="stretch")
+        st.form_submit_button("회원가입" if up else "로그인", type="primary", on_click=signup if up else login, width="stretch")
     if err := st.session_state.pop("_auth_err", None):
         st.error(err)
     st.button("이미 계정이 있어요 · 로그인" if up else "처음이에요 · 회원가입", key="auth_switch", type="tertiary", width="stretch",
@@ -3817,7 +3817,9 @@ def landing():
                         unsafe_allow_html=True)
             _, mid, _ = st.columns([1, 3, 1])
             with mid:
-                if st.button("Google로 계속하기", key="google", type="primary", width="stretch"):
+                auth_form()
+                st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
+                if st.button("Google로 계속하기", key="google", width="stretch"):
                     if google_on():
                         st.login("google")  # Google 로그인 창으로 갔다가 이 앱으로 돌아온다
                     else:
@@ -3825,8 +3827,6 @@ def landing():
                 if st.button("카카오로 계속하기", key="kakao", width="stretch"):
                     st.toast("카카오 로그인은 준비 중이에요. 지금은 이메일이나 Google로 시작해요.")
                 st.markdown('<div class="ps-note">카카오 로그인은 준비 중이에요.</div>', unsafe_allow_html=True)
-                st.markdown('<div class="ps-note" style="margin:1rem 0 0.5rem">또는</div>', unsafe_allow_html=True)
-                auth_form()
         with right:
             st.markdown(step_cards(), unsafe_allow_html=True)
         st.stop()
