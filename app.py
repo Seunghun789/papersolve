@@ -1491,7 +1491,7 @@ def home(t, K):
     now = local_now()
     name = person_name(uid) if uid else ""
     hello = "좋은 아침이에요" if 5 <= now.hour < 11 else "좋은 오후예요" if 11 <= now.hour < 17 else "좋은 저녁이에요"
-    hello += f", {name}님" if name and not name.startswith("이름 없음") else ""
+    hello += f", {name}님" if name and not name.startswith("이름 없음") and "@" not in name else ""
     today_line = f"오늘 챙길 것은 {todo}가지예요" if todo else "오늘은 챙길 것이 없어요"
     where_ = dict((i, n) for i, n, _ in CASES).get(t.id) if isinstance(t, Demo) else space_name(t.id)
     left, right = st.columns([3, 1.4], vertical_alignment="bottom")
@@ -3862,6 +3862,11 @@ def landing():
 ROLES = ["주인", "확인하는 사람", "올리는 사람", "보는 사람"]
 
 
+def role_name(role):
+    """화면에 보이는 역할 이름. DB 값 '주인'은 owner 로 보인다."""
+    return "owner" if role == "주인" else role
+
+
 def google_on():
     """secrets 에 [auth.google] 이 있으면 Google 로그인을 쓴다. 없으면 버튼만 보이고 안내한다."""
     try:
@@ -3950,8 +3955,8 @@ def my_email(uid):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def person_name(uid):
-    rows = db.get("users", select="name", id=f"eq.{uid}")
-    return (rows[0]["name"] if rows else None) or f"이름 없음 {uid}"
+    rows = db.get("users", select="name,email", id=f"eq.{uid}")
+    return (rows[0]["name"] or rows[0]["email"] if rows else None) or f"이름 없음 {uid}"  # 이름이 없으면 메일로 보인다
 
 
 def is_admin():
@@ -4154,7 +4159,7 @@ def hand_over(oid, uid):
     for w in db.get("tenants", select="id", org_id=f"eq.{oid}"):
         db.call("PATCH", "memberships", {"tenant_id": f"eq.{w['id']}", "user_id": f"eq.{uid}"}, {"role": "확인하는 사람"})
         db.post("memberships", {"tenant_id": w["id"], "user_id": to, "role": "주인"}, on_conflict="tenant_id,user_id")
-    st.toast("주인을 넘겼어요. 이제 확인하는 사람이에요.")
+    st.toast("owner를 넘겼어요. 이제 확인하는 사람이에요.")
 
 
 def make_invite(uid):
@@ -4189,7 +4194,7 @@ RIGHTS = [  # 권한 관리 표: 워크스페이스 역할마다 할 수 있는 
     ("워크스페이스 이름·설명 바꾸기", "O", "O", "", ""),
     ("조직 정보 바꾸기, 워크스페이스 생성", "O", "", "", ""),
     ("구성원 초대·역할 바꾸기·내보내기", "O", "", "", ""),
-    ("주인 넘기기·워크스페이스 지우기", "O", "", "", ""),
+    ("owner 넘기기·워크스페이스 지우기", "O", "", "", ""),
 ]
 
 
@@ -4209,7 +4214,7 @@ def org_info(t, uid):
     st.header("조직 정보")
     o = org_of(t.id)
     if not o:
-        st.caption("이 워크스페이스는 아직 조직이 없어요. 주인이 되면 조직이 생겨요.")
+        st.caption("이 워크스페이스는 아직 조직이 없어요. owner가 되면 조직이 생겨요.")
         return
     can = org_role(o["id"], uid) == "주인" or t.role is None or is_master(uid)
     with st.container(border=True):
@@ -4273,7 +4278,7 @@ def members_page(t, uid):
     st.header("구성원 관리")
     o = org_of(t.id)
     if not o:
-        st.caption("이 워크스페이스는 아직 주인이 없어요. 누구나 주소로 열 수 있어요.")
+        st.caption("이 워크스페이스는 아직 owner가 없어요. 누구나 주소로 열 수 있어요.")
         return
     owner = org_role(o["id"], uid) == "주인" or is_master(uid)
     spaces = db.get("tenants", select="id,title", org_id=f"eq.{o['id']}", order="id")
@@ -4300,9 +4305,9 @@ def members_page(t, uid):
             col.caption(h)
         for m in people:
             u = m.get("users") or {}
-            who = u.get("name") or f"이름 없음 {m['user_id']}"
+            who = u.get("name") or u.get("email") or f"이름 없음 {m['user_id']}"
             cols = st.columns(widths, vertical_alignment="center")
-            cols[0].write(who + ("  · 나" if m["user_id"] == uid else "") + ("  · 주인" if m["role"] == "주인" else ""))
+            cols[0].write(who + ("  · 나" if m["user_id"] == uid else "") + ("  · owner" if m["role"] == "주인" else ""))
             cols[1].write(u.get("email") or "-")
             for col, w in zip(cols[2:-1], spaces):
                 now_ = roles.get((w["id"], m["user_id"]), "없음")
@@ -4311,18 +4316,18 @@ def members_page(t, uid):
                     col.selectbox("역할", opts, index=opts.index(now_) if now_ in opts else 0, key=f"role_{w['id']}_{m['user_id']}",
                                   label_visibility="collapsed", on_change=set_role, args=(w["id"], m["user_id"]))
                 else:
-                    col.write(now_)
+                    col.write(role_name(now_))
             if owner and m["role"] != "주인":
                 with cols[-1].popover("내보내기"):
                     st.caption(f"{who}을(를) 내보내면 이 조직의 모든 워크스페이스에서 빠져요.")
                     st.button("내보내기", key=f"kick_{m['user_id']}", type="primary", on_click=kick, args=(o["id"], m["user_id"]))
         if owner and len(people) > 1:
-            others = {m["user_id"]: (m.get("users") or {}).get("name") or f"이름 없음 {m['user_id']}"
+            others = {m["user_id"]: (m.get("users") or {}).get("name") or (m.get("users") or {}).get("email") or f"이름 없음 {m['user_id']}"
                       for m in people if m["user_id"] != uid}
-            with st.popover("주인 넘기기"):
+            with st.popover("owner 넘기기"):
                 st.selectbox("받을 사람", list(others), format_func=others.get, key="owner_to")
-                st.caption("넘기면 받는 사람이 모든 워크스페이스의 주인이 되고, 나는 확인하는 사람이 돼요.")
-                st.button("주인 넘기기", key="owner_go", type="primary", on_click=hand_over, args=(o["id"], uid))
+                st.caption("넘기면 받는 사람이 모든 워크스페이스의 owner가 되고, 나는 확인하는 사람이 돼요.")
+                st.button("owner 넘기기", key="owner_go", type="primary", on_click=hand_over, args=(o["id"], uid))
     with tab_l:
         if not links:
             st.caption("아직 쓸 수 있는 초대 링크가 없어요." + (" [구성원 초대하기]로 만들어요." if owner else ""))
@@ -4337,12 +4342,12 @@ def members_page(t, uid):
 def rights_page(t):
     """권한 관리: 워크스페이스 역할 넷이 할 수 있는 것. 역할은 고정이고, 구성원의 역할은 구성원 관리에서 바꾼다."""
     st.header("권한 관리")
-    st.caption("조직 주인은 모든 워크스페이스의 주인이에요. 다른 구성원은 워크스페이스마다 역할을 하나 가져요. "
+    st.caption("조직 owner는 모든 워크스페이스의 owner예요. 다른 구성원은 워크스페이스마다 역할을 하나 가져요. "
                "역할은 넷으로 정해져 있고, 구성원 관리에서 바꿔요.")
-    st.dataframe(pd.DataFrame(RIGHTS, columns=["할 수 있는 것", *ROLES]), hide_index=True, width="stretch",
+    st.dataframe(pd.DataFrame(RIGHTS, columns=["할 수 있는 것", "owner", *ROLES[1:]]), hide_index=True, width="stretch",
                  alt="역할마다 할 수 있는 것")
     if t.role:
-        st.caption(f"나는 이 워크스페이스의 {t.role}이에요.")
+        st.caption(f"나는 이 워크스페이스의 {role_name(t.role)}예요." if t.role == "주인" else f"나는 이 워크스페이스의 {t.role}이에요.")
 
 
 def my_account(uid):
@@ -4372,6 +4377,12 @@ PLANS = [
 
 ADMIN_CSS = """<style>
 .ps-ad-ns {border: 1px solid #99F6E4; background: #F0FDFA; border-radius: 12px; padding: 18px 24px; margin-bottom: 8px;}
+.st-key-ad_card {position: relative; cursor: pointer;}
+.st-key-ad_card:hover .ps-ad-ns {border-color: #5EEAD4;}
+.st-key-ad_open {position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; z-index: 1; margin: 0 !important;}
+.st-key-ad_open [data-testid="stButton"], .st-key-ad_open button {width: 100%; height: 100%; min-height: 0;}
+.st-key-ad_open button {opacity: 0; cursor: pointer;}
+.ps-ad-use {font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #F0FDFA; color: #115E59; border: 1px solid #99F6E4;}
 .ps-ad-ns span {font-size: 14px; font-weight: 600; color: #115E59;}
 .ps-ad-ns strong {display: block; font-size: 48px; line-height: 58px;}
 .ps-ad-ns em, .ps-ad-step em {font-style: normal; font-size: 13px; color: #71717A;}
@@ -4394,14 +4405,54 @@ ADMIN_CSS = """<style>
 </style>"""
 
 
+def last_seen(iso):
+    """관리 화면의 날짜: 오래 안 쓴 것에는 '멈춤'을 붙인다."""
+    if not iso:
+        return "-"
+    idle = (datetime.datetime.now(KST) - datetime.datetime.fromisoformat(iso).astimezone(KST)).days
+    return html.escape(when(iso)) + (' <span class="ps-ad-idle">멈춤</span>' if idle >= engine.IDLE_DAYS else "")
+
+
+def admin_spaces():
+    """전체 워크스페이스: 숫자만 보고, 줄을 눌러도 워크스페이스로 들어가지 않는다. admin_page 안에서만 부른다."""
+    st.button("← 관리로", key="ad_back", on_click=lambda: st.session_state.update(admin_spaces=False))
+    st.header("전체 워크스페이스")
+    st.caption("숫자만 보여 줘요. 종이 내용과 AI에 보낸 글은 보여 주지 않아요. 구독 등급은 가정값이에요.")
+    o, plan = engine.admin_overview(skip=DUMMY), engine.FREE_PLAN
+    spaces = o["spaces"]
+    used = [w for w in spaces if w["use"]]
+    views = {f"전체 {len(spaces)}": spaces, f"이번 주 활용 {len(used)}": used, f"이번 주 없음 {len(spaces) - len(used)}": [w for w in spaces if not w["use"]]}
+    left, right = st.columns([3, 1], vertical_alignment="center")
+    view = left.segmented_control("보기", list(views), default=list(views)[0], required=True, label_visibility="collapsed", key=f"ad_view{len(spaces)}_{len(used)}")
+    word = right.text_input("찾기", placeholder="워크스페이스·owner 찾기", label_visibility="collapsed", key="ad_find").strip().lower()
+    rows = []
+    for w in views[view]:
+        if word and word not in f"{w['title']} {w['owner']}".lower():
+            continue
+        use = f'<span class="ps-ad-use">{w["use"]}</span>' if w["use"] else "<small>이번 주 없음</small>"
+        rows.append(f'<tr><td><b>{html.escape(w["title"])}</b> <small>{html.escape(w["org"])}</small></td><td>{html.escape(w["owner"])}</td>'
+                    f'<td><span class="ps-ad-plan">{plan["name"]}</span></td><td>{use}</td><td class="n">{w["papers"]}</td><td class="n">{w["records"]}</td>'
+                    f'<td>{last_seen(w["last"])}</td><td class="n">${w["cost"]:.2f}</td></tr>')
+    if rows:
+        st.html('<table class="ps-ad-table"><tr><th>워크스페이스</th><th>owner</th><th>구독 등급</th><th>이번 주 활용</th><th class="n">올린 종이</th>'
+                f'<th class="n">기록</th><th>최근 기록</th><th class="n">이번 달 금액</th></tr>{"".join(rows)}</table>')
+    else:
+        st.caption("찾는 워크스페이스가 없어요.")
+    st.caption("내부 계정과 활용 사례는 빼고 보여 줘요.")
+
+
 def admin_page():
     """관리자만 본다. 숫자는 기록에서 세고, 구독 등급과 한도 막대는 실제로 막지 않는 목업이다(engine.FREE_PLAN)."""
     st.html(ADMIN_CSS)
+    if st.session_state.get("admin_spaces"):
+        return admin_spaces()
     st.header("관리")
     st.caption("관리자만 보는 화면입니다. 내부 계정과 활용 사례는 세지 않아요. 종이 내용과 AI에 보낸 글은 보여 주지 않아요. 구독 등급과 한도는 가정값이에요.")
     o, plan = engine.admin_overview(skip=DUMMY), engine.FREE_PLAN
     mix = ", ".join(f"{k} {n}" for k, n in o["mix"].items())
-    st.html(f'<div class="ps-ad-ns"><span>이번 주 활용 워크스페이스</span><strong>{o["active"]}</strong><em>지난주 {o["before"]} · {mix}</em></div>')
+    with st.container(key="ad_card"):
+        st.html(f'<div class="ps-ad-ns"><span>이번 주 활용 워크스페이스</span><strong>{o["active"]}</strong><em>지난주 {o["before"]} · {mix}</em></div>')
+        st.button("전체 워크스페이스 보기", key="ad_open", on_click=lambda: st.session_state.update(admin_spaces=True))
     st.subheader("어디까지 가나")
     steps, total = [], o["funnel"][0]
     for i, (name, n) in enumerate(zip(engine.STAGES, o["funnel"])):
@@ -4417,12 +4468,6 @@ def admin_page():
             f'<div class="ps-ad-row" style="grid-template-columns: 1fr 1fr"><div class="ps-ad-one"><span>고친 값 비율</span><b>{fixed}</b></div>'
             f'<div class="ps-ad-one"><span>종이 한 장당 AI 비용</span><b>{cost}</b></div></div>')
     st.subheader("계정")
-
-    def last_seen(iso):
-        if not iso:
-            return "-"
-        idle = (datetime.datetime.now(KST) - datetime.datetime.fromisoformat(iso).astimezone(KST)).days
-        return html.escape(when(iso)) + (' <span class="ps-ad-idle">멈춤</span>' if idle >= engine.IDLE_DAYS else "")
 
     rows = []
     for a in o["accounts"]:
@@ -4541,7 +4586,7 @@ with st.sidebar:
         name = person_name(uid)
         with st.container(key="me_row"):
             st.html(f"<style>.st-key-me_row [data-testid='stPopover'] > div > button::before {{content: '{badge(name)}';}}</style>")
-            with st.popover(f"{name}{' · ' + ('owner' if role == '주인' else role) if role else ''}", width="stretch"), st.container(key="me_menu"):
+            with st.popover(f"{name}{' · ' + role_name(role) if role else ''}", width="stretch"), st.container(key="me_menu"):
                 master = is_master(uid)  # 요금제는 초안이라 테스트용 관리자에게만 보인다
                 plan = f"<br><span>{PLANS[0]['name']} 플랜</span>" if master else ""
                 st.html(f'<div class="ps-me-email">{html.escape(my_email(uid) or name)}{plan}</div>')
@@ -4590,8 +4635,8 @@ if uid and tid and not demo and tid not in DUMMY and not is_master(uid) and tid 
         and not db.get("memberships", select="user_id", tenant_id=f"eq.{tid}"):
     # 로그인 전에 이 브라우저에서 만든 워크스페이스: 내 계정으로 옮길지 묻는다
     with st.container(border=True):
-        st.markdown("**이 워크스페이스의 주인이 될까요?**")
-        st.caption("주인이 되면 구성원을 초대하고 역할을 정할 수 있어요. 주인이 생기면 초대받은 사람만 이 워크스페이스를 열어요.")
+        st.markdown("**이 워크스페이스의 owner가 될까요?**")
+        st.caption("owner가 되면 구성원을 초대하고 역할을 정할 수 있어요. owner가 생기면 초대받은 사람만 이 워크스페이스를 열어요.")
         no, yes, _ = st.columns([1, 1, 4])
         no.button("아니요", key="claim_no", on_click=claim, args=(tid, uid, False), width="stretch")
         yes.button("맞아요", key="claim_yes", type="primary", on_click=claim, args=(tid, uid, True), width="stretch")

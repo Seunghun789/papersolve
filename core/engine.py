@@ -2929,7 +2929,15 @@ def admin_overview(skip=()):
                          "last": max((r["last_opened_at"] for r in roles if r["user_id"] == u["id"] and r["last_opened_at"]), default=None),
                          "cost": sum(float(x["cost_usd"] or 0) for x in spent if x["tenant_id"] in owned)})
     now_use = [use(w, week, now_) for w in owner]
-    return {"accounts": accounts, "funnel": [sum(a["stage"] >= i for a in accounts) for i in range(len(STAGES))],
+    who = {u["id"]: u.get("name") or u.get("email") or "-" for u in people}
+    spaces = []
+    for w in db.get("tenants", select="id,title,orgs(name)", id=f"in.({','.join(map(str, owner))})", order="id") if owner else []:
+        here = [r["created_at"] for r in records if r["tenant_id"] == w["id"]]
+        spaces.append({"title": w.get("title") or "내 워크스페이스", "org": (w.get("orgs") or {}).get("name") or "", "owner": who[owner[w["id"]]],
+                       "use": use(w["id"], week, now_), "papers": sum(p["tenant_id"] == w["id"] for p in papers), "records": len(here),
+                       "last": max(here, default=None), "cost": sum(float(x["cost_usd"] or 0) for x in spent if x["tenant_id"] == w["id"])})
+    spaces.sort(key=lambda w: (w["use"] is None, w["last"] is None, -_at(w["last"]).timestamp() if w["last"] else 0))
+    return {"accounts": accounts, "spaces": spaces, "funnel": [sum(a["stage"] >= i for a in accounts) for i in range(len(STAGES))],
             "active": sum(bool(u) for u in now_use), "before": sum(bool(use(w, last_week, week)) for w in owner),
             "mix": {k: now_use.count(k) for k in ("묻기만", "지표·자동화만", "둘 다")},
             "cells": sum(len(v) for p in papers for v in (p.get("spans") or {}).values()), "fixed": len(fixed),
