@@ -2855,3 +2855,82 @@ def answer_space(t, q, ok, values=None):
     if org and (oid := space_row(t).get("org_id")):
         db.call("PATCH", "orgs", {"id": f"eq.{oid}"}, org)
     done(t, q, "승인" if ok else "거절", **(values or {}))
+
+
+# ---- 관리 화면 ----
+
+FREE_PLAN = {"name": "무료", "papers": 30}  # 구독은 아직 저장하지 않는다. 세는 계정은 모두 무료로 본다
+IDLE_DAYS = 5  # 이만큼 안 연 계정은 관리 화면에 '멈춤'으로 보인다
+STAGES = ["가입", "첫 종이", "확인 완료", "첫 활용", "재사용"]
+
+
+def _rows(table, select, **params):
+    """표의 모든 줄. Supabase 는 한 번에 1000줄까지만 돌려줘서 나눠 읽는다."""
+    out, step = [], 1000
+    while True:
+        part = db.get(table, select=select, order="id", limit=str(step), offset=str(len(out)), **params)
+        out += part
+        if len(part) < step:
+            return out
+
+
+def _at(iso):
+    return datetime.fromisoformat(iso)
+
+
+def admin_overview(skip=()):
+    """관리 화면의 숫자. 관리자 계정과 skip(활용 사례) 워크스페이스는 세지 않는다. 계정의 숫자는 주인인 워크스페이스의 합이다.
+    종이 내용·AI에 보낸 글·비밀번호·로그인 표는 돌려주지 않고, spans 는 읽은 칸 수를 세는 데만 쓴다.
+    활용: 그 주에 확정한 새 기록이 있고, 그 주의 묻기나 켜 둔 자동화·올린 지표가 있는 워크스페이스.
+    단계: 가입 → 첫 종이 → 확인 완료(확정한 기록이 있음) → 첫 활용(묻기·자동화·지표) → 재사용(첫 종이 뒤 7~14일 안에 다시 올림)."""
+    now_ = datetime.now(timezone.utc)
+    week, last_week = now_ - timedelta(days=7), now_ - timedelta(days=14)
+    month = date.today().replace(day=1).isoformat()
+    people = db.get("users", select="id,name,email,created_at", is_master="is.false", order="id")
+    roles = db.get("memberships", select="tenant_id,user_id,role,last_opened_at")
+    ids = {u["id"] for u in people}
+    owner = {r["tenant_id"]: r["user_id"] for r in roles if r["role"] == "주인" and r["user_id"] in ids and r["tenant_id"] not in skip}
+
+    def mine(rows):
+        return [r for r in rows if r["tenant_id"] in owner]
+
+    papers = mine(_rows("source_inputs", "tenant_id,created_at,spans", channel="neq.직접 입력"))
+    records = mine(_rows("records", "tenant_id,created_at", status="eq.확정"))
+    fixed = mine(_rows("proposals", "tenant_id", kind='in.("애매한 값","읽은 값")', status="eq.고침"))
+    asks = mine(_rows("ai_logs", "tenant_id,created_at", prompt="like.[묻기]*"))
+    reads = mine(_rows("ai_logs", "tenant_id,cost_usd", prompt="like.[사진 *", created_at=f"gte.{month}"))
+    spent = mine(_rows("ai_logs", "tenant_id,cost_usd", created_at=f"gte.{month}"))
+    built = mine(_rows("widgets", "tenant_id,created_at", status="eq.올림")) + mine(_rows("automations", "tenant_id,created_at", status="eq.켜짐"))
+
+    def use(w, start, end):
+        """그 주의 활용: '묻기만' · '지표·자동화만' · '둘 다', 활용이 아니면 None."""
+        between = lambda rows: any(r["tenant_id"] == w and start <= _at(r["created_at"]) < end for r in rows)
+        asked, made = between(asks), any(r["tenant_id"] == w and _at(r["created_at"]) < end for r in built)
+        if not between(records) or not (asked or made):
+            return None
+        return "둘 다" if asked and made else "묻기만" if asked else "지표·자동화만"
+
+    def stage(owned):
+        times = sorted(_at(p["created_at"]) for p in papers if p["tenant_id"] in owned)
+        if not times:
+            return 0
+        if not any(r["tenant_id"] in owned for r in records):
+            return 1
+        if not any(r["tenant_id"] in owned for r in asks + built):
+            return 2
+        again = any(times[0] + timedelta(days=7) <= t <= times[0] + timedelta(days=14) for t in times)
+        return 4 if again else 3
+
+    accounts = []
+    for u in people:
+        owned = {w for w, uid in owner.items() if uid == u["id"]}
+        accounts.append({"name": u.get("name"), "email": u.get("email"), "stage": stage(owned),
+                         "month_papers": sum(p["tenant_id"] in owned and p["created_at"] >= month for p in papers),
+                         "last": max((r["last_opened_at"] for r in roles if r["user_id"] == u["id"] and r["last_opened_at"]), default=None),
+                         "cost": sum(float(x["cost_usd"] or 0) for x in spent if x["tenant_id"] in owned)})
+    now_use = [use(w, week, now_) for w in owner]
+    return {"accounts": accounts, "funnel": [sum(a["stage"] >= i for a in accounts) for i in range(len(STAGES))],
+            "active": sum(bool(u) for u in now_use), "before": sum(bool(use(w, last_week, week)) for w in owner),
+            "mix": {k: now_use.count(k) for k in ("묻기만", "지표·자동화만", "둘 다")},
+            "cells": sum(len(v) for p in papers for v in (p.get("spans") or {}).values()), "fixed": len(fixed),
+            "paper_cost": sum(float(x["cost_usd"] or 0) for x in reads) / len(reads) if reads else None}

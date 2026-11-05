@@ -4370,9 +4370,70 @@ PLANS = [
 ]
 
 
+ADMIN_CSS = """<style>
+.ps-ad-ns {border: 1px solid #99F6E4; background: #F0FDFA; border-radius: 12px; padding: 18px 24px; margin-bottom: 8px;}
+.ps-ad-ns span {font-size: 14px; font-weight: 600; color: #115E59;}
+.ps-ad-ns strong {display: block; font-size: 48px; line-height: 58px;}
+.ps-ad-ns em, .ps-ad-step em {font-style: normal; font-size: 13px; color: #71717A;}
+.ps-ad-row {display: grid; gap: 12px; margin-bottom: 12px;}
+.ps-ad-step {border: 1px solid #E4E4E7; border-radius: 10px; padding: 12px 14px;}
+.ps-ad-step span {font-size: 13.5px; color: #52525B;}
+.ps-ad-step strong {display: block; font-size: 26px; margin: 2px 0 6px;}
+.ps-ad-step em {display: block; min-height: 18px; margin-top: 5px; font-size: 12px;}
+.ps-ad-bar {height: 6px; background: #ECECEE; border-radius: 3px; overflow: hidden;}
+.ps-ad-bar i {display: block; height: 100%;}
+.ps-ad-one {display: flex; justify-content: space-between; align-items: center; border: 1px solid #E4E4E7; border-radius: 10px; padding: 12px 16px; font-size: 14px;}
+.ps-ad-one b {font-size: 19px;}
+.ps-ad-table {width: 100%; border-collapse: collapse; font-size: 13.5px;}
+.ps-ad-table th {text-align: left; color: #71717A; font-weight: 600; font-size: 12.5px; padding: 8px; border-bottom: 1px solid #E4E4E7; background: #FAFAFA;}
+.ps-ad-table td {padding: 9px 8px; border-bottom: 1px solid #F0F0F2;}
+.ps-ad-table .n {text-align: right;}
+.ps-ad-table small {color: #A1A1AA; font-size: 12.5px;}
+.ps-ad-plan, .ps-ad-idle {font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #E4E4E7; background: #F4F4F5; color: #52525B;}
+.ps-ad-idle {background: #FFFBEB; color: #B45309; border-color: #FDE68A;}
+</style>"""
+
+
 def admin_page():
+    """관리자만 본다. 숫자는 기록에서 세고, 구독 등급과 한도는 아직 저장하지 않아 가정값(engine.FREE_PLAN)으로 보여 준다."""
+    st.html(ADMIN_CSS)
     st.header("관리")
-    st.write("관리자만 보는 화면입니다")
+    st.caption("관리자만 보는 화면입니다. 내부 계정과 활용 사례는 세지 않아요. 종이 내용과 AI에 보낸 글은 보여 주지 않아요. 구독 등급과 한도는 가정값이에요.")
+    o, plan = engine.admin_overview(skip=DUMMY), engine.FREE_PLAN
+    mix = ", ".join(f"{k} {n}" for k, n in o["mix"].items())
+    st.html(f'<div class="ps-ad-ns"><span>이번 주 활용 워크스페이스</span><strong>{o["active"]}</strong><em>지난주 {o["before"]} · {mix}</em></div>')
+    st.subheader("어디까지 가나")
+    steps, total = [], o["funnel"][0]
+    for i, (name, n) in enumerate(zip(engine.STAGES, o["funnel"])):
+        before = o["funnel"][i - 1] if i else 0
+        note = f"{n / before:.0%}" if before else ""
+        note += f" · {before - n}명이 확인에서 멈춤" if name == "확인 완료" and before > n else ""
+        note += " · 7~14일 안에 다시 올림" if name == "재사용" else ""
+        steps.append(f'<div class="ps-ad-step"><span>{name}</span><strong>{n}</strong><div class="ps-ad-bar">'
+                     f'<i style="width:{n / total * 100 if total else 0:.0f}%;background:{COLOR["type_fill"]}"></i></div><em>{note}</em></div>')
+    fixed = f"{o['fixed'] / o['cells']:.0%}" if o["cells"] else "-"
+    cost = f"${o['paper_cost']:.2f}" if o["paper_cost"] is not None else "-"
+    st.html(f'<div class="ps-ad-row" style="grid-template-columns: repeat(5, 1fr)">{"".join(steps)}</div>'
+            f'<div class="ps-ad-row" style="grid-template-columns: 1fr 1fr"><div class="ps-ad-one"><span>고친 값 비율</span><b>{fixed}</b></div>'
+            f'<div class="ps-ad-one"><span>종이 한 장당 AI 비용</span><b>{cost}</b></div></div>')
+    st.subheader("계정")
+
+    def last_seen(iso):
+        if not iso:
+            return "-"
+        idle = (datetime.datetime.now(KST) - datetime.datetime.fromisoformat(iso).astimezone(KST)).days
+        return html.escape(when(iso)) + (' <span class="ps-ad-idle">멈춤</span>' if idle >= engine.IDLE_DAYS else "")
+
+    rows = []
+    for a in o["accounts"]:
+        who = (f'{html.escape(a["name"])} <small>{html.escape(a["email"] or "")}</small>' if a["name"] else html.escape(a["email"] or "-"))
+        used, limit = a["month_papers"], plan["papers"]
+        color = "#D97706" if used >= limit * 0.8 else COLOR["type_fill"]
+        rows.append(f'<tr><td>{who}</td><td><span class="ps-ad-plan">{plan["name"]}</span></td>'
+                    f'<td>{used} / {limit}장<div class="ps-ad-bar"><i style="width:{min(used / limit, 1) * 100:.0f}%;background:{color}"></i></div></td>'
+                    f'<td>{engine.STAGES[a["stage"]]}</td><td>{last_seen(a["last"])}</td><td class="n">${a["cost"]:.2f}</td></tr>')
+    st.html('<table class="ps-ad-table"><tr><th>계정</th><th>구독 등급</th><th>이번 달 종이</th><th>도달 단계</th><th>최근 연 날</th>'
+            f'<th class="n">이번 달 금액</th></tr>{"".join(rows)}</table>')
 
 
 def plans():
