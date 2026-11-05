@@ -4455,7 +4455,6 @@ def admin_page():
     if st.session_state.get("admin_spaces"):
         return admin_spaces()
     st.header("관리")
-    st.caption("관리자만 보는 화면입니다. 내부 계정과 활용 사례는 세지 않아요. 종이 내용과 AI에 보낸 글은 보여 주지 않아요. 구독 등급과 한도는 가정값이에요.")
     o, plan = engine.admin_overview(skip=DUMMY), engine.FREE_PLAN
     mix = ", ".join(f"{k} {n}" for k, n in o["mix"].items())
     with st.container(key="ad_card"):
