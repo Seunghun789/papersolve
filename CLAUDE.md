@@ -4,7 +4,7 @@
 
 1. 작업을 시작하기 전에 PRD.md 를 먼저 읽는다. tasks.md 가 있으면 함께 읽는다. 범위·비전이 걸린 판단은 메인 PRD(`~/Desktop/papertolveai/PRD_Tolve_v3.1_SaaS.md`)도 본다.
 2. 어려운 말을 쓰면 바로 뒤에 뜻을 한 줄로 풀어 준다.
-3. 서비스가 제안하고 사용자는 예/아니오로 확인한다(사용자 확인 후 반영). 이 원칙을 벗어나는 기능은 넣지 않는다.
+3. AI가 판단해 반영하고 근거를 남긴다. 하네스(판단을 검사하는 틀)가 의심되는 것만 사람에게 묻고, 반영한 것은 언제든 되돌릴 수 있다. 사람 개입을 최소로 줄이면서 빠른 응답과 안정성을 함께 지킨다. 이 원칙을 벗어나는 기능은 넣지 않는다.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
