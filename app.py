@@ -243,11 +243,11 @@ PART = {"올리기": (0, ""), "확인": (1, "칸"), "대상": (1, "대상"), "�
 NOTE = {
     "홈": "챙길 일을 켜 두면 걸린 대상이 여기에 먼저 보여요.",
     "올리기": "종이 한 장을 올리면 아래 순서로 채워져요.",
-    "확인": "올린 종이에서 AI가 찾은 칸을 원본과 나란히 보고 [맞아요]로 확인해요.",
-    "대상": "같은 품목·설비·고객을 하나로 묶고, 분류와 정보를 확인해요.",
+    "확인": "AI가 반영한 것 중 사람이 봐야 할 값만 원본과 나란히 물어요.",
+    "대상": "AI가 같은 품목·설비·고객을 하나로 묶고, 분류와 정보를 정리해요.",
     "지식그래프": "칸과 대상이 어떻게 이어지는지(기준, 의존 등)를 그림으로 확인해요.",
-    "대시보드": "확인한 기록의 숫자 칸 추이와 지표가 여기에 그려져요.",
-    "자동화": "확인한 기준으로 챙길 일을 켜 두면 홈에 먼저 보여요.",
+    "대시보드": "쌓인 기록의 숫자 칸 추이와 지표가 여기에 그려져요.",
+    "자동화": "기록에서 찾은 기준으로 챙길 일을 켜 두면 홈에 먼저 보여요.",
     "묻기": "쌓인 기록에 물으면, 기록에서 센 답과 근거 기록·원본 사진이 함께 와요.",
 }
 TITLE = {"홈": "오늘 먼저 볼 것", "확인": "확인"}
@@ -1509,7 +1509,7 @@ def home(t, K):
         with st.container(border=True, key="home_check"):
             a_, b_ = st.columns([4, 1.3], vertical_alignment="center")
             a_.write(f"**확인할 것 {n_check}개가 기다려요**")
-            a_.caption("AI가 읽고 제안한 것을 예/아니오로 확인하면 기록과 지표에 들어가요.")
+            a_.caption("AI가 바로 반영했고, 사람이 봐야 할 것만 남겼어요.")
             b_.button(f"확인할 것 {n_check}개", on_click=go, args=("확인",), type="primary", width="stretch")
     if not autos:
         st.caption("자동화에서 업무를 켜 두면 걸린 대상이 여기에 알아서 보여요.")
@@ -1618,7 +1618,7 @@ def papers(t, K, S):
     done = [s for s in S if not s["wait"] and s["rows"]]
     none = [s for s in S if not s["wait"] and not s["rows"]]
     if wait:
-        groups.append(("wait", "확인 중", f"종이 {len(wait)}장 · 답하면 기록 종류가 정해져요", wait))
+        groups.append(("wait", "확인 중", f"종이 {len(wait)}장 · 답할 값이 남았어요", wait))
     for i, T in enumerate(dict.fromkeys(s["type"] for s in done)):  # 최근에 올린 종이가 있는 종류부터
         g = [s for s in done if s["type"] == T]
         first, last = min(s["first"] for s in g), max(s["last"] for s in g)
@@ -1643,7 +1643,7 @@ def paper_row(t, K, s, show_type):
         else:
             pic.html(f'<div class="ps-thumb">{"표" if s["channel"] == "파일" else "원본 없음"}</div>')
         kind = (f"PDF · {th['pages']}쪽" if (path or "").lower().endswith(".pdf") else "사진" if s["channel"] == "사진" else "표")
-        sub = kind + (f" · AI 제안: {s['type']}" if s["wait"] and s["type"] else f" · {s['type']}" if show_type and s["type"] else "")
+        sub = kind + (f" · AI 제안: {s['type']}" if s["wait"] and not s["rows"] and s["type"] else f" · {s['type']}" if (show_type or s["wait"]) and s["type"] else "")
         name.html(f'<div class="ps-paper"><b>{html.escape(s["name"] or "이름 없음")}</b><span>{html.escape(sub)}</span></div>')
         day.write(fmt_day(s["created_at"]))
         who.html(f'<span>{html.escape(person_name(s["created_by"])) if s.get("created_by") else "-"}</span>')
@@ -1732,7 +1732,7 @@ def field(K, p, seen):
 def write_form(t, K):
     """확정한 기록 종류의 칸 그대로 적는 입력 화면. 저장하면 묻지 않고 바로 기록이 된다."""
     if not K["types"]:
-        st.info("기록 종류를 하나 확정하면 여기서 같은 칸으로 바로 적을 수 있어요.")
+        st.info("종이를 한 장 읽으면 여기서 같은 칸으로 바로 적을 수 있어요.")
         return
     T = st.selectbox("기록 종류", K["types"], key="wtype")
     df = engine.frame(K, T)
@@ -2051,7 +2051,7 @@ def ask_reopen(sid):
 
 
 def auto_panel(t, K):
-    """AI가 바로 반영한 것: 맡긴 종류의 종이는 7일 동안 [되돌리기]로 다시 확인 중으로 돌린다(바뀌는 것을 보고 [적용])."""
+    """AI가 바로 반영한 것: 자동 반영한 종이는 7일 동안 [되돌리기]로 다시 확인 중으로 돌린다(바뀌는 것을 보고 [적용])."""
     rows = engine.auto_papers(t) if t else []
     if not rows:
         return
@@ -3650,7 +3650,7 @@ LOGIN = """<style>
 .st-key-google button {background: #FFFFFF;} .st-key-kakao button {background: #FEE500; color: #191919; border: none;}
 @media (max-width: 768px) {.stApp {background: #FFFFFF;}}
 </style>"""
-STEP_CARDS = [("① 종이", "사진이나 파일 한 장을 올려요"), ("② 확인", "AI가 찾은 칸 · 대상을 예/아니오로 확인해요"),
+STEP_CARDS = [("① 종이", "사진이나 파일 한 장을 올려요"), ("② 확인", "AI가 정리하고, 틀리면 위험한 값만 물어요"),
               ("③ 내 기록", "표 · 지표 · 챙길 일로 쌓여요"), ("④ 묻기", "물으면 기록에서 센 답과 근거가 와요")]
 
 
@@ -3784,7 +3784,7 @@ def auth_form():
 
 
 def landing():
-    """워크스페이스가 없는 첫 방문: 랜딩(무슨 서비스인지) → [바로 써 보기]로 올리기, [로그인]은 로그인 화면(모양만)."""
+    """로그인하지 않은 첫 방문: 랜딩(무슨 서비스인지). [바로 써 보기]와 [로그인]은 로그인 화면으로 간다."""
     st.html(LANDING_CSS)
     if st.session_state.get("landing") in ("login", "signup"):
         st.html(LOGIN)
@@ -3793,7 +3793,7 @@ def landing():
         left, right = st.columns(2, gap="xlarge", vertical_alignment="center")  # 오른쪽 네 카드를 왼쪽 글·입력 칸의 세로 가운데에
         with left:
             st.markdown('<div class="ps-hero"><h1>손으로 적은 기록을 찍으면<br>표 · 챙길 일 · 답이 돼요</h1>'
-                        '<p>점검표, 재고 장부, 메모를 사진으로 올리세요.<br>AI가 칸을 찾아 주고, 맞는지만 [맞아요]로 확인하면 돼요.</p></div>',
+                        '<p>점검표, 재고 장부, 메모를 사진으로 올리세요.<br>AI가 칸을 찾아 표로 정리하고, 틀리면 위험한 값만 물어요.</p></div>',
                         unsafe_allow_html=True)
             _, mid, _ = st.columns([1, 3, 1])
             with mid:
@@ -3830,7 +3830,7 @@ def landing():
                 st.toast(f"{name}는 준비 중이에요.")
         login.button("로그인", key="login", on_click=lambda: st.session_state.update(landing="login"), width="stretch")
     st.markdown('<div class="ps-hero"><h1>종이는 그대로,<br>정리는 AI가 할게요</h1>'
-                '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>맞는지만 확인하면 챙길 일과 답이 따라와요.</p></div>',
+                '<p>점검표 · 재고 장부 · 메모를 찍어 올리면<br>AI가 칸을 찾아 표로 정리해요.<br>애매한 값만 답하면 챙길 일과 답이 따라와요.</p></div>',
                 unsafe_allow_html=True)
     st.button("바로 써 보기  →", key="go", type="primary", on_click=enter)
     st.markdown('<div class="ps-note">이메일로 1분이면 시작해요</div>'

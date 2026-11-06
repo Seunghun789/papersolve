@@ -74,7 +74,7 @@ create table public.object_types (           -- 기록 종류(재고 점검, 고
   name text not null,
   kind text not null default '기록' check (kind in ('기록', '대상')),
   parent_name text,                          -- 대상 분류의 상위 분류 (예: 식품 → 품목)
-  trust text not null default '매번 묻기' check (trust in ('매번 묻기', '애매한 것만 묻기')),  -- 기록 종류의 사진 종이를 AI에게 맡기는 정도. '맡기기' 카드로만 바뀐다
+  trust text not null default '매번 묻기' check (trust in ('매번 묻기', '애매한 것만 묻기')),  -- 맡기기는 자동 반영으로 대체했다. 지난 기록 때문에 칸만 남아 있다
   created_at timestamptz not null default now(),
   unique (tenant_id, name)
 );
@@ -156,7 +156,7 @@ create table public.source_inputs (          -- 올린 사진이나 파일 1개,
   name text,
   storage_path text,
   spans jsonb not null default '{}',          -- 읽은 칸 이름 → 원본 어디에 적혔나 [{page, quote, value, written, box, rec, unsure, cand}]. value 는 넣은 값(AI가 읽은 날짜 · 숫자를 코드가 적힌 글과 맞춰 본 것), written 은 그와 다를 때 적힌 글 그대로. box 는 AI가 적은 자리(쪽의 0~1000 비율), rec 는 이 종이의 몇 번째 기록(0부터, 종이 전체 칸은 없음), unsure 는 읽기 애매한 칸, cand 는 AI가 본 다른 후보 값. 확인 화면이 원본 위에 겹쳐 보여 준다
-  auto boolean not null default false,        -- '애매한 것만 묻기'로 맡긴 종류라 [맞아요] 없이 바로 반영한 종이. 7일 동안 되돌릴 수 있다
+  auto boolean not null default false,        -- AI가 판단해 바로 반영한 종이. 7일 동안 되돌릴 수 있다
   created_by bigint references public.users(id),
   created_at timestamptz not null default now()
 );
