@@ -598,7 +598,7 @@ def auto_settle(t, sid=None):
     이름·글의 애매한 값은 묻지 않고 기록의 uncertain 에 미확인으로 남긴다. 사용자가 직접 올렸거나 되돌린 카드는 건드리지 않는다.
     역할과 상관없이 반영하고, 반영이 실패한 카드는 그대로 두어 사람이 답하게 한다."""
     a = db.Tenant(t.id, getattr(t, "user", None))
-    K = load(a)
+    K = load(a) if pending(a, ["같은 칸"]) else None  # 앱을 열 때마다 돌기도 해서, 쓸 때만 읽는다
     same = lambda q: next((p["dtype"] for p in K["props"].get(q["payload"]["type"], []) if p["name"] == q["payload"]["similar_to"]), None) == q["payload"].get("dtype")
     answers = {"워크스페이스 설정": lambda q: answer_space(a, q, True), "종류": lambda q: answer_type(a, q, "맞아요"),
                "칸": lambda q: answer_prop(a, q, True), "같은 칸": lambda q: answer_same(a, q, same(q)), "읽은 값": lambda q: answer_read(a, q),
@@ -618,12 +618,14 @@ def auto_settle(t, sid=None):
             except Exception as e:
                 failed.add(q["id"])
                 print(f"자동 반영 실패: {q['kind']} {q['id']}: {type(e).__name__}: {e}", flush=True)
-    K = load(a)
-    spans = {}
-    for q in pending(a, ["애매한 값"]):
-        sp = spans.setdefault(q["source_input_id"], (a.get("source_inputs", select="spans", id=f"eq.{q['source_input_id']}") or [{}])[0].get("spans") or {})
-        if not risky(K, q, sp):
-            done(a, q, "승인", unconfirmed=True)
+    if unsure := pending(a, ["애매한 값"]):
+        K = load(a)
+        papers = {q["source_input_id"] for q in unsure}
+        spans = {s["id"]: s["spans"] or {} for s in a.get("source_inputs", select="id,spans", id=f"in.({','.join(map(str, papers))})")}
+        quiet = [q for q in unsure if not risky(K, q, spans.get(q["source_input_id"], {}))]
+        db.together([lambda q=q: close(a, q, "승인", unconfirmed=True) for q in quiet])  # 애매한 값은 기록 확정을 막지 않아 확정 검사는 종이마다 한 번이면 된다
+        for sp in {q["source_input_id"] for q in quiet}:
+            settle(a, sp)
     if sid and a.get("records", select="id", source_input_id=f"eq.{sid}", status="eq.확정", limit=1):
         a.patch("source_inputs", {"auto": True}, id=f"eq.{sid}")
 
@@ -942,11 +944,15 @@ def pending_of(t, sid):
 
 # ---- C 확인: 답 적용 ----
 
-def done(t, q, status, **payload):
+def close(t, q, status, **payload):
     body = {"status": status, "decided_at": now(), **({"decided_by": t.user} if getattr(t, "user", None) else {})}
     if payload:
         body["payload"] = {**q["payload"], **payload}
     t.patch("proposals", body, id=f"eq.{q['id']}")
+
+
+def done(t, q, status, **payload):
+    close(t, q, status, **payload)
     settle(t, q.get("source_input_id"))
 
 
@@ -954,12 +960,17 @@ def set_alias(t, T, alias, prop):
     t.post("alias_dict", {"type_name": T, "alias": alias, "prop_name": prop}, on_conflict="tenant_id,type_name,alias")
 
 
+def add_props(t, T, props, position=0):
+    """칸 여러 개와 그 별칭을 DB에 두 번만 다녀와 넣는다. 한 번에 보내는 줄은 키가 겹치면 안 되어 같은 이름은 뒤의 것으로 둔다."""
+    defs = {p["name"]: {"type_name": T, "name": p["name"], "dtype": p["dtype"], "unit": p.get("unit"),
+                        "is_entity": p.get("is_entity", False), "position": position + i} for i, p in enumerate(props)}
+    t.post("property_defs", list(defs.values()), on_conflict="tenant_id,type_name,name")
+    aliases = {a: p["name"] for p in props for a in (p["label"], p["name"])}
+    t.post("alias_dict", [{"type_name": T, "alias": a, "prop_name": n} for a, n in aliases.items()], on_conflict="tenant_id,type_name,alias")
+
+
 def add_prop(t, T, p, position):
-    t.post("property_defs", {"type_name": T, "name": p["name"], "dtype": p["dtype"], "unit": p.get("unit"),
-                             "is_entity": p.get("is_entity", False), "position": position},
-           on_conflict="tenant_id,type_name,name")
-    set_alias(t, T, p["label"], p["name"])
-    set_alias(t, T, p["name"], p["name"])
+    add_props(t, T, [p], position)
 
 
 def answer_type(t, q, how):
@@ -973,8 +984,7 @@ def answer_type(t, q, how):
         for p in P["props"]:
             propose(t, "칸", {"type": P["type"], **p}, {"samples": samples.get(p["label"], [])}, q["source_input_id"])
         return done(t, q, "고침")
-    for i, p in enumerate(P["props"]):
-        add_prop(t, P["type"], p, i)
+    add_props(t, P["type"], P["props"])
     done(t, q, "승인")
     K = load(t)  # 기록이 확정된 뒤에 근거를 센다
     for l in P.get("links", []):
@@ -1327,15 +1337,15 @@ def propose_class(t, K, T, prop, C, user=False):
 
 
 def create_entities(t, K, C, names, attrs=None):
-    for n in names:
-        n = str(n).strip()
-        if not n or find_entity(K, C, n):
-            continue
-        e = t.post("entities", {"class_name": C, "name": n, "attrs": (attrs or {}).get(n, {})},
-                   on_conflict="tenant_id,class_name,name")
-        t.post("entity_aliases", {"entity_id": e["id"], "alias": n}, on_conflict="tenant_id,entity_id,alias")
+    fresh = dict.fromkeys(n for n in (str(x).strip() for x in names) if n and not find_entity(K, C, n))
+    if not fresh:
+        return
+    made = t.post("entities", [{"class_name": C, "name": n, "attrs": (attrs or {}).get(n, {})} for n in fresh],
+                  on_conflict="tenant_id,class_name,name")
+    t.post("entity_aliases", [{"entity_id": e["id"], "alias": e["name"]} for e in made], on_conflict="tenant_id,entity_id,alias")
+    for e in made:
         K["entities"][e["id"]] = e
-        K["ealias"].setdefault(n, []).append(e["id"])
+        K["ealias"].setdefault(e["name"], []).append(e["id"])
 
 
 def answer_class(t, q, ok):
@@ -1347,7 +1357,7 @@ def answer_class(t, q, ok):
     K = load(t)
     create_entities(t, K, P["class"], frame(K, P["type"])[P["prop"]].dropna().unique() if P["type"] in K["types"] else P["values"])
     done(t, q, "승인")
-    suggest_entity_rules(t, load(t))
+    suggest_entity_rules(t, K)
 
 
 def answer_entities(t, q, ok):
@@ -1506,9 +1516,11 @@ def suggest_entity_rules(t, K):
         for p in K["props"][T]:
             if p["is_entity"] and not p.get("ref_class"):
                 propose_class(t, K, T, p["name"], p["name"])
-    attr_seen = {(P.get("type"), P["attr"]) for P in asked(t, "대상 속성")}
-    linkattr_seen = {(P.get("type"), P["attr"]) for P in asked(t, "관계 속성")}
-    link_seen = {(P["from"], P["to"]) for P in asked(t, "연결")}
+    past = t.get("proposals", select="kind,payload", kind='in.("대상 속성","관계 속성","연결")')
+    of = lambda kind: [q["payload"] for q in past if q["kind"] == kind]
+    attr_seen = {(P.get("type"), P["attr"]) for P in of("대상 속성")}
+    linkattr_seen = {(P.get("type"), P["attr"]) for P in of("관계 속성")}
+    link_seen = {(P["from"], P["to"]) for P in of("연결")}
     for T in K["types"]:
         refs = ref_props(K, T)
         if not refs:
