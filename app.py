@@ -8,6 +8,7 @@ import json
 import math
 import os
 import secrets
+import threading
 import time
 from datetime import date
 
@@ -15,6 +16,7 @@ import anthropic
 import pandas as pd
 import requests
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from core import db, engine, llm
 
@@ -175,9 +177,32 @@ def knowledge(tid):
     return engine.load(db.Tenant(tid))
 
 
+@st.cache_data(ttl=30, max_entries=200, show_spinner=False)
+def waiting_cards(tid, version):
+    """기다리는 제안 전부(사이드바의 확인할 것 수와 확인 화면이 쓴다). version 은 이 서버에서 이 워크스페이스에 쓴 횟수(db.WRITES)라,
+    여기서 쓰면 바로 새로 읽고, 다른 서버에서 쓴 것은 30초 안에 보인다."""
+    return engine.waiting_rows(db.Tenant(tid))
+
+
+@st.cache_data(ttl=30, max_entries=500, show_spinner=False)
+def screen_read(tid, version, table, params):
+    return db.get(table, tenant_id=f"eq.{tid}", **dict(params))
+
+
+class Screen(db.Tenant):
+    """화면이 쓰는 워크스페이스. 읽기는 이 서버에서 이 워크스페이스에 쓴 횟수(db.WRITES)가 같으면 30초 동안 저장해 둔 것을 쓴다.
+    쓰면 횟수가 바뀌어 바로 새로 읽고, 다른 서버에서 쓴 것은 30초 안에 보인다. 클릭할 때마다 같은 표를 다시 읽지 않는다."""
+
+    def get(self, table, **params):
+        if get_script_run_ctx(suppress_warning=True) is None:  # 한꺼번에 읽기(db.together)의 스레드: 저장해 둔 값 없이 바로 읽는다
+            return super().get(table, **params)
+        return screen_read(self.id, db.WRITES.get(self.id, 0), table, tuple(sorted(params.items())))
+
+
 def forget(t):
     """이 워크스페이스의 저장해 둔 지식만 지운다. 다른 워크스페이스(다른 사람)의 것은 그대로 둔다."""
     st.session_state.pop("_synced", None)  # 지식이 바뀌면 규칙에서 나오는 제안을 다시 살핀다
+    fresh_account()  # 워크스페이스 이름 같은 설정도 카드로 바뀐다
     if isinstance(t, db.Tenant) and not isinstance(t, Demo):
         knowledge.clear(t.id)
     elif t is None:
@@ -219,7 +244,7 @@ def fail(title, e):
         body = "AI가 답하지 못했어요. 잠시 뒤 다시 눌러 주세요."
     elif isinstance(e, pd.errors.ParserError):
         body = "표 파일을 읽지 못했어요. 첫 줄에 칸 이름이 있는 표인지 확인해 주세요."
-    elif isinstance(e, (RuntimeError, ValueError)):
+    elif isinstance(e, (RuntimeError, ValueError, db.NotAllowed)):
         body = str(e)
     else:
         body = "생각하지 못한 문제가 생겼어요. 잠시 뒤 다시 눌러 주세요."
@@ -611,7 +636,7 @@ def show_table(t, src, sid, col=None, span=None):
     st.caption(f"원본: {src['name']}")
     content = engine.original(src.get("storage_path"))
     if content:
-        df = engine.read_table(src["name"], content)
+        df = engine.read_table(src["name"], content, (span or {}).get("sheet"))
     else:  # 원본 파일이 없으면 읽어 둔 기록으로
         df = pd.DataFrame([r["data"] for r in t.get("records", select="data", source_input_id=f"eq.{sid}", limit=200)])
     df.index = range(1, len(df) + 1)  # 카드의 'N번째 줄'과 같은 번호
@@ -1667,20 +1692,8 @@ def paper_row(t, K, s, show_type):
             with row.popover("다시 읽기"):
                 model = st.selectbox("읽는 모델", llm.MODELS, index=llm.MODELS.index(llm.DEFAULT), format_func=lambda m: MODEL_KO.get(m, m), key=f"prm{sid}")
                 st.caption("저장된 원본을 이 모델로 다시 읽어요. 지금 확인 중인 카드는 새 카드로 바뀌어요.")
-                if st.button("읽기 시작", key=f"prr{sid}", type="primary"):
-                    with st.spinner("다시 읽는 중이에요..."):
-                        try:
-                            engine.reread(t, model, sid)
-                            ok = True
-                        except (*ERRORS, db.NotAllowed) as e:
-                            fail("다시 읽지 못했어요", e)
-                            ok = False
-                    if ok:
-                        forget(t)
-                        st.session_state.pop("_space_seen", None)
-                        fresh_queue()
-                        st.session_state._goto = "확인"
-                        st.rerun()
+                st.button("읽기 시작", key=f"prr{sid}", type="primary", disabled=bool(reading()), on_click=reread_paper,
+                          args=(t, s["name"] or "올린 종이", sid, model))
         if mine:
             row.button("지우기", key=f"pdel{sid}", type="tertiary", on_click=toggle, args=("paper_open", ("지우기", sid)))
     if st.session_state.get("paper_open") == ("보기", sid):
@@ -1691,6 +1704,12 @@ def paper_row(t, K, s, show_type):
                 show_table(t, s, sid)
     if st.session_state.get("paper_open") == ("지우기", sid):
         delete_card(t, K, s)
+
+
+def reread_paper(t, name, sid, model):
+    """[다시 읽기]의 [읽기 시작]: 뒤에서 다시 읽고, 진행은 사진·파일 탭에서 본다."""
+    start_reading(t, name, lambda w, say: engine.reread(w, model, sid, say))
+    st.session_state.upload_tab = "사진·파일"
 
 
 def drop_paper(t, sid):
@@ -1764,7 +1783,97 @@ def write_form(t, K):
         st.success("홈 표에 한 줄 늘었어요." + (f" 확인할 것 {len(new)}개가 있어요." if new else ""), title="저장했어요")
 
 
+def start_reading(t, name, work):
+    """종이 읽기와 반영을 뒤에서 돌린다. 화면을 다시 그리거나 다른 화면으로 가도 멈추지 않는다.
+    work(Tenant, progress): 할 일(engine.ingest·reread). 진행은 st.session_state.reading 의 사전에 쌓이고 reading_panel 이 그린다."""
+    job = {"tid": t.id, "name": name, "step": "읽기", "rows": 0, "started": time.time(), "done": False, "error": None}
+    worker = db.Tenant(t.id, t.user, t.role)  # 화면의 Tenant 와 따로 쓴다
+
+    def run():
+        try:
+            work(worker, lambda step, **info: job.update(step=step, **info))
+        except BaseException as e:  # 화면이 다음에 그릴 때 안내한다
+            job["error"] = e
+        finally:
+            job["done"] = True
+
+    threading.Thread(target=run, daemon=True, name=f"reading-{t.id}").start()
+    st.session_state.reading = job
+
+
+def reading(tid=None):
+    """뒤에서 읽고 있는 종이(끝나지 않은 것). tid 를 주면 그 워크스페이스의 것만."""
+    job = st.session_state.get("reading")
+    return job if job and not job["done"] and (tid is None or job["tid"] == tid) else None
+
+
+def finish_reading():
+    """뒤에서 읽던 종이가 끝났으면 한 번 정리한다: 저장해 둔 지식을 비우고, 올리기·확인에서 기다리던 사람은 확인으로 보낸다."""
+    job = st.session_state.get("reading")
+    if not job or not job["done"]:
+        return
+    st.session_state.pop("reading")
+    forget(db.Tenant(job["tid"]))
+    st.session_state.pop("_space_seen", None)  # 새 종이를 읽으면 워크스페이스 설정을 다시 본다
+    fresh_queue()
+    if job["error"] is not None:
+        st.session_state._read_error = job["error"]
+        st.toast(f"'{job['name']}'을(를) 읽지 못했어요. 올리기에서 까닭을 볼 수 있어요.")
+    elif st.session_state.get("page") in ("올리기", "확인"):
+        st.session_state.page = "확인"
+    else:
+        st.toast(f"'{job['name']}' 정리를 마쳤어요. 확인에서 볼 수 있어요.")
+
+
+STEP_TEXT = {"읽기": "사진을 읽고 있어요", "구조": "기록 종류와 칸을 정하고 있어요", "반영": "대상과 관계를 반영하고 있어요"}
+
+
+@st.fragment(run_every=1.0)
+def reading_panel(full=True):
+    """뒤에서 읽는 종이의 진행. full 이면 단계·읽은 줄 수·읽은 표까지, 아니면 한 줄. 끝나면 앱 전체를 다시 그린다."""
+    job = st.session_state.get("reading")
+    if not job:
+        return
+    if job["done"]:
+        st.rerun(scope="app")
+    secs = int(time.time() - job["started"])
+    step = job["step"]
+    if step == "읽기" and job.get("rows"):
+        now = f"{STEP_TEXT[step]} · {job['rows']}줄 읽음"
+    elif step in ("구조", "반영") and job.get("cols"):
+        now = f"읽은 기록 {job['rows']}줄 · 칸 {job['cols']}개 · {STEP_TEXT[step]}"
+    else:
+        now = STEP_TEXT.get(step, STEP_TEXT["읽기"])
+    if not full:
+        st.caption(f"'{job['name']}' 정리 중 · {now} · {secs}초")
+        return
+    with st.container(border=True, key="reading_box"):
+        st.markdown(f"**'{html.escape(job['name'])}'을(를) 정리하고 있어요**")
+        names = list(STEP_TEXT)
+        st.html('<div class="ps-read-steps">' + "".join(
+            f'<span class="{"on" if n == step else "done" if names.index(n) < names.index(step) else ""}">{i}. {n}</span>'
+            for i, n in enumerate(names, 1)) + "</div>")
+        st.caption(f"{now} · {secs}초")
+        if job.get("table"):
+            st.caption("AI가 읽고 있는 그대로예요. 줄이 들어오는 대로 보여요." if step == "읽기" else
+                       "AI가 읽은 그대로예요. 기록 종류와 칸이 정해지면 확인에서 고칠 수 있어요.")
+            st.dataframe(pd.DataFrame(job["table"]), hide_index=True, height=min(36 * (len(job["table"]) + 1) + 2, 320))
+        st.caption("다른 화면으로 가도 계속 정리해요. 끝나면 알려 드려요.")
+
+
+READ_CSS = """<style>
+.ps-read-steps {display: flex; gap: 18px; font-size: 13px; color: #A1A1AA; margin: 2px 0;}
+.ps-read-steps span.done {color: #0F766E;} .ps-read-steps span.on {color: #111827; font-weight: 600;}
+</style>"""
+
+
 def read_file(t, key="up"):
+    if err := st.session_state.pop("_read_error", None):
+        fail("읽지 못했어요", err)
+    if reading():
+        st.html(READ_CSS)
+        reading_panel()
+        return
     f = st.file_uploader("사진이나 파일을 여기로 끌어 놓으세요", key=f"{key}file")  # 형식은 가리지 않고 받고, 읽을 때 고른다
     if f and f.name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
         st.image(f, caption=f.name, alt="올린 사진")
@@ -1774,17 +1883,13 @@ def read_file(t, key="up"):
         if not f:
             st.error("사진이나 파일을 먼저 넣어 주세요.")
             return
-        with st.spinner("읽고 정리하는 중이에요..."):
-            try:
-                t = t or new_account()  # 처음 올리는 사람은 이때 계정이 생긴다
-                engine.ingest(t, model, f.name, f.getvalue())
-            except ERRORS as e:
-                fail("읽지 못했어요", e)
-                return
-        forget(t)
-        st.session_state.pop("_space_seen", None)  # 새 종이를 읽으면 워크스페이스 설정을 다시 본다
-        fresh_queue()
-        st.session_state._goto = "확인"
+        try:
+            t = t or new_account()  # 처음 올리는 사람은 이때 계정이 생긴다
+        except ERRORS as e:
+            fail("읽지 못했어요", e)
+            return
+        name, content = f.name, f.getvalue()
+        start_reading(t, name, lambda w, say: engine.ingest(w, model, name, content, say))
         st.rerun()
 
 
@@ -2094,6 +2199,11 @@ def reopen_paper(t, sid):
 
 
 def check(t, K):
+    if t and reading(t.id):  # 정리하는 동안에는 카드가 바뀌고 있어 답하지 않는다. 끝나면 이 화면이 카드를 보인다
+        st.header("확인")
+        st.html(READ_CSS)
+        reading_panel()
+        return
     qs = queue(t) if t else []
     if not qs and not K["types"]:
         st.header("확인")
@@ -3836,6 +3946,7 @@ def match(row, key, cond):
 
 class Demo(db.Tenant):
     """활용 사례: 시험 계정을 이 브라우저 세션의 메모리로 복사해 실제 화면 그대로 누르고 바뀌는 것을 본다. DB에는 쓰지 않는다."""
+    in_memory = True  # engine 이 DB 에만 있는 것(워크스페이스 설명, 읽어 둔 표)을 쓰지 않게 한다
 
     def __init__(self, tid):
         super().__init__(tid)
@@ -4096,7 +4207,17 @@ def is_master(uid):
 
 
 def my_spaces(uid):
-    """내가 들어간 워크스페이스. 마지막에 연 것부터. 조직 번호와 이름을 함께. 관리자는 활용 사례를 뺀 모든 워크스페이스."""
+    """내가 들어간 워크스페이스. 마지막에 연 것부터. 조직 번호와 이름을 함께. 관리자는 활용 사례를 뺀 모든 워크스페이스.
+    사이드바가 클릭마다 부르므로 같은 접속에서 30초 동안 저장해 둔다(fresh_account 로 비운다)."""
+    got = st.session_state.get("_spaces")
+    if got and got["uid"] == uid and time.time() - got["at"] < 30:
+        return copy.deepcopy(got["rows"])
+    rows = find_spaces(uid)
+    st.session_state._spaces = {"uid": uid, "at": time.time(), "rows": rows}
+    return copy.deepcopy(rows)
+
+
+def find_spaces(uid):
     if is_master(uid):
         rows = db.get("tenants", select="id,title,org_id,orgs(name)", order="id.desc")
         return [{"id": r["id"], "role": "주인", "title": r.get("title"), "org_id": r.get("org_id"),
@@ -4131,8 +4252,34 @@ def org_role(oid, uid):
 
 
 def account(uid):
+    """주소의 워크스페이스 번호와 내 역할. 같은 접속에서 다시 그릴 때는 30초 동안 저장해 둔 답을 쓴다(클릭마다 DB 왕복 3번을 줄인다).
+    구성원·역할이 바뀌는 일을 하면 fresh_account 로 비운다. 다른 사람이 바꾼 것은 30초 안에 보인다."""
+    got = st.session_state.get("_acct")
+    if got and got["key"] == (uid, st.query_params.get("a", "")) and time.time() - got["at"] < 30:
+        return got["value"]
+    seen = {}
+    value = open_space(uid, seen)
+    st.session_state._acct = {"key": (uid, st.query_params.get("a", "")), "at": time.time(), "value": value, "members": seen.get("members")}
+    return value
+
+
+def space_members(tid):
+    """워크스페이스의 구성원. account 가 방금 읽었으면 그것을 쓴다."""
+    got = st.session_state.get("_acct") or {}
+    if got.get("value", (None,))[0] == tid and got.get("members") is not None:
+        return got["members"]
+    return db.get("memberships", select="user_id,role", tenant_id=f"eq.{tid}")
+
+
+def fresh_account():
+    """워크스페이스·구성원·역할이 바뀌면 저장해 둔 내 워크스페이스 목록과 역할을 비운다."""
+    st.session_state.pop("_acct", None)
+    st.session_state.pop("_spaces", None)
+
+
+def open_space(uid, seen):
     """주소의 워크스페이스 번호와 내 역할. 구성원이 있는 워크스페이스는 구성원과 조직 주인에게만 연다
-    (역할 None 은 주인이 없는 워크스페이스). 주소에 번호가 없으면 마지막에 연 내 워크스페이스."""
+    (역할 None 은 주인이 없는 워크스페이스). 주소에 번호가 없으면 마지막에 연 내 워크스페이스. seen 에 읽은 구성원을 남긴다."""
     a = st.query_params.get("a", "")
     if not a.isdigit():
         if uid and (mine := my_spaces(uid)):
@@ -4147,6 +4294,7 @@ def account(uid):
     if is_master(uid):
         return int(a), "주인"
     members = db.get("memberships", select="user_id,role", tenant_id=f"eq.{a}")
+    seen["members"] = members
     mine = next((m for m in members if m["user_id"] == uid), None)
     if members and not mine:
         if org_role(row[0]["org_id"], uid) == "주인":  # 조직 주인은 조직의 모든 워크스페이스에서 주인
@@ -4162,6 +4310,7 @@ def account(uid):
 
 def new_account(org_id=None):
     """워크스페이스를 만든다. 조직을 주지 않으면 새 조직도 만든다(처음 [읽기 시작])."""
+    fresh_account()
     uid = me()
     if not org_id:
         org_id = db.post("orgs", {"name": None})[0]["id"]
@@ -4183,12 +4332,14 @@ def new_space(org_id=None):
 
 
 def switch_space(sid):
+    fresh_account()
     st.query_params["a"] = str(sid)
     st.session_state.page = "홈"
 
 
 def claim(tid, uid, yes):
     """주인이 없는 워크스페이스의 주인이 될지 답한다. 조직이 없으면 조직도 만든다."""
+    fresh_account()
     if yes:
         oid = (db.get("tenants", select="org_id", id=f"eq.{tid}") or [{}])[0].get("org_id")
         if not oid:
@@ -4209,6 +4360,7 @@ def answerable(q):
 
 def join(inv, uid):
     """초대 링크의 [참여하기]: 조직 구성원이 되고, 링크의 워크스페이스에 그 역할로 들어간다."""
+    fresh_account()
     if name := st.session_state.get("join_name", "").strip():
         db.call("PATCH", "users", {"id": f"eq.{uid}"}, {"name": name})
         person_name.clear()
@@ -4253,6 +4405,7 @@ def save_my_name(uid):
 
 def set_role(tid, member):
     """조직 주인이 워크스페이스마다 구성원의 역할을 정한다. '없음'이면 그 워크스페이스에서 뺀다."""
+    fresh_account()
     role_ = st.session_state[f"role_{tid}_{member}"]
     if role_ == "없음":
         db.call("DELETE", "memberships", {"tenant_id": f"eq.{tid}", "user_id": f"eq.{member}"})
@@ -4263,6 +4416,7 @@ def set_role(tid, member):
 
 def kick(oid, member):
     """조직에서 내보내면 조직의 모든 워크스페이스에서도 빠진다."""
+    fresh_account()
     for w in db.get("tenants", select="id", org_id=f"eq.{oid}"):
         db.call("DELETE", "memberships", {"tenant_id": f"eq.{w['id']}", "user_id": f"eq.{member}"})
     db.call("DELETE", "org_members", {"org_id": f"eq.{oid}", "user_id": f"eq.{member}"})
@@ -4271,6 +4425,7 @@ def kick(oid, member):
 
 def hand_over(oid, uid):
     """조직 주인을 넘긴다. 받는 사람은 모든 워크스페이스의 주인이 되고, 나는 확인하는 사람이 된다."""
+    fresh_account()
     to = st.session_state.get("owner_to")
     if not to:
         return
@@ -4290,6 +4445,7 @@ def make_invite(uid):
 
 
 def drop_space(tid):
+    fresh_account()
     db.call("DELETE", "tenants", {"id": f"eq.{tid}"})
     del st.query_params["a"]
     st.session_state.page = "홈"
@@ -4649,14 +4805,18 @@ uid = None if demo else me()
 if uid and st.query_params.get("invite"):
     invite_page(st.query_params["invite"], uid)  # 초대 링크로 온 사람
 tid, role = (demo, None) if demo else account(uid)
-tenant = Demo(tid) if demo else db.Tenant(tid, uid, role) if tid else None
-if tenant and not demo and role in (None, *db.ANSWER) and st.session_state.get("_space_seen") != tid:
+tenant = Demo(tid) if demo else Screen(tid, uid, role) if tid else None
+finish_reading()  # 뒤에서 읽던 종이가 끝났으면 저장해 둔 지식을 비우고 확인으로
+if tenant and not demo and role in (None, *db.ANSWER) and st.session_state.get("_space_seen") != tid and not reading(tid):
     # 워크스페이스 설정 카드는 이 접속에서 워크스페이스마다 한 번, 그리고 종이를 새로 읽은 뒤에만 살핀다(화면마다 DB 3번을 줄인다)
     if tenant.get("source_inputs", select="id", limit=1):
-        engine.suggest_space(tenant, llm.DEFAULT)
+        engine.suggest_space(tenant)
         engine.auto_settle(tenant)
+        forget(tenant)  # 반영한 것이 이번 화면에 바로 보이게
     st.session_state._space_seen = tid
 K = know(tenant)
+if tenant and not demo:
+    tenant.waiting = waiting_cards(tid, db.WRITES.get(tid, 0))
 waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
 if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
     st.session_state.page = "홈" if K["types"] else "올리기"
@@ -4750,7 +4910,7 @@ if st.query_params.get("invite") and not uid and not demo:
 if not st.session_state.get("entered") and not st.query_params.get("invite"):
     landing()  # 새로 열면 늘 랜딩부터. 초대 링크로 온 사람만 바로 들어간다
 if uid and tid and not demo and tid not in DUMMY and not is_master(uid) and tid not in st.session_state.get("_claim_no", set()) \
-        and not db.get("memberships", select="user_id", tenant_id=f"eq.{tid}"):
+        and not space_members(tid):
     # 로그인 전에 이 브라우저에서 만든 워크스페이스: 내 계정으로 옮길지 묻는다
     with st.container(border=True):
         st.markdown("**이 워크스페이스의 owner가 될까요?**")
@@ -4778,6 +4938,8 @@ if st.session_state.page == "요금제" and not is_master(uid):  # 요금제 초
 if st.session_state.page == "관리" and not is_admin():  # 버튼만 숨기지 않고, 관리자가 아니면 관리 화면을 돌리지 않는다
     st.session_state.page = "홈"
 page = st.session_state.page
+if reading() and page not in ("올리기", "확인"):  # 다른 화면에서도 정리가 어디까지 왔는지 한 줄로
+    reading_panel(full=False)
 if page == "홈" and K["types"]:
     st.session_state.saw_home = True  # 띠를 그리기 전에: 홈에 오면 ③ 내 기록은 끝
 if first_run() is not None:

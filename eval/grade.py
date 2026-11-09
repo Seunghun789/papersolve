@@ -62,8 +62,8 @@ def run(s, model):
     sheets, took = {}, {}
     real = llm.extract
 
-    def keep(t, model_, name, photo):  # 실제 읽기를 그대로 쓰고, 채점하려고 읽은 값만 옆에 둔다
-        sheets[name] = real(t, model_, name, photo)
+    def keep(t, model_, name, photo, *rest):  # 실제 읽기를 그대로 쓰고, 채점하려고 읽은 값만 옆에 둔다
+        sheets[name] = real(t, model_, name, photo, *rest)
         return json.loads(json.dumps(sheets[name]))
 
     llm.extract = keep

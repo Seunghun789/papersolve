@@ -94,6 +94,13 @@ class NotAllowed(PermissionError):
     pass
 
 
+WRITES = {}  # 워크스페이스마다 이 서버에서 쓴 횟수. 화면이 잠깐 저장해 둔 값(app.waiting_cards)을 쓴 뒤에는 새로 읽게 한다
+
+
+def wrote(tid):
+    WRITES[tid] = WRITES.get(tid, 0) + 1
+
+
 class Tenant:
     """한 워크스페이스의 표만 읽고 쓴다. 모든 줄에 tenant_id 를 붙인다.
     user·role: 지금 쓰는 사람과 그 역할. role 이 없으면(주인이 없는 워크스페이스) 막지 않는다."""
@@ -101,6 +108,7 @@ class Tenant:
     def __init__(self, tid, user=None, role=None):
         self.id, self.user, self.role = tid, user, role
         self.waiting = None  # 이번 화면에서 읽은 '대기' 제안(engine.pending). 이 워크스페이스에 쓰면 비워 다시 읽는다
+        self.kept = {}  # engine.load 가 읽어 둔 표. 이 Tenant 로 그 표에 쓰면 지워 다음 load 가 그 표만 다시 읽는다
 
     def allow(self, table, body=None, params=None):
         if self.role in (None, *ANSWER):
@@ -122,21 +130,27 @@ class Tenant:
         for r in rows:
             self.allow(table, r)
         self.waiting = None
+        self.kept.pop(table, None)
         mark = {"created_by": self.user} if self.user and table in ("proposals", "source_inputs") else {}
         out = post(table, [{**mark, **r, "tenant_id": self.id} for r in rows], **params)
+        wrote(self.id)  # 쓴 뒤에 센다. 먼저 세면 쓰기 전의 표를 새 값인 줄 알고 저장해 둘 수 있다
         return out if isinstance(body, list) else out[0]
 
     def patch(self, table, body, **params):
         self.allow(table, body, params)
         self.waiting = None
+        self.kept.pop(table, None)
         if table == "proposals" and "status" in body and self.user:
             body = {**body, "decided_by": self.user}
         call("PATCH", table, {"tenant_id": f"eq.{self.id}", **params}, body)
+        wrote(self.id)
 
     def delete(self, table, **params):
         self.allow(table)
         self.waiting = None
+        self.kept.pop(table, None)
         call("DELETE", table, {"tenant_id": f"eq.{self.id}", **params})
+        wrote(self.id)
 
     def drop_file(self, path):
         """올린 원본을 Storage 에서 지운다. True 면 서버에 둔 사본도 지운다(활용 사례는 False)."""

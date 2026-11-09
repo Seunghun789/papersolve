@@ -40,13 +40,39 @@ def log(t, model, prompt, answer, usage_in, usage_out, started=None):
         pass
 
 
-def ask_json(t, model, content, schema, log_prompt, system=None, history=()):
-    """스키마대로 JSON 을 받는다. 화면에 글로 보여 주지 않고 서비스가 쓴다. history 는 앞선 대화."""
+def thinking(model, effort):
+    """생각 설정. effort 가 None 이면 모델 기본, 'off' 면 생각 없이 바로 답하고, 'low'·'medium' 이면 생각 깊이를 그만큼 낮춘다.
+    생각 토큰도 출력이라 기다리는 시간과 값에 든다. 적힌 것을 옮겨 적거나 짧게 고르는 호출은 생각이 답을 낫게 하지 않는다.
+    끄는 방법은 모델마다 다르다: Sonnet 5.5 는 'between_tools'(도구가 없으면 생각하지 않음), Haiku 5.5 는 'disabled',
+    Opus 5.5 는 끌 수 없어 깊이를 가장 낮춘다."""
+    if effort is None:
+        return {}, {}
+    if effort != "off":
+        return {}, {"effort": effort}
+    if model.startswith("claude-sonnet"):
+        return {"thinking": {"type": "between_tools"}}, {}
+    if model.startswith("claude-haiku"):
+        return {"thinking": {"type": "disabled"}}, {}
+    return {}, {"effort": "low"}
+
+
+def ask_json(t, model, content, schema, log_prompt, system=None, history=(), effort=None, on_text=None):
+    """스키마대로 JSON 을 받는다. 화면에 글로 보여 주지 않고 서비스가 쓴다. history 는 앞선 대화.
+    effort: 생각 깊이(thinking 참고). on_text: 답이 흘러 들어오는 대로 받은 글 조각을 넘길 함수(읽는 중 진행 표시)."""
     started = time.monotonic()
-    reply = client().messages.create(
-        model=model, max_tokens=16000, messages=[*history, {"role": "user", "content": content}],
-        output_config={"format": {"type": "json_schema", "schema": schema}}, **({"system": system} if system else {}),
-    )
+    think, config = thinking(model, effort)
+    # 표가 큰 종이는 답이 길어 16000 토큰을 넘는다. 긴 답은 스트리밍으로만 받을 수 있다
+    with client().messages.stream(
+        model=model, max_tokens=64000, messages=[*history, {"role": "user", "content": content}],
+        output_config={"format": {"type": "json_schema", "schema": schema}, **config}, **think,
+        **({"system": system} if system else {}),
+    ) as stream:
+        if on_text:
+            for text in stream.text_stream:
+                on_text(text)
+        reply = stream.get_final_message()
+    if reply.stop_reason == "max_tokens":
+        raise RuntimeError("AI 답이 길어 끝까지 받지 못했어요. 사진이면 표를 두세 부분으로 나눠 찍어 한 장씩 올려 주세요.")
     if reply.stop_reason != "end_turn":
         raise RuntimeError(f"답을 마치지 못했어요({reply.stop_reason}).")
     answer = next(b.text for b in reply.content if b.type == "text")
@@ -54,7 +80,8 @@ def ask_json(t, model, content, schema, log_prompt, system=None, history=()):
     return json.loads(answer)
 
 
-S, B = {"type": "string"}, {"type": "boolean"}
+S, B, I = {"type": "string"}, {"type": "boolean"}, {"type": "integer"}
+SMALL = "claude-haiku-5-5"  # 짧게 고르는 호출(워크스페이스 이름 짓기, 범위 숫자 옮기기, 같은 대상 찾기)은 고른 모델과 상관없이 이 모델로 빨리
 
 
 def obj(**props):
@@ -69,7 +96,6 @@ def array(s):
     return {"type": "array", "items": s}
 
 
-CELL = obj(label=S, value=S, normal=S, uncertain=B, candidates=array(S), page={"type": "integer"}, box=array({"type": "integer"}))
 KINDS = ["숫자", "날짜", "글", "고르는 값"]
 COND = obj(prop=S, op={"type": "string", "enum": OPS}, value=nullable(S), value_prop=nullable(S))
 LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}, "reason": S})
@@ -77,25 +103,70 @@ LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}
 
 # ---- A 수집: 사진 읽기 ----
 
-EXTRACT = obj(title=S, occurred_at=nullable(S), doc_fields=array(CELL), rows=array(obj(cells=array(CELL))))
+# 답은 짧게 받는다: 표의 열 이름과 열의 가로 범위는 한 번만, 줄마다 값만 열 순서대로. 뜻(normal)과 헷갈림(unsure)은 그런 칸만 notes 에.
+# 칸마다 이름·뜻·상자를 되풀이하면 출력 토큰이 다섯 배쯤 늘어 그만큼 늦게 읽는다. spread 가 칸마다 하나씩 편 모양으로 바꾼다.
+NOTE = obj(label=S, normal=nullable(S), unsure=B, candidates=array(S))
+EXTRACT = obj(title=S, occurred_at=nullable(S),
+              doc_fields=array(obj(label=S, value=S, normal=nullable(S), unsure=B, candidates=array(S), page=I, box=array(I))),
+              columns=array(obj(label=S, x=array(I))),
+              rows=array(obj(page=I, y=array(I), values=array(nullable(S)), notes=array(NOTE))))
 EXTRACT_PROMPT = (
     "손으로 적은 기록 사진입니다(표, 점검표, 메모 등 무엇이든). 적힌 내용을 빠짐없이 읽어 주세요.\n"
     "- title: 무슨 기록인지 짧은 이름. 종이에 제목이 있으면 그대로.\n"
     "- occurred_at: 기록의 날짜(YYYY-MM-DD). 없으면 null.\n"
-    "- doc_fields: 종이 전체에 한 번만 적힌 칸(작성자, 검사자, 담당자 등). 날짜는 넣지 마세요.\n"
-    "- rows: 표라면 행마다 하나, 메모처럼 표가 아니면 하나. cells 에는 그 행의 칸 이름(label)과 값(value).\n"
-    "  행이 무엇에 대한 것인지 가리키는 칸(품목, 설비, 제품, 고객 등)도 cells 에 넣으세요.\n"
+    "- 표: columns 에 열마다 이름(label)과 그 열의 가로 범위 x [왼쪽, 오른쪽]을 한 번만 적고, rows 에 표의 줄마다 하나씩 "
+    "그 줄의 세로 범위 y [위, 아래], 쪽 번호 page(1부터, 사진 한 장이면 1), 그 줄의 값 values(columns 와 같은 순서와 개수)를 적으세요. "
+    "행이 무엇에 대한 것인지 가리키는 열(품목, 설비, 제품, 고객 등)도 columns 에 넣으세요.\n"
+    "- doc_fields: 종이 전체에 한 번만 적힌 칸(작성자, 검사자, 담당자 등). 칸마다 이름 label, 값 value, 쪽 page, "
+    "그 값을 감싸는 상자 box [x0, y0, x1, y1]. "
+    "표가 아닌 종이(메모 등)는 columns 와 rows 를 비우고, 적힌 칸을 모두(날짜 칸도) doc_fields 에 넣으세요.\n"
+    "- 표가 있는 종이에서 종이 전체에 한 번 적힌 날짜(작성일·점검일·판정일 등)는 doc_fields 에 넣지 말고 occurred_at 에만 적으세요.\n"
     "- label 은 종이에 인쇄되거나 적힌 칸 이름 그대로. 표에서는 열 이름을 쓰고 행 이름을 붙이지 마세요.\n"
-    "- value 는 적힌 그대로. 숫자는 단위 없이 숫자만. 인쇄된 값(기준, 최소 재고 등)도 칸이면 넣으세요.\n"
-    "- normal: 그 값을 읽은 뜻. 날짜면 YYYY-MM-DD(시각도 적혀 있으면 YYYY-MM-DD HH:MM, 해가 안 적혔으면 occurred_at 의 해), "
-    "'2026년 12월 14일'·'12/14(월) 오후 3시'·'26.12.14'처럼 어떻게 적혀 있어도. 숫자면 쉼표·단위 없는 숫자(예: '1억 3,950만원' → 139500000). "
-    "날짜도 숫자도 아니면 빈 글. 적힌 것만 바꿔 쓰고 계산하거나 지어내지 마세요.\n"
-    "- 값이 없다는 표시(-, 빈칸, 칸을 가로지르는 사선·X, 줄을 그어 지운 칸)는 넣지 마세요. 빈 칸에 이웃 칸의 값을 옮겨 적지 마세요. 글씨가 흐리거나 헷갈리면 uncertain 을 true. 없는 값을 지어내지 마세요.\n"
-    "- candidates: uncertain 이 true 일 때만, 그 글씨가 달리 읽힐 수 있는 값 1~3개(value 와 다른 것, 그럴 법한 순서로). "
-    "또렷하면 빈 목록. 글씨 모양으로만 고르고 계산하거나 지어내지 마세요.\n"
-    "- page: 그 값이 적힌 쪽 번호(1부터). 사진 한 장이면 1.\n"
-    "- box: 그 값이 적힌 곳을 감싸는 상자 [x0, y0, x1, y1]. 그 쪽의 왼쪽 위가 0, 0, 오른쪽 아래가 1000, 1000 인 비율 좌표."
+    "- 값은 적힌 그대로. 숫자는 단위 글자(kg, ℃, 개 등) 없이 숫자만 적고, ±10%·이상·이하·~처럼 값의 뜻을 바꾸는 표시는 그대로 두세요. "
+    "인쇄된 값(기준, 최소 재고 등)도 칸이면 넣으세요. "
+    "값이 없다는 표시(-, 빈칸, 칸을 가로지르는 사선·X, 줄을 그어 지운 칸)는 values 에서 null, doc_fields 에서는 그 칸을 빼세요. "
+    "빈 칸에 이웃 칸의 값을 옮겨 적지 마세요. 없는 값을 지어내지 마세요.\n"
+    "- 표에서 세로로 합쳐진 칸(한 값이 여러 줄에 걸쳐 한 번만 적힌 칸, 예: 기종 'A2K'가 1~5번 줄에 걸쳐 있음)은 빈 칸이 아니에요. "
+    "걸친 줄마다 그 값을 적으세요. null 은 정말 비었거나 -·사선으로 비운 칸에만 써요.\n"
+    "- normal: 날짜가 YYYY-MM-DD 가 아닌 모양으로 적혔거나('2026년 12월 14일'·'12/14(월) 오후 3시'·'26.12.14') "
+    "숫자가 억·만·천으로 적혔을 때('1억 3,950만원')만 그 뜻을 적고, 그 밖에는 null. 날짜는 YYYY-MM-DD(시각도 적혀 있으면 YYYY-MM-DD HH:MM, "
+    "해가 안 적혔으면 occurred_at 의 해), 숫자는 쉼표·단위 없는 숫자(139500000). 적힌 것만 바꿔 쓰고 계산하거나 지어내지 마세요.\n"
+    "- unsure: 글씨가 흐리거나 헷갈리면 true, candidates 에 그 글씨가 달리 읽힐 수 있는 값 1~3개(value 와 다른 것, 그럴 법한 순서로). "
+    "또렷하면 false 와 빈 목록. 글씨 모양으로만 고르고 계산하거나 지어내지 마세요.\n"
+    "- 표의 칸에 normal 이나 unsure 가 있으면 그 줄의 notes 에 칸 이름(label)과 함께 적으세요. 둘 다 없는 칸은 notes 에 넣지 않아요.\n"
+    "- x, y, box 는 그 쪽의 왼쪽 위가 0, 0, 오른쪽 아래가 1000, 1000 인 비율 좌표."
 )
+
+
+def spread(sheet):
+    """짧게 받은 답을 칸마다 하나씩 편 모양으로 바꾼다: doc_fields 와 rows[].cells 의 칸은
+    {label, value, normal, uncertain, candidates, page, box}. 표의 칸 상자는 열의 가로 범위와 줄의 세로 범위로 만든다.
+    표가 아닌 종이는 doc_fields 를 기록 한 줄로 둔다(예전처럼 메모 한 장은 기록 하나)."""
+    def cell(label, value, note, page, box):
+        note = note or {}
+        return {"label": label, "value": value, "normal": note.get("normal") or "", "uncertain": bool(note.get("unsure")),
+                "candidates": note.get("candidates") or [], "page": page or 1, "box": box}
+
+    def span(v):
+        return v if isinstance(v, list) and len(v) == 2 else None
+
+    doc = [cell(f["label"], f["value"], f, f.get("page"), f.get("box")) for f in sheet.get("doc_fields") or [] if str(f.get("value") or "").strip()]
+    cols, rows = sheet.get("columns") or [], []
+    for r in sheet.get("rows") or []:
+        if len(r["values"]) != len(cols):  # 열과 값의 개수가 다르면 앞에서부터 맞춘다. 서버 로그에 남긴다
+            print(f"읽기: 열 {len(cols)}개, 값 {len(r['values'])}개인 줄", flush=True)
+        notes, y = {n["label"]: n for n in r.get("notes") or []}, span(r.get("y"))
+        cells = []
+        for c, v in zip(cols, r["values"]):
+            if v is not None and str(v).strip():
+                x = span(c.get("x"))
+                cells.append(cell(c["label"], v, notes.get(c["label"]), r.get("page"), [x[0], y[0], x[1], y[1]] if x and y else None))
+        if cells:
+            rows.append({"cells": cells})
+    if not cols:  # 표가 아닌 종이: 적힌 칸 모두가 기록 한 줄
+        rows, doc = ([{"cells": doc}] if doc else []), []
+    return {"title": sheet["title"], "occurred_at": sheet["occurred_at"], "doc_fields": doc, "rows": rows,
+            "columns": [c["label"] for c in cols]}  # 표의 열 이름(값이 모두 빈 열도). 앞쪽 줄만 읽었을 때도 모든 칸 이름을 안다
 
 
 RULER = 44  # 사진 둘레에 붙이는 눈금 자의 폭(px)
@@ -129,11 +200,61 @@ def as_image(photo):
 
 
 RULER_NOTE = ("\n- 사진 둘레의 흰 띠에 0~1000 눈금 자가 있어요. 숫자가 붙은 눈금은 100 단위, 짧은 눈금은 그 사이 50 자리예요. "
-              "box 는 흰 띠 안쪽 사진의 왼쪽 위를 0, 0 으로 해서 이 눈금을 보고 적어 주세요. 표라면 줄의 위아래 선이 눈금 어디에 닿는지 보고 적으세요.")
+              "x, y, box 는 흰 띠 안쪽 사진의 왼쪽 위를 0, 0 으로 해서 이 눈금을 보고 적어 주세요. "
+              "표라면 줄의 위아래 선과 열의 좌우 선이 눈금 어디에 닿는지 보고 적으세요.")
 
 
-def extract(t, model, name, photo):
-    """사진이나 PDF 1개를 읽는다. PDF 는 쪽마다 Claude 가 직접 읽는다."""
+class Rows:
+    """흘러 들어오는 읽기 답에서 끝난 줄까지만 잘라 JSON 으로 읽는다. 답의 키는 스키마 순서(…, columns, rows)로 오므로,
+    rows 의 줄 하나가 닫힐 때마다 그 자리까지의 글에 ']}' 를 붙이면 그때까지 읽은 표가 된다."""
+
+    def __init__(self):
+        self.text, self.i, self.depth, self.instr, self.esc = "", 0, 0, False, False
+        self.key_at, self.last_key, self.rows_depth, self.ends = None, None, None, []
+
+    def feed(self, chunk):
+        """글 조각을 더하고, 새로 끝난 줄이 있으면 True."""
+        self.text += chunk
+        before = len(self.ends)
+        while self.i < len(self.text):
+            ch = self.text[self.i]
+            if self.instr:
+                if self.esc:
+                    self.esc = False
+                elif ch == "\\":
+                    self.esc = True
+                elif ch == '"':
+                    self.instr = False
+                    if self.key_at is not None:
+                        self.last_key, self.key_at = self.text[self.key_at:self.i], None
+            elif ch == '"':
+                self.instr = True
+                self.key_at = self.i + 1 if self.depth == 1 else None  # 맨 바깥 객체의 키(또는 값) 글
+            elif ch in "[{":
+                self.depth += 1
+                if ch == "[" and self.depth == 2 and self.last_key == "rows":
+                    self.rows_depth = 2
+            elif ch in "]}":
+                if ch == "}" and self.rows_depth and self.depth == self.rows_depth + 1:
+                    self.ends.append(self.i + 1)
+                self.depth -= 1
+            self.i += 1
+        return len(self.ends) > before
+
+    def sheet(self):
+        """지금까지 끝난 줄까지의 읽은 표(spread 모양). 아직 줄이 없거나 읽을 수 없으면 None."""
+        if not self.ends:
+            return None
+        try:
+            return spread(json.loads(self.text[:self.ends[-1]] + "]}"))
+        except (ValueError, KeyError):
+            return None
+
+
+def extract(t, model, name, photo, on_rows=None):
+    """사진이나 PDF 1개를 읽는다. PDF 는 쪽마다 Claude 가 직접 읽는다. 생각 없이 바로 옮겨 적게 한다(thinking 참고).
+    on_rows: 표의 줄을 하나 다 받을 때마다 그때까지 읽은 표(spread 모양)를 넘길 함수. 읽는 중 진행 표시와,
+    앞쪽 줄로 구조 제안을 먼저 시작하는 데 쓴다(engine.ingest_photo)."""
     if name.lower().endswith(".pdf"):
         part = {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
                                                "data": base64.standard_b64encode(photo).decode()}}
@@ -141,16 +262,23 @@ def extract(t, model, name, photo):
         part = {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                             "data": base64.standard_b64encode(as_image(photo)).decode()}}
     content = [part, {"type": "text", "text": EXTRACT_PROMPT + ("" if part["type"] == "document" else RULER_NOTE)}]
-    return ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}")
+    rows = Rows()
+
+    def on_text(chunk):
+        if rows.feed(chunk) and (part_ := rows.sheet()):
+            on_rows(part_)
+
+    sheet = ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}", effort="off", on_text=on_text if on_rows else None)
+    return spread(sheet)
 
 
 # ---- B 스키마 추천 ----
 
 SCHEMA = obj(type_name=S, props=array(obj(label=S, name=S, kind={"type": "string", "enum": KINDS}, unit=nullable(S), is_entity=B,
-                                          ref_class=nullable(S), similar_to=nullable(S))), links=array(LINK))
+                                          ref_class=nullable(S), similar_to=nullable(S), split=nullable(obj(low=S, high=S)))), links=array(LINK))
 
 
-def propose_schema(t, model, title, columns, known, pending_types, space=""):
+def propose_schema(t, model, title, columns, known, pending_types, space="", effort=None):
     prompt = (
         "손으로 적은 기록을 표로 정리하려 합니다. 이 기록을 담을 '종류'와 '칸'을 제안해 주세요.\n"
         + (f"이 워크스페이스(사용자가 확정한 설명, 이름 짓기에만 참고): {space}\n" if space else "") +
@@ -168,15 +296,35 @@ def propose_schema(t, model, title, columns, known, pending_types, space=""):
         "(예: 품목, 거래처, 고객, 설비, 담당자). 이미 확정된 대상 분류가 있으면 그 이름을 쓰세요. 숫자·날짜·설명 글이면 null.\n"
         "- similar_to: type_name 이 이미 확정된 종류이고, 그 종류의 칸 중 이름만 다른 같은 칸이 있으면 그 칸 이름. "
         "확정된 칸에 적힌 값의 범위·예·단위와 읽은 값이 맞을 때만 같은 칸이에요. 아니면 null.\n"
+        "- split: 칸의 값이 모두 아래값과 위값이 있는 범위를 뜻하면(어떻게 적혔든: 26~32, 26-32, 26 이상 32 이하, 5,210 ±10%, 5,210(±521) 등) "
+        "두 숫자 칸으로 나눌 이름 {low, high}(예: {'low': '토크 최소', 'high': '토크 최대'}). 그 범위로 재는 칸이 있으면 links 에 "
+        "low→그 칸 '최소 기준', high→그 칸 '최대 기준'을 더하세요. 범위가 아니면 null.\n"
         "- links: 칸 사이 관계가 이름과 값으로 분명할 때만. from/to 는 name. kind 는 "
         "'최소 기준'(from 이 to 의 최소 기준, 예: 최소 재고 → 현재 재고), '최대 기준'(from 이 to 의 최대 기준), "
         "'연결'(같은 대상을 가리킴), '함께 움직임'.\n"
         "- 값을 지어내거나 계산하지 마세요."
     )
-    return ask_json(t, model, prompt, SCHEMA, prompt)
+    return ask_json(t, model, prompt, SCHEMA, prompt, effort=effort)
 
 
-def suggest_workspace(t, model, type_name, columns):
+N = {"type": "number"}
+RANGE_READ = obj(values=array(obj(written=S, low=nullable(N), high=nullable(N), base=nullable(N), pct=nullable(N), plus_minus=nullable(N))))
+
+
+def read_ranges(t, label, values):
+    """범위로 본 칸의 적힌 값마다 뜻을 받는다. 숫자를 옮겨 적기만 하고 계산과 검사는 코드가 한다(engine.range_of)."""
+    prompt = (
+        f"'{label}' 칸에 적힌 값들입니다. 모두 아래값과 위값이 있는 범위를 뜻해요.\n값: {values}\n"
+        "값마다 written 에 적힌 그대로, 그리고 아래 셋 중 하나만 채우고 나머지는 null:\n"
+        "- 아래값·위값이 적혀 있으면 low, high (예: '26~32' → low 26, high 32)\n"
+        "- 가운데 값과 비율 오차면 base, pct (예: '5,210 ±10%' → base 5210, pct 10)\n"
+        "- 가운데 값과 절대 오차면 base, plus_minus (예: '5,210(±521)' → base 5210, plus_minus 521)\n"
+        "적힌 숫자만 옮기고 계산하지 마세요. 범위로 읽을 수 없는 값은 모두 null."
+    )
+    return ask_json(t, SMALL, prompt, RANGE_READ, prompt, effort="off")["values"]
+
+
+def suggest_workspace(t, type_name, columns):
     """첫 종이로 워크스페이스 이름·업종·대표 제품·기록하는 것을 제안한다. 사용자가 고쳐 [맞아요]로 확정한다."""
     prompt = (
         "사용자가 처음 올린 손글씨 기록입니다. 이 기록을 쌓을 워크스페이스의 설명을 제안해 주세요.\n"
@@ -188,18 +336,18 @@ def suggest_workspace(t, model, type_name, columns):
         "- about: 이 워크스페이스에 무엇을 기록하는지 한 문장(예: '매일 설비 온도와 합격 여부를 점검해요').\n"
         "- 기록에 없는 것을 지어내지 마세요."
     )
-    return ask_json(t, model, prompt, obj(org=S, title=S, industry=S, product=S, about=S), prompt)
+    return ask_json(t, SMALL, prompt, obj(org=S, title=S, industry=S, product=S, about=S), prompt, effort="off")
 
 
 # ---- 대상 층: 같은 대상 찾기, 대상 칸·하위 분류 제안 ----
 
-def match_entities(t, model, C, values, known):
+def match_entities(t, C, values, known):
     prompt = (
         f"'{C}' 대상 목록(별칭 포함):\n{known}\n새로 읽은 값: {values}\n"
         "새 값이 목록의 대상과 같은 것을 다르게 적은 것(줄임말·번호 표기·오타 등)이면 same_as 에 목록의 이름을, "
         "아니면 null 을 쓰세요. 확실하지 않으면 null. reason 은 한 문장."
     )
-    return ask_json(t, model, prompt, obj(matches=array(obj(value=S, same_as=nullable(S), reason=S))), prompt)["matches"]
+    return ask_json(t, SMALL, prompt, obj(matches=array(obj(value=S, same_as=nullable(S), reason=S))), prompt, effort="low")["matches"]
 
 
 def propose_entities(t, model, types, classes, schema_text, entity_names):

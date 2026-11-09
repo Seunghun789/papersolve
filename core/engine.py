@@ -169,7 +169,9 @@ def infer_dtype(values):
 # ---- 지식 읽기 ----
 
 def load(t):
-    """확정된 지식(종류·분류·칸·별칭·관계·대상)과 확정된 기록. 표 8개는 서로 기다릴 필요가 없어 한꺼번에 읽는다."""
+    """확정된 지식(종류·분류·칸·별칭·관계·대상)과 확정된 기록. 표 8개는 서로 기다릴 필요가 없어 한꺼번에 읽는다.
+    같은 Tenant 로 다시 부르면 그 사이에 이 Tenant 로 쓴 표만 다시 읽는다(db.Tenant.kept). 자동 반영은 카드마다 지식을 다시 보는데,
+    매번 기록 전체를 읽으면 기록이 많을수록 느려진다. 활용 사례(app.Demo)는 메모리 표라 늘 그대로 읽는다."""
     reads = [("object_types", dict(select="name,kind,parent_name,trust", order="id")),
              ("alias_dict", dict(select="type_name,alias,prop_name")),
              ("link_types", dict(select="id,from_ref,to_ref,kind,reason,name,attr_defs", order="id")),
@@ -179,8 +181,11 @@ def load(t):
              ("entity_links", dict(select="id,link_id,from_entity,to_entity,attrs")),
              ("property_defs", dict(select="type_name,name,dtype,unit,description,is_entity,ref_class,position", order="position,id")),
              ("entity_aliases", dict(select="entity_id,alias"))]
-    objs, aliases, links, records, entities, elinks, props, ealiases = db.together(
-        [lambda table=table, params=params: t.get(table, **params) for table, params in reads])
+    kept = {} if getattr(t, "in_memory", False) else t.kept
+    todo = [(table, params) for table, params in reads if table not in kept]
+    for (table, _), rows in zip(todo, db.together([lambda table=table, params=params: t.get(table, **params) for table, params in todo])):
+        kept[table] = rows
+    objs, aliases, links, records, entities, elinks, props, ealiases = (copy.deepcopy(kept[table]) for table, _ in reads)
     K = {
         "types": [o["name"] for o in objs if o["kind"] == "기록"],
         "classes": {o["name"]: o["parent_name"] for o in objs if o["kind"] == "대상"},
@@ -412,11 +417,15 @@ def stats_text(K):
 
 # ---- 제안 ----
 
+def waiting_rows(t):
+    """기다리는 제안 전부. pending 이 종류로 거르는 바탕이고, 화면은 잠깐 저장해 두고 쓴다(app.waiting_cards)."""
+    return t.get("proposals", select="id,kind,payload,evidence,source_input_id,status,created_by", status="eq.대기", order="id")
+
+
 def pending(t, kinds):
     """기다리는 제안 중 kinds 종류. 한 화면에서 여러 번 불러도 DB 는 한 번만 읽고(t.waiting), 이 워크스페이스에 쓰면 다시 읽는다."""
     if getattr(t, "waiting", None) is None:
-        t.waiting = t.get("proposals", select="id,kind,payload,evidence,source_input_id,status,created_by",
-                          status="eq.대기", order="id")
+        t.waiting = waiting_rows(t)
     return [copy.deepcopy(q) for q in t.waiting if q["kind"] in kinds]
 
 
@@ -598,27 +607,42 @@ TABLES = (".csv", ".xlsx")  # 값을 파일 그대로 쓰는 표
 PAGES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".pdf")  # Claude 가 보고 읽는 사진·PDF
 
 
-def ingest(t, model, name, content):
-    """올린 파일 1개를 형식에 맞는 길로 읽고, 구조는 AI 판단대로 반영한다. 읽을 길이 없는 형식은 안내 문장으로 멈춘다."""
+def ingest(t, model, name, content, progress=None):
+    """올린 파일 1개를 형식에 맞는 길로 읽고, 구조는 AI 판단대로 반영한다. 읽을 길이 없는 형식은 안내 문장으로 멈춘다.
+    progress(step, **info): 지금 하는 일을 알리는 함수(화면의 진행 표시). step 은 '읽기'(rows: 받은 줄 수),
+    '구조'(rows·cols: 읽은 기록 줄 수와 칸 수, table: 읽은 기록), '반영'."""
+    say = progress or (lambda step, **info: None)
     ext = Path(name).suffix.lower()
     if ext in TABLES:
-        sid = ingest_table(t, model, name, content)
+        sid = ingest_table(t, model, name, content, say)
     elif ext in PAGES:
-        sid = ingest_photo(t, model, name, content)
+        sid = ingest_photo(t, model, name, content, say)
     else:
         raise ValueError("이 파일은 아직 읽지 못해요. 종이를 찍은 사진, PDF, 엑셀, CSV로 올려 주세요.")
+    say("반영")
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(1) as pool:  # 첫 종이의 워크스페이스 설정 제안(AI)을 자동 반영과 함께 돌려 다음 화면을 기다리지 않게 한다
-        space = pool.submit(suggest_space, t, llm.DEFAULT) if getattr(t, "role", None) in (None, *db.ANSWER) else None
+        space = pool.submit(suggest_space, copy_of(t)) if getattr(t, "role", None) in (None, *db.ANSWER) else None
         auto_settle(t, sid)
         try:
             made = space and space.result()
         except Exception as e:  # 제안을 못 받아도 읽기는 끝난다. 앱을 열 때 다시 살핀다
             print(f"워크스페이스 설정 제안 실패: {type(e).__name__}: {e}", flush=True)
             made = None
-    if made:
-        auto_settle(t)  # 함께 도는 동안 올라온 워크스페이스 설정 카드를 닫는다
+    if made:  # 함께 도는 동안 올라온 워크스페이스 설정 카드를 닫는다. 다른 카드는 위에서 다 반영했다
+        a = db.Tenant(t.id, getattr(t, "user", None))
+        for q in pending(a, ["워크스페이스 설정"]):
+            if not (q.get("evidence") or {}).get("user"):
+                try:
+                    answer_space(a, q, True)
+                except Exception as e:
+                    print(f"자동 반영 실패: 워크스페이스 설정 {q['id']}: {type(e).__name__}: {e}", flush=True)
     return sid
+
+
+def copy_of(t):
+    """같은 워크스페이스·사람·역할의 새 Tenant. 다른 스레드에서 쓸 때 이번 화면에서 읽어 둔 대기 제안(waiting)을 함께 쓰지 않게 한다."""
+    return db.Tenant(t.id, getattr(t, "user", None), getattr(t, "role", None))
 
 
 def risky(K, q, spans):
@@ -693,6 +717,12 @@ def auto_settle(t, sid=None):
                "같은 대상": lambda q: answer_same_entity(a, q, True), "대상 속성": lambda q: answer_entity_attr(a, q, True),
                "속성 값": lambda q: answer_attr_value(a, q, True), "상위 분류": lambda q: answer_hierarchy(a, q, True),
                "관계 속성": lambda q: answer_link_attr(a, q, True), "연결": link}
+    def flush():
+        sids, a.later = a.later or set(), None
+        for sp in sids:
+            settle(a, sp)
+        a.later = set()
+
     failed = set()
     for _ in range(8):  # 답이 새 카드를 만들기도 한다
         fresh.clear()
@@ -700,12 +730,24 @@ def auto_settle(t, sid=None):
                         and not q["payload"].get("reopened")), key=lambda q: AUTO.index(q["kind"]))
         if not cards:
             break
+        a.later = set()
+        if attrs := [q for q in cards if q["kind"] == "속성 값"]:  # 대상 정보 바꾸기는 대상마다 한 번에 쓴다
+            try:
+                answer_attr_values(a, attrs)
+            except Exception as e:
+                failed |= {q["id"] for q in attrs}
+                print(f"자동 반영 실패: 속성 값 {len(attrs)}개: {type(e).__name__}: {e}", flush=True)
+            cards = [q for q in cards if q["kind"] != "속성 값"]
         for q in cards:
+            if q["kind"] == "연결" and a.later:  # 연결은 확정된 기록으로 근거를 세서, 그 전에 모아 둔 확정 검사를 한다
+                flush()
             try:
                 answers[q["kind"]](q)
             except Exception as e:
                 failed.add(q["id"])
                 print(f"자동 반영 실패: {q['kind']} {q['id']}: {type(e).__name__}: {e}", flush=True)
+        flush()
+    a.later = None
     if unsure := pending(a, ["애매한 값"]):
         K = load(a)
         papers = {q["source_input_id"] for q in unsure}
@@ -718,19 +760,47 @@ def auto_settle(t, sid=None):
         a.patch("source_inputs", {"auto": True}, id=f"eq.{sid}")
 
 
-def ingest_photo(t, model, name, photo):
+EARLY_ROWS = 4  # 표의 앞쪽 몇 줄이 들어오면 구조 제안(AI)을 먼저 시작하나. 구조 제안은 칸마다 값 예 4개까지만 본다
+
+
+def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
     """사진 1장(또는 PDF 1개) → 행마다 기록 1개(대기) + 구조·애매한 값·대상 제안.
-    사진은 Claude 가 값을 읽는 동안 OCR 이 글줄 위치를 찾고, 읽은 값마다 OCR 글줄에 짝지어 정확한 상자를 쓴다(core/ocr.py)."""
+    Claude 가 값을 읽는 동안 OCR 이 글줄 위치를 찾고(core/ocr.py), 원본을 저장하고, 확정 지식을 미리 읽는다.
+    표의 앞쪽 줄이 들어오면 나머지 줄을 읽는 동안 구조 제안(AI)을 먼저 시작한다. 읽은 값마다 OCR 글줄에 짝지어 정확한 상자를 쓴다."""
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(1) as pool:
-        seen = pool.submit(ocr.lines, photo) if not name.lower().endswith(".pdf") else None
-        sheet = llm.extract(t, model, name, photo)
+    pool = ThreadPoolExecutor(4)
+    seen = pool.submit(ocr.lines, photo) if not name.lower().endswith(".pdf") else None
+    saved = pool.submit(save_source, copy_of(t), "사진", name, photo)
+    known = pool.submit(load, copy_of(t))
+    early = {}
+
+    def on_rows(part):
+        doc_ = {c["label"].strip(): c["value"].strip() for c in part["doc_fields"] if filled(c["value"])}
+        say("읽기", rows=len(part["rows"]), table=[{**doc_, **{c["label"].strip(): c["value"].strip() for c in r["cells"] if filled(c["value"])}}
+                                                   for r in part["rows"]])  # 들어온 줄을 화면이 바로 그린다
+        if "plan" not in early and part["columns"] and len(part["rows"]) >= EARLY_ROWS:
+            when_ = to_date(part.get("occurred_at"))  # 아래와 같이, 기록 날짜와 같은 날을 적은 종이 칸은 칸으로 두지 않는다
+            doc = {c["label"].strip(): c["value"].strip() for c in part["doc_fields"]
+                   if not (when_ and to_date(c["value"], when_.year) == when_)}
+            rows_ = [{**doc, **{c["label"].strip(): c["value"].strip() for c in r["cells"]}} for r in part["rows"]]
+            labels = list(dict.fromkeys([*doc, *(l.strip() for l in part["columns"])]))
+            early["plan"] = pool.submit(lambda: schema_plan(copy_of(t), model, known.result(), part["title"], rows_, labels))
+
+    try:
+        sheet = llm.extract(t, model, name, photo, on_rows)
+        sid, path = saved.result()
         try:
             found = seen.result() if seen else []
         except Exception as e:  # OCR 이 실패해도 읽기는 계속한다. 상자는 Claude 가 눈금을 보고 적은 것을 쓴다
             print(f"OCR 실패: {type(e).__name__}: {e}", flush=True)  # 서버 로그에 남긴다
             found = []
-    sid, path = save_source(t, "사진", name, photo)
+    except BaseException:  # 읽지 못한 종이는 남기지 않는다: 미리 저장한 원본을 지운다
+        try:
+            delete_source(t, saved.result()[0])
+        except Exception:
+            pass
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
     spans = {}  # 칸 이름 → 원본 어디에 적혔나. 확인 화면이 원본 위에 읽은 값을 겹쳐 보이고, 고른 카드의 자리를 짚는다
 
     for c in [*sheet["doc_fields"], *(c for row in sheet["rows"] for c in row["cells"])]:
@@ -740,6 +810,9 @@ def ingest_photo(t, model, name, photo):
         if not ok:
             c["uncertain"] = True
             c["candidates"] = [c["normal"].strip(), *(c.get("candidates") or [])]
+    when = to_date(sheet["occurred_at"])
+    if sheet.get("columns") and when:  # 표가 있는 종이에서 기록 날짜와 같은 날을 적은 종이 칸(점검일자 등)은 기록 날짜와 겹쳐 칸으로 두지 않는다
+        sheet["doc_fields"] = [c for c in sheet["doc_fields"] if to_date(c["value"], when.year) != when]
     if found:
         cells = [c for c in [*sheet["doc_fields"], *(c for row in sheet["rows"] for c in row["cells"])] if filled(c["written"])]
         for c, b in zip(cells, ocr.place_all([(c["written"], box(c.get("box")), c["label"].strip()) for c in cells], found)):
@@ -771,35 +844,100 @@ def ingest_photo(t, model, name, photo):
                 keep(c, len(rows))
             rows.append({**doc, **{c["label"].strip(): c["value"].strip() for c in cells}})
             unsure.append(doc_unsure + [c["label"].strip() for c in cells if c["uncertain"]])
-    t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
     if not rows:
+        delete_source(t, sid)
+        pool.shutdown(wait=False, cancel_futures=True)
         raise RuntimeError("올린 종이에서 읽은 칸이 없어요.")
-    stage(t, model, sid, sheet["title"], rows, unsure, [day] * len(rows), [path] * len(rows), paper=True, doc_unsure=doc_unsure)
+    t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
+    say("구조", rows=len(rows), cols=len({l for r in rows for l in r}), table=rows)
+
+    def ready(f):  # 미리 시작한 일이 실패했으면 stage 가 다시 한다
+        try:
+            return f.result()
+        except Exception as e:
+            print(f"미리 한 일 실패, 다시 함: {type(e).__name__}: {e}", flush=True)
+            return None
+    plan, K = (ready(early["plan"]) if "plan" in early else None), ready(known)
+    pool.shutdown(wait=False)
+    stage(t, model, sid, sheet["title"], rows, unsure, [day] * len(rows), [path] * len(rows), paper=True, doc_unsure=doc_unsure,
+          K=K, plan=plan)
     return sid
 
 
-def read_table(name, content):
-    """CSV·엑셀 원본을 표로. 값은 모두 글자 그대로. 엑셀은 첫 시트."""
-    read = pd.read_excel if name.lower().endswith(".xlsx") else pd.read_csv
-    return read(io.BytesIO(content), dtype=str).fillna("")
+def _framed(raw):
+    """머리말 줄(제목·안내 글) 아래에서 칸이 가장 많이 찬 첫 줄을 칸 이름으로 삼는다."""
+    raw = raw.fillna("").astype(str).apply(lambda c: c.str.strip())
+    used = list((raw != "").any(axis=0))
+    blocks, cur = [], []
+    for i, u in enumerate(used + [False]):  # 빈 열로 나뉜 옆 표(집계 칸 등)가 있으면 값이 가장 많은 표만
+        if u:
+            cur.append(i)
+        elif cur:
+            blocks.append(cur)
+            cur = []
+    if blocks:
+        raw = raw.iloc[:, max(blocks, key=lambda b: (raw.iloc[:, b] != "").values.sum())]
+    raw = raw.loc[(raw != "").any(axis=1)]
+    if raw.empty:
+        return raw
+    width = (raw != "").sum(axis=1)
+    at = next(i for i, w in enumerate(width) if w >= 0.8 * width.max())
+    names, seen = [], set()
+    for i, v in enumerate(raw.iloc[at]):
+        v = v or f"칸{i + 1}"
+        while v in seen:
+            v += "'"
+        seen.add(v)
+        names.append(v)
+    df = raw.iloc[at + 1:].copy()
+    df.columns = names
+    return df.reset_index(drop=True)
 
 
-def ingest_table(t, model, name, content):
-    """CSV·엑셀 1개 → 행마다 기록 1개. 값은 파일 그대로 쓰고, 구조만 제안받는다."""
-    df = read_table(name, content)
+def read_tables(name, content):
+    """CSV·엑셀 원본을 표 목록 [(이름, 표)]로. 값은 모두 글자 그대로. 엑셀은 값이 있는 모든 시트."""
+    if not name.lower().endswith(".xlsx"):
+        return [(Path(name).stem, pd.read_csv(io.BytesIO(content), dtype=str).fillna(""))]
+    out = []
+    for sheet, raw in pd.read_excel(io.BytesIO(content), sheet_name=None, header=None, dtype=str).items():
+        df = _framed(raw)
+        if len(df):
+            out.append((str(sheet), df))
+    return out
+
+
+def read_table(name, content, sheet=None):
+    """표 하나. sheet 를 주면 그 시트, 아니면 첫 표."""
+    tables = read_tables(name, content)
+    return next((df for n, df in tables if n == sheet), tables[0][1] if tables else pd.DataFrame())
+
+
+def ingest_table(t, model, name, content, say=lambda step, **info: None):
+    """CSV·엑셀 1개 → 행마다 기록 1개. 엑셀은 시트마다 따로 구조를 제안받는다. 값은 파일 그대로 쓴다."""
+    tables = read_tables(name, content)
+    if not tables:
+        raise RuntimeError("파일에서 값이 있는 표를 찾지 못했어요.")
     sid, _ = save_source(t, "파일", name, content)
-    spans = {c: [{"row": i + 1, "quote": f"{c}: {v}", "value": v} for i, v in enumerate(df[c]) if filled(v)][:5]
-             for c in df}  # 칸 이름 → 표의 몇 번째 줄에 있나. 확인 카드가 원본 표의 그 줄을 짚는다
-    t.patch("source_inputs", {"spans": {c: s for c, s in spans.items() if s}}, id=f"eq.{sid}")
-    photo_cols = [c for c in df if len(df) and df[c].str.lower().str.endswith((".jpg", ".jpeg", ".png")).all()]
-    dates = [c for c in df if c not in photo_cols and infer_dtype(df[c]) == "date"]
-    rows, days, photos = [], [], []
-    for _, r in df.iterrows():
-        rows.append({c: r[c].strip() for c in df if c not in photo_cols and filled(r[c])})
-        days.append(((to_date(r[dates[0]]) if dates else None) or date.today()).isoformat())
-        photo = r[photo_cols[0]] if photo_cols else ""
-        photos.append(photo if photo and (DATA / photo).exists() else None)
-    stage(t, model, sid, Path(name).stem, rows, [[] for _ in rows], days, photos)
+    many = len(tables) > 1
+    spans = {}
+    for sheet, df in tables:  # 칸 이름 → 표의 몇 번째 줄에 있나. 확인 카드가 원본 표의 그 줄을 짚는다
+        for c in df:
+            s = [{"row": i + 1, "quote": f"{c}: {v}", "value": v, **({"sheet": sheet} if many else {})}
+                 for i, v in enumerate(df[c]) if filled(v)][:5]
+            if s and c not in spans:
+                spans[c] = s
+    t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
+    for sheet, df in tables:
+        photo_cols = [c for c in df if len(df) and df[c].str.lower().str.endswith((".jpg", ".jpeg", ".png")).all()]
+        dates = [c for c in df if c not in photo_cols and infer_dtype(df[c]) == "date"]
+        rows, days, photos = [], [], []
+        for _, r in df.iterrows():
+            rows.append({c: r[c].strip() for c in df if c not in photo_cols and filled(r[c])})
+            days.append(((to_date(r[dates[0]]) if dates else None) or date.today()).isoformat())
+            photo = r[photo_cols[0]] if photo_cols else ""
+            photos.append(photo if photo and (DATA / photo).exists() else None)
+        say("구조", rows=len(rows), cols=len({l for r in rows for l in r}), table=rows)
+        stage(t, model, sid, sheet if many else Path(name).stem, rows, [[] for _ in rows], days, photos)
     return sid
 
 
@@ -807,9 +945,10 @@ def ingest_table(t, model, name, content):
 
 def sources(t):
     """올린 사진·파일마다 기다리는 카드 수, 반영된 기록 수, 기록 종류(반영 전이면 AI가 붙인 이름), 기록 날짜 범위. 최근 것부터."""
-    srcs = t.get("source_inputs", select="id,channel,name,storage_path,created_by,created_at", channel="neq.직접 입력",
-                 order="id.desc")
-    recs = t.get("records", select="source_input_id,type_name,occurred_at,status", source_input_id="not.is.null")
+    srcs, recs = db.together([  # 서로 기다릴 필요가 없어 한꺼번에 읽는다
+        lambda: t.get("source_inputs", select="id,channel,name,storage_path,created_by,created_at", channel="neq.직접 입력",
+                      order="id.desc"),
+        lambda: t.get("records", select="source_input_id,type_name,occurred_at,status", source_input_id="not.is.null")])
     wait = {}
     for q in pending(t, ENTRY):
         wait[q["source_input_id"]] = wait.get(q["source_input_id"], 0) + 1
@@ -853,9 +992,9 @@ def delete_source(t, sid):
         (DATA / src["storage_path"]).unlink(missing_ok=True)
 
 
-def reread(t, model, sid):
+def reread(t, model, sid, progress=None):
     """반영 전 종이를 저장된 원본으로 다시 읽는다(다른 모델로). 기다리던 카드와 기록을 거두고 새로 읽은 뒤 예전 종이를 지운다.
-    새로 읽기가 실패하면 예전 종이와 원본은 남는다."""
+    새로 읽기가 실패하면 예전 종이와 원본은 남는다. progress 는 ingest 와 같다."""
     src = (t.get("source_inputs", select="id,name,storage_path,created_by", id=f"eq.{sid}") or [None])[0]
     content = original(src["storage_path"]) if src else None
     if not content:
@@ -866,7 +1005,7 @@ def reread(t, model, sid):
         raise db.NotAllowed("확인하는 사람이 다시 읽어요.")
     t.delete("proposals", source_input_id=f"eq.{sid}", status="eq.대기")
     t.delete("records", source_input_id=f"eq.{sid}", status="eq.대기")
-    new = ingest(t, model, src["name"], content)
+    new = ingest(t, model, src["name"], content, progress)
     delete_source(t, sid)
     return new
 
@@ -887,25 +1026,133 @@ def thumbnail(path, width=192):
     return {"png": _png(img.convert("RGB")), "pages": pages, "found": True}
 
 
-def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_unsure=()):
+def numbers_in(v):
+    """적힌 글 속 숫자들. '5,210 ±10%' → {5210.0, 10.0}"""
+    return {float(x.replace(",", "")) for x in re.findall(r"\d[\d,]*(?:\.\d+)?", str(v))}
+
+
+def range_of(written, m):
+    """AI가 읽은 범위의 뜻 m 을 (아래값, 위값)으로 계산한다. 하네스: AI가 옮긴 숫자가 모두 적힌 글에 있어야 하고,
+    셋 중 한 가지 연산만 채워져야 하고, 아래값 ≤ 위값이어야 한다. 아니면 None."""
+    got = {k: m.get(k) for k in ("low", "high", "base", "pct", "plus_minus") if m.get(k) is not None}
+    if not got or not set(map(abs, map(float, got.values()))) <= numbers_in(written):
+        return None
+    if set(got) == {"low", "high"}:
+        lo, hi = got["low"], got["high"]
+    elif set(got) == {"base", "pct"}:
+        lo, hi = got["base"] * (1 - got["pct"] / 100), got["base"] * (1 + got["pct"] / 100)
+    elif set(got) == {"base", "plus_minus"}:
+        lo, hi = got["base"] - got["plus_minus"], got["base"] + got["plus_minus"]
+    else:
+        return None
+    return (lo, hi) if lo <= hi else None
+
+
+def _num(x):
+    x = round(x, 6)
+    return str(int(x)) if x == int(x) else str(x)
+
+
+def split_ranges(t, sid, rows, unsure, plan):
+    """AI가 범위라고 본 칸(split)을 아래값·위값 두 숫자 칸으로 나눈다. 적힌 값의 뜻은 AI가 읽고(llm.read_ranges),
+    계산과 검사는 range_of 가 한다. 하나라도 검사를 넘지 못하면 한 칸 그대로 둔다. 원본 위치(spans)는 두 칸에 같이 잇는다.
+    범위 칸이 여럿이면 AI에게 칸마다 동시에 묻는다."""
+    def names(p):
+        sp = p.get("split") or {}
+        return (sp.get("low") or "").strip(), (sp.get("high") or "").strip()
+
+    def values(l):
+        return list(dict.fromkeys(str(r[l]) for r in rows if filled(r.get(l))))
+
+    def read(l):
+        try:
+            return {m["written"]: range_of(m["written"], m) for m in llm.read_ranges(t, l, values(l))}
+        except Exception as e:
+            print(f"범위 읽기 실패, 한 칸 그대로 둠: {type(e).__name__}: {e}", flush=True)
+            return {}
+
+    asks = [p["label"].strip() for p in plan["props"] if all(names(p)) and len(set(names(p))) == 2 and values(p["label"].strip())]
+    read_of = dict(zip(asks, db.together([lambda l=l: read(l) for l in asks])))
+    props, spans = [], None
+    for p in plan["props"]:
+        l = p["label"].strip()
+        (lo_name, hi_name), vals, ranges = names(p), values(l), read_of.get(l, {})
+        if l not in read_of or not all(ranges.get(v) for v in vals):
+            props.append(p)
+            continue
+        for r, u in zip(rows, unsure):
+            if filled(r.get(l)):
+                lo, hi = ranges[str(r.pop(l))]
+                r[lo_name], r[hi_name] = _num(lo), _num(hi)
+            if l in u:
+                u[u.index(l):u.index(l) + 1] = [lo_name, hi_name]
+        props += [{**p, "label": n, "name": n, "kind": "숫자", "is_entity": False, "ref_class": None, "similar_to": None, "split": None}
+                  for n in (lo_name, hi_name)]
+        if sid:
+            spans = spans if spans is not None else ((t.get("source_inputs", select="spans", id=f"eq.{sid}") or [{}])[0].get("spans") or {})
+            for n in (lo_name, hi_name):
+                spans[n] = spans.get(l, [])
+    if spans is not None:
+        t.patch("source_inputs", {"spans": spans}, id=f"eq.{sid}")
+    return rows, unsure, {**plan, "props": props}
+
+
+def split_before(t, K, labels):
+    """모르는 칸이 모두 전에 같은 종류에서 아래값·위값 두 칸으로 나눈 범위 칸이면, 그때처럼 나누는 구조를 돌려준다.
+    나눈 두 칸은 원본 자리(spans)를 함께 잇고 있어서 지난 종이의 spans 로 찾는다. 위아래는 지난 기록의 값으로 정한다."""
+    for T in K["types"]:
+        unknown = [l for l in labels if (T, l) not in K["alias"]]
+        if not unknown or len(unknown) == len(labels):
+            continue
+        rec = t.get("records", select="source_input_id,data", type_name=f"eq.{T}", source_input_id="not.is.null",
+                    order="id.desc", limit=1)
+        if not rec:
+            continue
+        spans = (t.get("source_inputs", select="spans", id=f"eq.{rec[0]['source_input_id']}") or [{}])[0].get("spans") or {}
+        data, props = rec[0]["data"] or {}, []
+        for l in unknown:
+            pair = [n for n, v in spans.items() if n != l and v == spans.get(l) and (T, n) in K["alias"]]
+            if len(pair) != 2 or l not in spans:
+                break
+            a, b = (to_number(data.get(n)) for n in pair)
+            lo, hi = pair if a is None or b is None or a <= b else pair[::-1]
+            props.append({"label": l, "name": l, "kind": "숫자", "split": {"low": lo, "high": hi}})
+        else:
+            return {"type_name": T, "props": props, "links": []}
+    return None
+
+
+def schema_plan(t, model, K, title, rows, labels=None):
+    """읽은 칸으로 기록 종류와 칸 구조를 정한다(AI). (구조, 근거 표시)를 돌려준다.
+    이미 아는 칸만 적힌 같은 양식이면 새로 정할 구조가 없어 AI에게 묻지 않는다. 구조 제안이 실패하면 적힌 이름 그대로 두고
+    근거에 no_ai 를 붙인다(AI 판단 없이 올린 것이라 자동 반영하지 않고 사람이 답한다).
+    labels: 칸 이름. 표의 앞쪽 줄만 읽었을 때도 모든 열을 넘기려고 따로 받는다. 없으면 rows 에서 모은다."""
+    labels = labels or list(dict.fromkeys(l for r in rows for l in r))
+    known = [T for T in K["types"] if all((T, l) in K["alias"] for l in labels)]
+    if len(known) == 1:
+        return {"type_name": known[0], "props": [], "links": []}, {}
+    if not known and (again := split_before(t, K, labels)):
+        return again, {}
+    columns = "\n".join(f"- {l}: 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
+    try:
+        waiting = [q["payload"]["type"] for q in pending(t, ["종류"])]
+        return llm.propose_schema(t, model, title, columns, schema_text(K, values=True), waiting, space_text(t)), {}
+    except Exception as e:  # 구조 제안이 실패해도 이미 읽은 값은 지킨다
+        print(f"구조 제안 실패, 적힌 이름 그대로 올림: {type(e).__name__}: {e}", flush=True)
+        return {"type_name": known[0] if known else title, "props": [], "links": []}, {"no_ai": True}
+
+
+def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_unsure=(), K=None, plan=None):
     """읽은 행들을 대기 기록으로 넣고, 확정 지식과 다른 부분만 제안으로 올린다.
     paper: AI가 보고 읽은 사진·PDF. 이미 있는 종류의 종이는 맡기는 정도에 따라 '읽은 값' 카드로 한 번 묻거나(매번 묻기),
     또렷한 값은 바로 반영하고 확정한 기준을 넘은 값만 묻는다(애매한 것만 묻기).
-    doc_unsure: 종이 전체에 한 번 적힌 애매한 칸. 기록마다 묻지 않고 카드 한 장으로 묻는다."""
-    K = load(t)
-    labels = list(dict.fromkeys(l for r in rows for l in r))
-    columns = "\n".join(f"- {l}: 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
+    doc_unsure: 종이 전체에 한 번 적힌 애매한 칸. 기록마다 묻지 않고 카드 한 장으로 묻는다.
+    K: 미리 읽은 확정 지식. plan: 먼저 받아 둔 (구조, 근거 표시)(schema_plan). 없으면 여기서 읽고 정한다."""
+    K = K or load(t)
     waiting = {q["payload"]["type"]: q for q in pending(t, ["종류"])}
-    known = [T for T in K["types"] if all((T, l) in K["alias"] for l in labels)]
-    ai = {}  # 구조 카드의 근거에 붙인다. no_ai 면 AI 판단 없이 올린 것이라 자동 반영하지 않고 사람이 답한다
-    if len(known) == 1:  # 이미 아는 칸만 적힌 같은 양식: 새로 정할 구조가 없어 AI에게 묻지 않는다
-        plan = {"type_name": known[0], "props": [], "links": []}
-    else:
-        try:
-            plan = llm.propose_schema(t, model, title, columns, schema_text(K, values=True), list(waiting), space_text(t))
-        except Exception as e:  # 구조 제안이 실패해도 이미 읽은 값은 지킨다. 적힌 이름 그대로 카드로 올린다
-            print(f"구조 제안 실패, 적힌 이름 그대로 올림: {type(e).__name__}: {e}", flush=True)
-            plan, ai = {"type_name": known[0] if known else title, "props": [], "links": []}, {"no_ai": True}
+    plan, ai = plan or schema_plan(t, model, K, title, rows)
+    rows, unsure, plan = split_ranges(t, sid, rows, unsure, plan)
+    labels = list(dict.fromkeys(l for r in rows for l in r))
     kinds = {p["label"].strip(): p.get("kind") for p in plan["props"]}
     dtypes = {l: fit_dtype(kinds.get(l), [r.get(l) for r in rows]) or infer_dtype([r.get(l) for r in rows]) for l in labels}
     T = plan["type_name"].strip() or title
@@ -946,14 +1193,17 @@ def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_uns
 
     recs = t.post("records", [{"type_name": T, "occurred_at": d, "data": r, "uncertain": u, "photo_path": ph,
                                 "source_input_id": sid} for r, u, d, ph in zip(rows, unsure, days, photos)])
-    doc = set(doc_unsure)
+    doc, unclear = set(doc_unsure), []
     for i, rec in enumerate(recs):
         for label in rec["uncertain"]:
             if label in doc and i:
                 continue
             many = {"record_ids": [r["id"] for r in recs]} if label in doc and len(recs) > 1 else {}
-            propose(t, "애매한 값", {"record_id": rec["id"], "type": T, "label": label, "value": rec["data"].get(label), **many},
-                    None, sid)
+            unclear.append({"kind": "애매한 값", "payload": {"record_id": rec["id"], "type": T, "label": label,
+                                                         "value": rec["data"].get(label), **many},
+                            "evidence": None, "source_input_id": sid})
+    if unclear:  # 카드마다 따로 넣지 않고 한 번에 넣는다
+        t.post("proposals", unclear)
     if paper and (T in K["types"] or T in waiting):
         if T in K["types"] and K["trust"].get(T) == TRUST[1]:
             autos = t.get("automations", select="spec", status="eq.켜짐")
@@ -1002,7 +1252,7 @@ def entity_checks(t, model, K, T, recs, sid):
         known = "\n".join(f"- {e['name']}{' (별칭: ' + ', '.join(aliases_of(K, e['id'])) + ')' if aliases_of(K, e['id']) else ''}"
                           for e in members(K, C))
         jobs.append((C, unseen, same, ask, known))
-    answers = db.together([lambda j=j: llm.match_entities(t, model, j[0], j[3], j[4]) if j[3] else [] for j in jobs])
+    answers = db.together([lambda j=j: llm.match_entities(t, j[0], j[3], j[4]) if j[3] else [] for j in jobs])
     for (C, unseen, same, ask, _), matches in zip(jobs, answers):
         names = {e["name"] for e in members(K, C)}
         for m in matches:
@@ -1013,6 +1263,7 @@ def entity_checks(t, model, K, T, recs, sid):
         new = [v for v in unseen if v not in same]
         if new:
             propose(t, "대상", {"class": C, "values": new, "attrs": {}}, None, sid)
+    before, cards = None, {}  # 대상 정보가 바뀐 기록: 이미 올린 카드는 한 번만 읽고, 새 카드는 한 번에 올린다
     for (TT, label), pn in K["alias"].items():
         if TT != T or not pn or not pn.startswith("@") or "·" in pn:
             continue
@@ -1026,16 +1277,25 @@ def entity_checks(t, model, K, T, recs, sid):
             eid = find_entity(K, p["ref_class"], who)
             if not eid or not filled(new) or same_value(K["entities"][eid]["attrs"].get(attr), new):
                 continue
-            if any(P["entity_id"] == eid and P["attr"] == attr and same_value(P["new"], new) for P in asked(t, "속성 값")):
+            before = asked(t, "속성 값") if before is None else before
+            if any(P["entity_id"] == eid and P["attr"] == attr and same_value(P["new"], new) for P in before):
                 continue
             e = K["entities"][eid]
-            propose(t, "속성 값", {"entity_id": eid, "entity": e["name"], "class": e["class_name"], "attr": attr,
-                                  "old": e["attrs"].get(attr), "new": plain(new)}, {"record_id": r["id"]}, sid)
+            cards[(eid, attr)] = {"kind": "속성 값", "payload": {"entity_id": eid, "entity": e["name"], "class": e["class_name"],
+                                  "attr": attr, "old": e["attrs"].get(attr), "new": plain(new)},
+                                  "evidence": {"record_id": r["id"]}, "source_input_id": sid}  # 한 종이에서 같은 대상·정보는 나중 기록 값 하나
+    if cards:
+        t.post("proposals", list(cards.values()))
 
 
 def settle(t, sid):
     """그 입력의 기록 확인 질문이 다 끝났으면 기록을 확정한다. 종류가 거절된 기록은 거절."""
-    if not sid or pending_of(t, sid):
+    if not sid:
+        return
+    if getattr(t, "later", None) is not None:  # 자동 반영 중: 카드마다 확정 검사를 하지 않고 모아 두었다가 한 번씩 한다
+        t.later.add(sid)
+        return
+    if pending_of(t, sid):
         return
     types = {r["name"] for r in t.get("object_types", select="name", kind="eq.기록")}
     waiting = {r["type_name"] for r in t.get("records", select="type_name", source_input_id=f"eq.{sid}", status="eq.대기")}
@@ -1554,6 +1814,20 @@ def answer_attr_value(t, q, ok):
         if P["entity_id"] in K["entities"]:
             set_attr(t, K, P["entity_id"], P["attr"], P["new"])
     done(t, q, "승인" if ok else "거절")
+
+
+def answer_attr_values(t, qs):
+    """속성 값 카드 여럿을 승인한다. 같은 대상의 바뀐 정보는 나중 카드 값으로 합쳐 대상마다 한 번 쓰고, 카드는 동시에 닫는다."""
+    K = load(t)
+    merged = {}
+    for q in sorted(qs, key=lambda q: q["id"]):
+        P = q["payload"]
+        if P["entity_id"] in K["entities"]:
+            merged.setdefault(P["entity_id"], dict(K["entities"][P["entity_id"]]["attrs"]))[P["attr"]] = plain(P["new"])
+    db.together([lambda e=e, v=v: t.patch("entities", {"attrs": v}, id=f"eq.{e}") for e, v in merged.items()])
+    db.together([lambda q=q: close(t, q, "승인") for q in qs])
+    for sid in {q.get("source_input_id") for q in qs}:
+        settle(t, sid)
 
 
 def answer_hierarchy(t, q, ok):
@@ -2992,7 +3266,7 @@ def space_row(t):
 
 def space_text(t):
     """읽기·제안 때 AI에게 넘기는 조직·워크스페이스 설명. 비어 있으면 빈 글자."""
-    if type(t) is not db.Tenant:  # 활용 사례(Demo)는 DB에 설명이 없다
+    if getattr(t, "in_memory", False):  # 활용 사례(app.Demo)는 DB에 설명이 없다
         return ""
     r = space_row(t)
     o = r["org"]
@@ -3001,7 +3275,7 @@ def space_text(t):
     return ", ".join(parts)
 
 
-def suggest_space(t, model):
+def suggest_space(t):
     """첫 종이를 읽으면 워크스페이스 설정을 한 번 제안한다. 조직 이름이 이미 있으면 조직 칸은 묻지 않는다."""
     r = space_row(t)
     if asked(t, "워크스페이스 설정") or r.get("title"):
@@ -3015,7 +3289,7 @@ def suggest_space(t, model):
     else:
         return
     try:
-        s = llm.suggest_workspace(t, model, T, cols)
+        s = llm.suggest_workspace(t, T, cols)
     except Exception:  # 제안을 못 받아도 이름만은 묻는다
         s = {"title": T}
     fields = SPACE_FIELDS if not r["org"].get("name") else ["title", "about"]
