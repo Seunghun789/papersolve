@@ -3,6 +3,7 @@ Claude 는 읽기·이름 붙이기·제안·조회 도구 고르기만 한다. 
 import base64
 import io
 import json
+import time
 from datetime import date
 
 import anthropic
@@ -28,18 +29,20 @@ def client():
     return anthropic.Anthropic(api_key=KEY)
 
 
-def log(t, model, prompt, answer, usage_in, usage_out):
-    """AI 호출 1번을 ai_logs 에 남긴다. 남기지 못해도 하던 일은 계속한다."""
+def log(t, model, prompt, answer, usage_in, usage_out, started=None):
+    """AI 호출 1번을 ai_logs 에 남긴다. started(time.monotonic)를 주면 걸린 시간도 남긴다. 남기지 못해도 하던 일은 계속한다."""
     cost = (usage_in * PRICE[model][0] + usage_out * PRICE[model][1]) / 1_000_000
+    took = {"duration_ms": round((time.monotonic() - started) * 1000)} if started else {}
     try:
         db.post("ai_logs", {"tenant_id": t.id, "model": model, "prompt": prompt, "answer": answer,
-                            "input_tokens": usage_in, "output_tokens": usage_out, "cost_usd": round(cost, 6)})
+                            "input_tokens": usage_in, "output_tokens": usage_out, "cost_usd": round(cost, 6), **took})
     except requests.RequestException:
         pass
 
 
 def ask_json(t, model, content, schema, log_prompt, system=None, history=()):
     """스키마대로 JSON 을 받는다. 화면에 글로 보여 주지 않고 서비스가 쓴다. history 는 앞선 대화."""
+    started = time.monotonic()
     reply = client().messages.create(
         model=model, max_tokens=16000, messages=[*history, {"role": "user", "content": content}],
         output_config={"format": {"type": "json_schema", "schema": schema}}, **({"system": system} if system else {}),
@@ -47,7 +50,7 @@ def ask_json(t, model, content, schema, log_prompt, system=None, history=()):
     if reply.stop_reason != "end_turn":
         raise RuntimeError(f"답을 마치지 못했어요({reply.stop_reason}).")
     answer = next(b.text for b in reply.content if b.type == "text")
-    log(t, model, log_prompt, answer, reply.usage.input_tokens, reply.usage.output_tokens)
+    log(t, model, log_prompt, answer, reply.usage.input_tokens, reply.usage.output_tokens, started)
     return json.loads(answer)
 
 
@@ -163,7 +166,8 @@ def propose_schema(t, model, title, columns, known, pending_types, space=""):
         "- is_entity: 행이 가리키는 대상 칸(품목·설비·제품·고객 등)이면 true. 하나만.\n"
         "- ref_class: 칸의 값이 따로 관리할 대상(사람·물건·설비·장소·거래처 등)의 이름이면 그 대상 분류 이름"
         "(예: 품목, 거래처, 고객, 설비, 담당자). 이미 확정된 대상 분류가 있으면 그 이름을 쓰세요. 숫자·날짜·설명 글이면 null.\n"
-        "- similar_to: type_name 이 이미 확정된 종류이고, 그 종류의 칸 중 이름만 다른 같은 칸이 있으면 그 칸 이름. 아니면 null.\n"
+        "- similar_to: type_name 이 이미 확정된 종류이고, 그 종류의 칸 중 이름만 다른 같은 칸이 있으면 그 칸 이름. "
+        "확정된 칸에 적힌 값의 범위·예·단위와 읽은 값이 맞을 때만 같은 칸이에요. 아니면 null.\n"
         "- links: 칸 사이 관계가 이름과 값으로 분명할 때만. from/to 는 name. kind 는 "
         "'최소 기준'(from 이 to 의 최소 기준, 예: 최소 재고 → 현재 재고), '최대 기준'(from 이 to 의 최대 기준), "
         "'연결'(같은 대상을 가리킴), '함께 움직임'.\n"
@@ -378,9 +382,12 @@ def answer(t, model, question, run_tool, max_turns=6):
         "- 먼저 schema 로 어떤 기록 종류·대상 분류·칸이 있는지 보고, find_records·aggregate 로 찾아 그 결과로만 답하세요. "
         "켜 둔 자동화나 올린 지표를 묻는 질문이면 saved 를 쓰세요.\n"
         "- 건수·합계·평균 같은 숫자는 도구 결과만 쓰고 직접 계산하지 마세요.\n"
-        "- 찾은 기록이 없으면 '기록에 없어요'라고 답하세요. 모르는 것은 모른다고 쓰세요.\n"
+        "- 찾은 줄이 0건인데 결과에 '비슷한 값'이나 '값의 범위'가 있으면, 질문이 가리키는 것과 같은 값으로 한 번 더 찾으세요"
+        "(예: '압축기2' → '압축기 2'). 질문과 다른 대상이나 다른 숫자로 바꿔 찾지는 마세요. 바꿔 찾았으면 어떤 값으로 찾았는지 답에 쓰세요.\n"
+        "- 그래도 찾은 기록이 없으면 '기록에 없어요'라고 답하세요. 모르는 것은 모른다고 쓰세요.\n"
         f"- 한국어로 2~4문장. 근거가 된 기록의 날짜나 대상 이름을 함께 쓰세요. 오늘은 {date.today().isoformat()}입니다."
     )
+    started = time.monotonic()
     messages = [{"role": "user", "content": question}]
     used_in = used_out = 0
     evidence = []
@@ -410,7 +417,7 @@ def answer(t, model, question, run_tool, max_turns=6):
     elif reply.stop_reason == "refusal":
         text = "이 질문에는 답할 수 없어요."
     text = text or "기록에 없어요."
-    log(t, model, f"[묻기] {question}", text, used_in, used_out)
+    log(t, model, f"[묻기] {question}", text, used_in, used_out, started)
     return text, evidence
 
 

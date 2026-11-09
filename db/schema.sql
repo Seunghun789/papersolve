@@ -241,7 +241,8 @@ create table public.ai_logs (                -- AI 호출 1번 = 1줄
   answer text not null,
   input_tokens integer not null,
   output_tokens integer not null,
-  cost_usd numeric not null
+  cost_usd numeric not null,
+  duration_ms integer                         -- 호출 1번에 걸린 시간(밀리초). 묻기는 도구 루프 전체
 );
 
 alter table public.tenants enable row level security;

@@ -431,6 +431,14 @@ def link_sentence(P):
             "대체": f"'{a}'이(가) '{b}'을(를) 대신할 수 있나요?"}[P["kind"]]
 
 
+def stated(question):
+    """관계 질문을 확정한 관계의 문장으로: '영향을 주나요?' → '영향을 줘요.'"""
+    for ask, say in (("의존하나요?", "의존해요."), ("주나요?", "줘요."), ("있나요?", "있어요."), ("기준인가요?", "기준이에요."),
+                     ("가리키나요?", "가리켜요."), ("움직이나요?", "움직여요.")):
+        question = question.replace(ask, say)
+    return question
+
+
 @st.cache_data(max_entries=40, show_spinner=False)
 def drawn(path, page, solid=(), dashed=()):
     """원본 한 쪽 그림(page), 고른 곳을 크게 자른 그림(zoom, zoom_ratio), 쪽 수(pages). 같은 쪽·같은 상자는 다시 그리지 않는다."""
@@ -1045,6 +1053,8 @@ def card(t, K, q, label=True):
             space_card(t, q, ok)
         elif kind == "종류":
             st.write(f"**이 기록을 '{P['type']}'(으)로 정리할까요?**")
+            if ev.get("no_ai"):
+                st.caption("AI가 구조를 정하지 못해 종이에 적힌 이름 그대로 올렸어요.")
             unsure = {u["payload"]["label"] for u in engine.pending(t, ["애매한 값"])
                       if u["source_input_id"] == q["source_input_id"]}
             st.caption("이 종이에서 찾은 칸")
@@ -1068,7 +1078,8 @@ def card(t, K, q, label=True):
             buttons(q, ("아니요", (engine.answer_prop, t, q, False)), ("추가", (engine.answer_prop, t, q, True)))
         elif kind == "같은 칸":
             st.write(f"**이 종이의 '{P['label']}'{pp(P['label'], '은는')} 전에 모아 둔 '{P['similar_to']}'{pp(P['similar_to'], '과와')} 같은 것인가요?**")
-            st.caption(f"읽은 값 예: {samples(t, q)}. 지난 기록과 이름만 달라요.")
+            doubt = engine.same_doubt(K, q)  # AI는 같은 칸으로 봤지만 기록으로 보면 다를 수 있어 바로 반영하지 않은 까닭
+            st.caption(f"읽은 값 예: {samples(t, q)}. " + (f"AI는 같은 칸으로 봤지만 {doubt}." if doubt else "지난 기록과 이름만 달라요."))
             n = sum(P["label"] in r["data"] for r in t.get("records", select="data", source_input_id=f"eq.{q['source_input_id']}"))
             st.caption(f"같은 칸이면 이 종이의 기록 {n}줄의 '{P['label']}' 값이 '{P['similar_to']}' 칸으로 들어가요.")
             buttons(q, ("다른 칸", (engine.answer_same, t, q, False)), ("같은 칸", (engine.answer_same, t, q, True)))
@@ -1081,10 +1092,10 @@ def card(t, K, q, label=True):
         elif kind == "연결":
             st.write(f"**{link_sentence(P)}**")
             try:
-                counted = engine.pair_evidence(K, P["from"], P["to"])  # 기록이 늘면 근거도 다시 센다
+                n, counted = engine.pair_basis(K, P["from"], P["to"])  # 기록이 늘면 근거도 다시 센다
             except (KeyError, ValueError):
-                counted = ev.get("counted", "-")
-            st.caption(f"{P.get('reason') or ''} 근거: {counted}.")
+                n, counted = None, ev.get("counted", "-")
+            st.caption(f"{P.get('reason') or ''} 근거: {counted}." + (" 기록에 함께 나온 적이 없어 AI가 바로 반영하지 않았어요." if n == 0 and not user else ""))
             buttons(q, ("아니요", (engine.answer_link, t, q, False)), ("맞아요", (engine.answer_link, t, q, True)))
         elif kind == "지표":
             st.write(f"**'{P['title']}'을(를) 대시보드에 올릴까요?**")
@@ -2273,9 +2284,54 @@ function focus(s, id) {
   }))
 }
 
+// 누른 점 옆의 정보 카드. 이름·관계는 사용자가 적은 글이라 HTML 이 아닌 글자로만 넣는다.
+function el(tag, cls, text) {
+  const x = document.createElement(tag)
+  if (cls) x.className = cls
+  if (text !== undefined) x.textContent = text
+  return x
+}
+
+function fill(card, info) {
+  card.replaceChildren()
+  const head = el("div", "head")
+  head.append(el("b", "", info.name), el("span", "kind", info.kind))
+  card.append(head)
+  if (info.desc) card.append(el("p", "desc", info.desc))
+  const grid = el("div", "stats")
+  for (const [k, v] of info.stats) {
+    const c = el("div", "stat")
+    c.append(el("span", "", k), el("b", "", v))
+    grid.append(c)
+  }
+  card.append(grid)
+  card.append(el("div", "sub", info.count ? `이어진 선 ${info.count}개` : "이어진 점이 없어요"))
+  const list = el("ul")
+  for (const r of info.rels.slice(0, 8)) list.append(el("li", "", r))
+  if (info.rels.length > 8) list.append(el("li", "more", `외 ${info.rels.length - 8}개`))
+  card.append(list)
+}
+
+// 카드를 점 오른쪽 아래에 두고, 그림 밖으로 나가면 안쪽으로 당긴다
+function place(s, box, card) {
+  if (!s.cardId || !s.nodes.get(s.cardId)) { card.hidden = true; return }
+  const p = s.net.canvasToDOM(s.net.getPosition(s.cardId))
+  const w = card.offsetWidth, h = card.offsetHeight
+  card.style.left = Math.max(8, Math.min(p.x + 24, box.clientWidth - w - 8)) + "px"
+  card.style.top = Math.max(8, Math.min(p.y + 16, box.clientHeight - h - 8)) + "px"
+}
+
+function show(s, box, card, id) {
+  const n = id && s.nodes.get(id)
+  s.cardId = n && n.info ? id : null
+  card.hidden = !s.cardId
+  if (s.cardId) { fill(card, n.info); place(s, box, card) }
+}
+
 export default function (component) {
   const { data, parentElement, setTriggerValue } = component
   const box = parentElement.querySelector("#kg")
+  const card = parentElement.querySelector("#card")
   const sig = JSON.stringify([data.nodes, data.edges])
   visP = visP || import(VIS)
   visP.then(({ Network, DataSet }) => {
@@ -2301,9 +2357,14 @@ export default function (component) {
     s.net.off("click")
     s.net.on("click", (e) => {
       focus(s, e.nodes[0])  // 서버를 기다리지 않고 바로 보이게
+      show(s, box, card, e.nodes[0])
       setTriggerValue("clicked", e.nodes[0] ?? "")
     })
-    focus(s, data.nodes.some((n) => n.id === data.selected) ? data.selected : null)
+    s.net.off("afterDrawing")
+    s.net.on("afterDrawing", () => { if (s.cardId) place(s, box, card) })  // 펼치기·끌기·확대에도 점을 따라간다
+    const picked = data.nodes.some((n) => n.id === data.selected) ? data.selected : null
+    focus(s, picked)
+    show(s, box, card, picked)
   })
   return () => {
     const s = nets.get(parentElement)
@@ -2315,6 +2376,7 @@ export default function (component) {
 KG = st.components.v2.component("papersolve_kg", html="""
 <div class="wrap">
   <div id="kg"></div>
+  <div id="card" class="card" hidden></div>
   <div class="zoom">
     <button id="zin" type="button" aria-label="크게">+</button>
     <button id="zout" type="button" aria-label="작게">−</button>
@@ -2333,6 +2395,24 @@ KG = st.components.v2.component("papersolve_kg", html="""
   font: 22px/1 var(--st-font, sans-serif); color: var(--st-text-color, #1F1F1F);
 }
 .zoom button + button { border-top: 1px solid var(--st-border-color, #E4E4E7); }
+.card {
+  position: absolute; width: 280px; max-width: calc(100% - 16px); padding: 12px 14px; box-sizing: border-box;
+  background: var(--st-background-color, #FFFFFF); color: var(--st-text-color, #1F1F1F);
+  border: 1px solid var(--st-border-color, #E4E4E7); border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  font: 13px/1.45 var(--st-font, sans-serif); pointer-events: none;
+}
+.card[hidden] { display: none; }
+.card .head { display: flex; align-items: baseline; gap: 6px; }
+.card .head b { font-size: 15px; overflow-wrap: anywhere; }
+.card .kind, .card .stat span, .card .sub, .card .more { color: var(--st-gray-70, #71717A); font-size: 12px; }
+.card .desc { margin: 4px 0 8px; overflow-wrap: anywhere; }
+.card .stats { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--st-border-color, #E4E4E7); border-radius: 8px; }
+.card .stat { padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.card .stat + .stat { border-left: 1px solid var(--st-border-color, #E4E4E7); }
+.card .stat b { overflow-wrap: anywhere; }
+.card .sub { margin-top: 8px; }
+.card ul { margin: 4px 0 0; padding-left: 16px; }
+.card li { overflow-wrap: anywhere; }
 .zoom button:hover { background: var(--st-secondary-background-color, #F4F4F5); }
 """, js=KG_JS)
 
@@ -2364,36 +2444,91 @@ def graph_data(K, pend, with_entities=False):
         dot(f"T:{T}", T, COLOR["type_fill"], big=True)
         for p in K["props"][T]:
             dot(f"P:{T}.{p['name']}", p["name"], COLOR["prop_dot"])
-            line(f"T:{T}", f"P:{T}.{p['name']}", color=COLOR["line_weak"])
+            line(f"T:{T}", f"P:{T}.{p['name']}", color=COLOR["line_weak"], rel=["칸", "기록 종류"])
             if p.get("ref_class") in K["classes"]:
-                line(f"P:{T}.{p['name']}", f"C:{p['ref_class']}", label="가리킴", dashes=[2, 4], arrows="to")
+                line(f"P:{T}.{p['name']}", f"C:{p['ref_class']}", label="가리킴", dashes=[2, 4], arrows="to", rel=["가리키는 대상 분류", "가리키는 칸"])
     for C, parent in K["classes"].items():
         n = sum(1 for e in K["entities"].values() if e["class_name"] == C)
         dot(f"C:{C}", f"{C}\n대상 {n}개", COLOR["class_fill"], box=True)
         if parent:
-            line(f"C:{C}", f"C:{parent}", label="종류의 하나", arrows="to", color=COLOR["line"])
+            line(f"C:{C}", f"C:{parent}", label="종류의 하나", arrows="to", color=COLOR["line"], rel=["상위 분류", "하위 분류"])
         for a in K["props"].get(C, []):
             dot(f"A:{C}.{a['name']}", a["name"], COLOR["attr_dot"])
-            line(f"C:{C}", f"A:{C}.{a['name']}", color=COLOR["line_weak"])
+            line(f"C:{C}", f"A:{C}.{a['name']}", color=COLOR["line_weak"], rel=["정보 칸", "대상 분류"])
     for l in K["links"]:
         label = (l.get("name") or l["kind"]) + (" (" + ", ".join(d["name"] for d in l["attr_defs"]) + ")" if l.get("attr_defs") else "")
-        line(node_id(K, l["from_ref"]), node_id(K, l["to_ref"]), label=label, arrows="to", width=1.6, color=COLOR["line_strong"])
+        line(node_id(K, l["from_ref"]), node_id(K, l["to_ref"]), label=label, arrows="to", width=1.6, color=COLOR["line_strong"],
+             say=stated(link_sentence({"from": l["from_ref"], "to": l["to_ref"], "kind": l["kind"], "name": l.get("name")})))
     for q in pend:
         P = q["payload"]
-        line(node_id(K, P["from"]), node_id(K, P["to"]), label=f"{P.get('name') or P['kind']}?", arrows="to", dashes=True)
+        line(node_id(K, P["from"]), node_id(K, P["to"]), label=f"{P.get('name') or P['kind']}?", arrows="to", dashes=True,
+             say=link_sentence(P) + " (확인할 관계)")
     if with_entities:
         for e in list(K["entities"].values())[:60]:
             dot(f"E:{e['id']}", e["name"], COLOR["entity_dot"])
-            line(f"E:{e['id']}", f"C:{e['class_name']}", color=COLOR["line_weak"])
+            line(f"E:{e['id']}", f"C:{e['class_name']}", color=COLOR["line_weak"], rel=["분류", "대상"])
         for l in K["links"]:
             if "." in l["from_ref"] or "." in l["to_ref"]:
                 continue
             for a, b in engine.link_pairs(K, l)[[l["from_ref"], l["to_ref"]]].itertuples(index=False):
                 x, y = engine.find_entity(K, l["from_ref"], a), engine.find_entity(K, l["to_ref"], b)
                 if x and y:
-                    line(f"E:{x}", f"E:{y}", arrows="to", color=COLOR["entity_link"])
+                    line(f"E:{x}", f"E:{y}", arrows="to", color=COLOR["entity_link"],
+                         say=f"{K['entities'][x]['name']} → {l.get('name') or l['kind']} → {K['entities'][y]['name']}")
     ids = {n["id"] for n in nodes}
-    return nodes, [e for e in edges if e["from"] in ids and e["to"] in ids]
+    edges = [e for e in edges if e["from"] in ids and e["to"] in ids]
+    for n in nodes:
+        n["info"] = node_info(K, n, nodes, edges)
+    return nodes, edges
+
+
+def node_info(K, n, nodes, edges):
+    """점을 누르면 그 옆에 뜨는 정보 카드: 이름·종류, 코드가 센 숫자 세 개, 다른 점과 어떤 관계인지."""
+    kind, _, ref = n["id"].partition(":")
+    name = n["label"].split("\n")[0]
+    def short(i):  # 칸·정보는 다른 종류·분류의 것일 때만 어디 것인지 붙인다
+        if i[0] in "PA":
+            owner, p = engine.split(i[2:])
+            return p if owner == ref else ref_text(i[2:])
+        return next(x["label"].split("\n")[0] for x in nodes if x["id"] == i)
+    mine = [e for e in edges if n["id"] in (e["from"], e["to"])]
+    groups, rels = {}, []
+    for e in mine:  # 칸·정보·분류 같은 짜임은 "칸: 담당자, 설비"로 묶고, 관계는 지식그래프 목록과 같은 문장으로
+        out = e["from"] == n["id"]
+        if e.get("rel"):
+            groups.setdefault(e["rel"][0 if out else 1], []).append(short(e["to"] if out else e["from"]))
+        elif e.get("say"):
+            rels.append(e["say"])
+    rels = [f"{k}: {', '.join(v[:6])}" + (f" 외 {len(v) - 6}개" if len(v) > 6 else "") for k, v in groups.items()] + rels
+    near = len({e["to"] if e["from"] == n["id"] else e["from"] for e in mine})
+    desc, stats = "", []
+    if kind == "T":
+        df = engine.frame(K, ref)
+        desc = f"날짜 {df['날짜'].min()} ~ {df['날짜'].max()}" if len(df) else "아직 확정한 기록이 없어요"
+        stats = [("기록", f"{len(df)}줄"), ("칸", f"{len(K['props'][ref])}개"), ("이어진 점", f"{near}개")]
+    elif kind == "P":
+        T, prop = engine.split(ref)
+        p = next(x for x in K["props"][T] if x["name"] == prop)
+        df = engine.frame(K, T)
+        filled = int(df[prop].notna().sum()) if prop in df else 0
+        desc = " · ".join(x for x in (f"{T}의 칸", p.get("unit") and f"단위 {p['unit']}", p.get("description")) if x)
+        stats = [("값의 종류", engine.DTYPE_KO[p["dtype"]]), ("값이 적힌 기록", f"{filled}줄"), ("이어진 점", f"{near}개")]
+    elif kind == "C":
+        names = [e["name"] for e in engine.members(K, ref)]
+        direct = sum(1 for e in K["entities"].values() if e["class_name"] == ref)  # 그림의 상자에 적힌 수
+        desc = (f"상위 분류 {K['classes'][ref]} · " if K["classes"][ref] else "") + (f"대상 예: {', '.join(names[:3])}" if names else "아직 대상이 없어요")
+        stats = [("하위 분류까지 대상" if direct != len(names) else "대상", f"{len(names)}개"),("정보 칸", f"{len(K['props'].get(ref, []))}개"), ("이어진 점", f"{near}개")]
+    elif kind == "A":
+        C, attr = engine.split(ref)
+        has = sum(1 for e in engine.members(K, C) if engine.filled(e["attrs"].get(attr)))
+        desc = f"{C}의 정보 칸"
+        stats = [("값이 있는 대상", f"{has}개"), ("대상", f"{len(engine.members(K, C))}개"), ("이어진 점", f"{near}개")]
+    elif kind == "E" and int(ref) in K["entities"]:
+        e = K["entities"][int(ref)]
+        attrs = {k: v for k, v in e["attrs"].items() if engine.filled(v)}
+        desc = " · ".join(f"{k} {v}" for k, v in list(attrs.items())[:3]) or f"{e['class_name']} 대상"
+        stats = [("분류", e["class_name"]), ("별칭", f"{len(engine.aliases_of(K, e['id']))}개"), ("이어진 점", f"{near}개")]
+    return {"name": name, "kind": NODE_KO[kind], "desc": desc, "stats": [list(x) for x in stats], "rels": rels, "count": len(mine)}
 
 
 NODE_KO = {"T": "기록 종류", "P": "칸", "C": "대상 분류", "A": "대상 정보", "E": "대상"}
@@ -2543,7 +2678,7 @@ def graph(t, K):
         KG(data={"nodes": nodes, "edges": edges, "selected": st.session_state.get("kg_pick")}, key="kg",
            on_clicked_change=pick_node)
         st.caption("청록 원 기록 종류 · 주황 상자 대상 분류 · 작은 점 칸·대상 정보·대상 · 실선 확정 · 점선 확인할 관계")
-        st.caption("점을 누르면 오른쪽에서 설정을 고치고, 빈 곳을 누르면 닫혀요.")
+        st.caption("점을 누르면 그 옆에 정보와 관계가, 오른쪽에 설정 칸이 열려요. 빈 곳을 누르면 닫혀요.")
         with st.expander("점 고르기"):  # 마우스 없이도 점을 고를 수 있게
             names = {n["id"]: f"{n['label'].replace(chr(10), ' ')} ({NODE_KO[n['id'][0]]})" for n in nodes}
             st.selectbox("점", list(names), format_func=names.get, index=None, key="kg_select",
@@ -2560,8 +2695,7 @@ def graph(t, K):
         st.subheader("확정한 관계")
         for l in K["links"]:
             left, right = st.columns([5, 1], vertical_alignment="center")
-            left.write(link_sentence({"from": l["from_ref"], "to": l["to_ref"], "kind": l["kind"], "name": l.get("name")})
-                       .replace("이어져 있나요?", "이어져 있어요.").replace("인가요?", "예요.").replace("나요?", "요."))
+            left.write(stated(link_sentence({"from": l["from_ref"], "to": l["to_ref"], "kind": l["kind"], "name": l.get("name")})))
             right.button("끊기", key=f"cut{l['id']}", on_click=act, args=(engine.cut_link, t, l), kwargs={"done": "관계를 끊었어요."})
     with st.expander("이어져 있다고 생각하는 칸이 있나요?"):
         refs = engine.refs(K)

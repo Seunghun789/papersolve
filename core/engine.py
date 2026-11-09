@@ -103,6 +103,7 @@ def checked(raw, normal):
     if (d := to_date(normal)) and re.match(r"^\d{4}-\d{2}-\d{2}", normal):
         hm = re.search(r"(\d{1,2}):(\d{2})$", normal)
         ok = d.month in nums and d.day in nums and (not any(n >= 1000 for n in nums) or d.year in nums)
+        ok &= not swapped(raw, d)
         if hm:
             h, mi = int(hm.group(1)), int(hm.group(2))
             ok &= (h in nums or h - 12 in nums or (h == 0 and 12 in nums)) and (mi == 0 or mi in nums)
@@ -112,6 +113,23 @@ def checked(raw, normal):
     if (n := to_number(normal)) is not None and to_number(raw) is None and re.search(r"\d\s*(억|만|천)", raw):
         return (normal, True) if korean_number(raw) == n else (raw, False)
     return raw, True
+
+
+def swapped(raw, d):
+    """적힌 글의 달·날 순서와 AI가 읽은 날짜가 뒤바뀌었나: '3/4'·'3월 4일'을 4월 3일로 읽은 것.
+    숫자가 다 들어 있어도 자리가 바뀌면 날짜가 조용히 틀어진다. 앞 숫자가 12보다 커 달일 수 없으면(14/3) 뒤바뀐 것으로 보지 않는다."""
+    if m := re.search(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일", raw):
+        a, b = int(m.group(1)), int(m.group(2))
+    else:
+        nums = [int(x) for x in re.findall(r"\d+", raw)]
+        if nums and nums[0] >= 1000:
+            nums = nums[1:]  # 2026.3.4
+        elif len(nums) >= 3 and nums[0] > 12:
+            nums = nums[1:]  # 26.3.4 처럼 두 자리 해
+        if len(nums) < 2:
+            return False
+        a, b = nums[0], nums[1]
+    return a != b and a <= 12 and (d.month, d.day) == (b, a)
 
 
 def two_dates(v):
@@ -339,12 +357,25 @@ def entity_frame(K, C):
     return _numeric(df, [(a["name"], a["dtype"]) for a in attrs])
 
 
-def schema_text(K):
+def seen_values(df, p):
+    """칸에 쌓인 값의 요약(코드가 센다): 숫자는 범위, 글은 자주 나온 값 3개. 구조 제안이 같은 칸인지 값으로도 보게 한다."""
+    col = df[p["name"]].dropna() if p["name"] in df else []
+    if not len(col):
+        return ""
+    if p["dtype"] == "number":
+        return f", 값 {col.min():g}~{col.max():g}"
+    return ", 예 " + "/".join(str(v) for v in col.astype(str).value_counts().index[:3])
+
+
+def schema_text(K, values=False):
+    """확정한 구조를 AI에게 넘기는 글. values 면 칸마다 쌓인 값의 범위·예도 붙인다(구조 제안용)."""
     lines = []
     for T in K["types"]:
+        df = frame(K, T) if values else None
         cols = ", ".join(
             f"{p['name']}({DTYPE_KO[p['dtype']]}{', ' + p['unit'] if p['unit'] else ''}"
-            f"{', 대상: ' + p['ref_class'] if p.get('ref_class') in K['classes'] else ', 대상' if p['is_entity'] else ''})"
+            f"{', 대상: ' + p['ref_class'] if p.get('ref_class') in K['classes'] else ', 대상' if p['is_entity'] else ''}"
+            f"{seen_values(df, p) if values else ''})"
             for p in K["props"][T])
         lines.append(f"- [기록] {T}: {cols}")
     for C, parent in K["classes"].items():
@@ -576,7 +607,17 @@ def ingest(t, model, name, content):
         sid = ingest_photo(t, model, name, content)
     else:
         raise ValueError("이 파일은 아직 읽지 못해요. 종이를 찍은 사진, PDF, 엑셀, CSV로 올려 주세요.")
-    auto_settle(t, sid)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(1) as pool:  # 첫 종이의 워크스페이스 설정 제안(AI)을 자동 반영과 함께 돌려 다음 화면을 기다리지 않게 한다
+        space = pool.submit(suggest_space, t, llm.DEFAULT) if getattr(t, "role", None) in (None, *db.ANSWER) else None
+        auto_settle(t, sid)
+        try:
+            made = space and space.result()
+        except Exception as e:  # 제안을 못 받아도 읽기는 끝난다. 앱을 열 때 다시 살핀다
+            print(f"워크스페이스 설정 제안 실패: {type(e).__name__}: {e}", flush=True)
+            made = None
+    if made:
+        auto_settle(t)  # 함께 도는 동안 올라온 워크스페이스 설정 카드를 닫는다
     return sid
 
 
@@ -593,22 +634,69 @@ def risky(K, q, spans):
     return any(digits(c) and digits(c) not in digits(P.get("value")) for c in cand)
 
 
+def unit_key(u):
+    """단위를 견줄 때 쓰는 글. 띄어쓰기·대소문자와 도 기호 표기(°C, ℃)만 다르면 같은 단위로 본다."""
+    return (u or "").strip().lower().replace(" ", "").replace("°c", "℃")
+
+
+def same_doubt(K, q):
+    """AI가 고른 같은 칸이 의심스러운 까닭. 이름이 비슷해도 단위가 다르거나 숫자 크기가 전 기록과 10배 넘게 다르면
+    합계·평균이 섞이므로 그 까닭을 돌려주고, 아니면 None. 견줄 전 기록이 3줄 안 되면 크기는 보지 않는다."""
+    P = q["payload"]
+    old = next((p for p in K["props"].get(P["type"], []) if p["name"] == P["similar_to"]), None)
+    if not old:
+        return None
+    if unit_key(old.get("unit")) and unit_key(P.get("unit")) and unit_key(old["unit"]) != unit_key(P["unit"]):
+        return f"단위가 달라요. 전 기록은 {old['unit'].strip()}, 이 종이는 {P['unit'].strip()}예요"
+    if old["dtype"] != "number" or P.get("dtype") != "number":
+        return None
+    df = frame(K, P["type"])
+    before = [abs(v) for v in df[old["name"]].dropna() if v] if old["name"] in df else []
+    now_ = [abs(v) for v in map(to_number, (q.get("evidence") or {}).get("samples") or []) if v]
+    if len(before) < 3 or not now_:
+        return None
+    m_old, m_new = float(pd.Series(before).median()), float(pd.Series(now_).median())
+    if max(m_old, m_new) / min(m_old, m_new) >= 10:
+        return f"값의 크기가 달라요. 전 기록은 {m_old:g} 안팎, 이 종이는 {m_new:g} 안팎이에요"
+    return None
+
+
 def auto_settle(t, sid=None):
     """구조 카드는 사람에게 묻지 않고 AI 판단대로 반영한다. 숫자·날짜의 애매한 값과 지표·자동화만 남는다.
+    AI 판단을 기록으로 한 번 더 보고, 기록에 함께 나온 적이 없는 연결과 단위·값의 크기가 다른 같은 칸은 반영하지 않고 사람에게 남긴다.
     이름·글의 애매한 값은 묻지 않고 기록의 uncertain 에 미확인으로 남긴다. 사용자가 직접 올렸거나 되돌린 카드는 건드리지 않는다.
     역할과 상관없이 반영하고, 반영이 실패한 카드는 그대로 두어 사람이 답하게 한다."""
     a = db.Tenant(t.id, getattr(t, "user", None))
     K = load(a) if pending(a, ["같은 칸"]) else None  # 앱을 열 때마다 돌기도 해서, 쓸 때만 읽는다
-    same = lambda q: next((p["dtype"] for p in K["props"].get(q["payload"]["type"], []) if p["name"] == q["payload"]["similar_to"]), None) == q["payload"].get("dtype")
+    left, fresh = set(), {}  # left: 사람에게 남긴 카드. fresh: 연결 근거를 셀 때 읽은 지식
+
+    def same(q):
+        """같은 칸 카드. 값의 종류가 다르면 다른 칸으로 두고, 단위나 값의 크기가 의심스러우면 사람에게 남긴다."""
+        P = q["payload"]
+        if next((p["dtype"] for p in K["props"].get(P["type"], []) if p["name"] == P["similar_to"]), None) != P.get("dtype"):
+            return answer_same(a, q, False)
+        if same_doubt(K, q):
+            return left.add(q["id"])
+        answer_same(a, q, True)
+
+    def link(q):
+        """연결 카드. 두 곳이 기록에 함께 나온 적이 있을 때만 반영한다. 근거가 없는 짐작은 사람에게 남긴다."""
+        if "K" not in fresh:  # 연결은 한 바퀴의 마지막에 반영해서, 앞 카드로 확정된 기록까지 센다
+            fresh["K"] = load(a)
+        if pair_basis(fresh["K"], q["payload"]["from"], q["payload"]["to"])[0]:
+            return answer_link(a, q, True)
+        left.add(q["id"])
+
     answers = {"워크스페이스 설정": lambda q: answer_space(a, q, True), "종류": lambda q: answer_type(a, q, "맞아요"),
-               "칸": lambda q: answer_prop(a, q, True), "같은 칸": lambda q: answer_same(a, q, same(q)), "읽은 값": lambda q: answer_read(a, q),
+               "칸": lambda q: answer_prop(a, q, True), "같은 칸": same, "읽은 값": lambda q: answer_read(a, q),
                "대상 분류": lambda q: answer_class(a, q, True), "대상": lambda q: answer_entities(a, q, True),
                "같은 대상": lambda q: answer_same_entity(a, q, True), "대상 속성": lambda q: answer_entity_attr(a, q, True),
                "속성 값": lambda q: answer_attr_value(a, q, True), "상위 분류": lambda q: answer_hierarchy(a, q, True),
-               "관계 속성": lambda q: answer_link_attr(a, q, True), "연결": lambda q: answer_link(a, q, True)}
+               "관계 속성": lambda q: answer_link_attr(a, q, True), "연결": link}
     failed = set()
     for _ in range(8):  # 답이 새 카드를 만들기도 한다
-        cards = sorted((q for q in pending(a, AUTO) if q["id"] not in failed and not (q.get("evidence") or {}).get("user")
+        fresh.clear()
+        cards = sorted((q for q in pending(a, AUTO) if q["id"] not in failed | left and not any((q.get("evidence") or {}).get(k) for k in ("user", "no_ai"))
                         and not q["payload"].get("reopened")), key=lambda q: AUTO.index(q["kind"]))
         if not cards:
             break
@@ -808,7 +896,16 @@ def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_uns
     labels = list(dict.fromkeys(l for r in rows for l in r))
     columns = "\n".join(f"- {l}: 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
     waiting = {q["payload"]["type"]: q for q in pending(t, ["종류"])}
-    plan = llm.propose_schema(t, model, title, columns, schema_text(K), list(waiting), space_text(t))
+    known = [T for T in K["types"] if all((T, l) in K["alias"] for l in labels)]
+    ai = {}  # 구조 카드의 근거에 붙인다. no_ai 면 AI 판단 없이 올린 것이라 자동 반영하지 않고 사람이 답한다
+    if len(known) == 1:  # 이미 아는 칸만 적힌 같은 양식: 새로 정할 구조가 없어 AI에게 묻지 않는다
+        plan = {"type_name": known[0], "props": [], "links": []}
+    else:
+        try:
+            plan = llm.propose_schema(t, model, title, columns, schema_text(K, values=True), list(waiting), space_text(t))
+        except Exception as e:  # 구조 제안이 실패해도 이미 읽은 값은 지킨다. 적힌 이름 그대로 카드로 올린다
+            print(f"구조 제안 실패, 적힌 이름 그대로 올림: {type(e).__name__}: {e}", flush=True)
+            plan, ai = {"type_name": known[0] if known else title, "props": [], "links": []}, {"no_ai": True}
     kinds = {p["label"].strip(): p.get("kind") for p in plan["props"]}
     dtypes = {l: fit_dtype(kinds.get(l), [r.get(l) for r in rows]) or infer_dtype([r.get(l) for r in rows]) for l in labels}
     T = plan["type_name"].strip() or title
@@ -838,14 +935,14 @@ def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_uns
             same = p["similar_to"] if p["similar_to"] in existing else p["name"] if p["name"] in existing else None
             if same:
                 propose(t, "같은 칸", {"type": T, "label": p["label"], "similar_to": same, **_def(p)},
-                        {"samples": samples[p["label"]]}, sid)
+                        {"samples": samples[p["label"]], **ai}, sid)
             else:
-                propose(t, "칸", {"type": T, **_def(p)}, {"samples": samples[p["label"]]}, sid)
+                propose(t, "칸", {"type": T, **_def(p)}, {"samples": samples[p["label"]], **ai}, sid)
         for l in links:
             propose_link(t, K, f"{T}.{l['from']}", f"{T}.{l['to']}", l["kind"], l["reason"])
     elif T not in waiting:
         propose(t, "종류", {"type": T, "title": title, "props": [_def(p) for p in props], "links": links, "paper": paper},
-                {"samples": samples, "rows": len(rows)}, sid)
+                {"samples": samples, "rows": len(rows), **ai}, sid)
 
     recs = t.post("records", [{"type_name": T, "occurred_at": d, "data": r, "uncertain": u, "photo_path": ph,
                                 "source_input_id": sid} for r, u, d, ph in zip(rows, unsure, days, photos)])
@@ -882,7 +979,10 @@ def labels_of(K, T, prop):
 
 
 def entity_checks(t, model, K, T, recs, sid):
-    """새 기록에서 처음 보는 대상(같은 대상인지 AI가 비교)과 대상 정보가 바뀐 값을 제안으로 올린다."""
+    """새 기록에서 처음 보는 대상(같은 대상인지 AI가 비교)과 대상 정보가 바뀐 값을 제안으로 올린다.
+    띄어쓰기·대소문자만 다른 이름은 코드가 바로 같은 대상으로 보고, 나머지만 분류마다 동시에 AI에게 묻는다."""
+    key = lambda v: re.sub(r"\s+", "", str(v)).lower()
+    jobs = []  # (분류, 처음 보는 값, 같은 대상, AI에게 물을 값, 대상 목록 글)
     for p in ref_props(K, T):
         C, labels = p["ref_class"], labels_of(K, T, p["name"])
         values = list(dict.fromkeys(r["data"][l].strip() for r in recs for l in labels if filled(r["data"].get(l))))
@@ -891,14 +991,23 @@ def entity_checks(t, model, K, T, recs, sid):
         unseen = [v for v in values if not find_entity(K, C, v) and v not in seen]
         if not unseen:
             continue
-        names = [e["name"] for e in members(K, C)]
-        same = {}
-        if names:
-            known = "\n".join(f"- {e['name']}{' (별칭: ' + ', '.join(aliases_of(K, e['id'])) + ')' if aliases_of(K, e['id']) else ''}"
-                              for e in members(K, C))
-            for m in llm.match_entities(t, model, C, unseen, known):
-                if m["value"] in unseen and m["same_as"] in names:
-                    same[m["value"]] = (m["same_as"], m["reason"])
+        ents = {e["id"]: e["name"] for e in members(K, C)}
+        spell = {}
+        for alias, ids in [*K["ealias"].items(), *((n, [i]) for i, n in ents.items())]:
+            for i in ids:
+                if i in ents:
+                    spell.setdefault(key(alias), set()).add(ents[i])
+        same = {v: (next(iter(spell[key(v)])), "띄어쓰기·대소문자만 달라요.") for v in unseen if len(spell.get(key(v), ())) == 1}
+        ask = [v for v in unseen if v not in same] if ents else []
+        known = "\n".join(f"- {e['name']}{' (별칭: ' + ', '.join(aliases_of(K, e['id'])) + ')' if aliases_of(K, e['id']) else ''}"
+                          for e in members(K, C))
+        jobs.append((C, unseen, same, ask, known))
+    answers = db.together([lambda j=j: llm.match_entities(t, model, j[0], j[3], j[4]) if j[3] else [] for j in jobs])
+    for (C, unseen, same, ask, _), matches in zip(jobs, answers):
+        names = {e["name"] for e in members(K, C)}
+        for m in matches:
+            if m["value"] in ask and m["same_as"] in names:
+                same[m["value"]] = (m["same_as"], m["reason"])
         for v, (s, why) in same.items():
             propose(t, "같은 대상", {"class": C, "value": v, "same_as": s, "reason": why}, None, sid)
         new = [v for v in unseen if v not in same]
@@ -1835,8 +1944,8 @@ def via(K, T, C):
     return next((p["name"] for p in ref_props(K, T) if C in ancestors(K, p["ref_class"])), None)
 
 
-def pair_evidence(K, a, b):
-    """두 곳 사이를 기록으로 센 근거."""
+def pair_basis(K, a, b):
+    """두 곳 사이를 기록으로 센 근거: (근거 수, 글). 근거 수 0 은 두 곳이 기록에 함께 나온 적이 없다는 뜻이다."""
     if a in K["classes"] and b in K["classes"]:
         pairs = set()
         for T in K["types"]:
@@ -1844,7 +1953,7 @@ def pair_evidence(K, a, b):
             if pa and pb:
                 pairs |= {tuple(map(str, x)) for x in frame(K, T)[[pa, pb]].dropna().drop_duplicates().itertuples(index=False)}
         shown = ", ".join("–".join(x) for x in sorted(pairs)[:3])
-        return f"기록에 같이 나온 대상 쌍 {len(pairs)}개({shown}{' 등' if len(pairs) > 3 else ''})"
+        return len(pairs), f"기록에 같이 나온 대상 쌍 {len(pairs)}개({shown}{' 등' if len(pairs) > 3 else ''})"
     (Ta, pa), (Tb, pb) = split(a), split(b)
     if Ta in K["classes"] and Tb in K["types"] and via(K, Tb, Ta):
         Ta, pa = Tb, f"{via(K, Tb, Ta)}.{pa}"
@@ -1853,17 +1962,23 @@ def pair_evidence(K, a, b):
     if Ta == Tb and Ta in K["types"] + list(K["classes"]):
         df = frame(K, Ta)
         if pa not in df or pb not in df:
-            return "같이 적힌 기록 없음"
+            return 0, "같이 적힌 기록 없음"
         nums = prop_names(K, Ta, "number")
         both = df[[pa, pb]].apply(pd.to_numeric, errors="coerce").dropna() if pa in nums and pb in nums else None
         if both is None or len(both) < 3:
-            return f"같이 적힌 기록 {int(df[[pa, pb]].notna().all(axis=1).sum())}건"
+            n = int(df[[pa, pb]].notna().all(axis=1).sum())
+            return n, f"같이 적힌 기록 {n}건"
         corr = both[pa].corr(both[pb])
         corr_text = f"상관 {corr:.2f}" if pd.notna(corr) else "상관 계산 불가(값이 일정)"
-        return f"같이 적힌 {len(both)}건, {corr_text}, {pa}<{pb} 인 비율 {(both[pa] < both[pb]).mean():.0%}"
+        return len(both), f"같이 적힌 {len(both)}건, {corr_text}, {pa}<{pb} 인 비율 {(both[pa] < both[pb]).mean():.0%}"
     va = {str(v) for v in frame(K, Ta)[pa].dropna()} if Ta in K["types"] and pa in frame(K, Ta) else set()
     vb = {str(v) for v in frame(K, Tb)[pb].dropna()} if Tb in K["types"] and pb in frame(K, Tb) else set()
-    return f"두 칸에 함께 나오는 값 {len(va & vb)}개 {sorted(va & vb)[:4]}"
+    return len(va & vb), f"두 칸에 함께 나오는 값 {len(va & vb)}개 {sorted(va & vb)[:4]}"
+
+
+def pair_evidence(K, a, b):
+    """두 곳 사이를 기록으로 센 근거."""
+    return pair_basis(K, a, b)[1]
 
 
 def all_evidence(K):
@@ -2777,6 +2892,29 @@ def saved_result(K, name):
                      f"{[a['title'] for a in saved['automations']] + [w['title'] for w in saved['widgets']]}")
 
 
+def near(df, conds):
+    """조건에 맞는 줄이 없을 때 다시 찾을 실마리. 글 조건에는 그 칸에 실제로 적힌 비슷한 값('압축기2' → '압축기 2'),
+    숫자 조건에는 그 칸 값의 범위를 준다. 어떤 값으로 다시 찾을지는 Claude 가 질문의 뜻을 보고 고른다."""
+    similar, span = {}, {}
+    key = lambda s: re.sub(r"\s+", "", s).lower()
+    for c in conds or []:
+        if c.get("value_prop") or c["prop"] not in df or c["op"] not in (">", "<", ">=", "<=", "=", "!=", "contains"):
+            continue
+        col, value = df[c["prop"]].dropna(), str(c.get("value") or "").strip()
+        nums = pd.to_numeric(col.map(to_number), errors="coerce").dropna()
+        if to_number(value) is not None and len(nums):
+            span[c["prop"]] = [float(nums.min()), float(nums.max())]
+        elif c["op"] in ("=", "contains") and value:
+            have = sorted({str(v).strip() for v in col if filled(v)})
+            hits = [h for h in have if key(h) == key(value)]  # 띄어쓰기·대소문자만 다른 값이 있으면 그것만 준다
+            if not hits:
+                hits = [h for h in have if len(key(h)) > 1 and (key(value) in key(h) or key(h) in key(value))]
+                hits += [h for h in difflib.get_close_matches(value, have, n=5, cutoff=0.6) if h not in hits]
+            if hits:
+                similar[c["prop"]] = hits[:5]
+    return {**({"비슷한 값": similar} if similar else {}), **({"값의 범위": span} if span else {})}
+
+
 def run_tool(K, name, inp):
     """Claude 가 부른 조회 도구를 실행한다. (결과, 근거 id들: 기록은 'r12', 대상은 'e5')."""
     if name == "schema":
@@ -2794,12 +2932,14 @@ def run_tool(K, name, inp):
     for c in inp.get("where") or []:
         if not valid_cond(K, T, c):
             raise ValueError(f"'{c.get('prop')}' 칸이나 조건을 쓸 수 없어요. 칸: {prop_names(K, T)}")
-    df = match(df, inp.get("where"))
+    found = match(df, inp.get("where"))
+    hint = near(df, inp.get("where")) if found.empty else {}  # 0건이면 적힌 값과 조건 값이 조금 다른 것일 수 있다
+    df = found
     key, tag = ("_eid", "e") if T in K["classes"] else ("_id", "r")
     if name == "find_records":
         rows = df.head(min(int(inp.get("limit") or 10), 20))
-        return {"전체 건수": len(df), "줄": rows.drop(columns=[c for c in ("_photo",) if c in rows]).rename(columns={key: "id"}).to_dict("records")}, \
-            [f"{tag}{i}" for i in rows[key]]
+        return {"전체 건수": len(df), "줄": rows.drop(columns=[c for c in ("_photo",) if c in rows]).rename(columns={key: "id"}).to_dict("records"),
+                **hint}, [f"{tag}{i}" for i in rows[key]]
     if name == "aggregate":
         fn, prop = inp["fn"], inp.get("prop")
         if fn != "count" and prop not in prop_names(K, T, "number"):
@@ -2815,7 +2955,7 @@ def run_tool(K, name, inp):
         if group and group not in prop_names(K, T):
             raise ValueError(f"'{group}' 칸이 없어요. 칸: {prop_names(K, T)}")
         result = {str(k): calc(v) for k, v in df.groupby(group)} if group else calc(df)
-        out = {"결과": result, "센 줄 수": len(df)}
+        out = {"결과": result, "센 줄 수": len(df), **hint}
         if group and (left := (df[group].isna() | df[group].map(lambda v: not filled(v))).sum()):
             out["분류 안 된 줄"] = int(left)  # 화면에 "분류 안 된 기록 N줄은 세지 않았어요"
         return out, [f"{tag}{i}" for i in df[key].head(20)]
@@ -2880,6 +3020,7 @@ def suggest_space(t, model):
         s = {"title": T}
     fields = SPACE_FIELDS if not r["org"].get("name") else ["title", "about"]
     propose(t, "워크스페이스 설정", {f: (s.get(f) or "").strip() for f in fields} | {"fallback": T})
+    return True
 
 
 def user_space_title(t, title, old):
