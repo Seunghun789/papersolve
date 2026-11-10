@@ -760,6 +760,32 @@ def auto_settle(t, sid=None):
         a.patch("source_inputs", {"auto": True}, id=f"eq.{sid}")
 
 
+def zoom_unsure(t, model, photo, cells):
+    """읽기 애매한 표 칸은 그 둘레를 크게 잘라 AI에게 한 번 더 읽힌다(동시에). 두 판단이 같으면 또렷한 값으로 두고,
+    다르면 다시 읽은 값을 값으로, 처음 값을 후보로 두어 사람에게 묻는다. 다시 읽기가 실패하거나 헷갈리면 처음 그대로."""
+    asks = [c for c in cells if c["uncertain"] and box(c.get("box"))][:12]
+
+    def one(c):
+        try:
+            return llm.reread_cell(t, model, c["label"].strip(), c["value"], photo, box(c["box"]))
+        except Exception as e:
+            print(f"칸 다시 읽기 실패: {type(e).__name__}: {e}", flush=True)
+            return None
+    for c, z in zip(asks, db.together([lambda c=c: one(c) for c in asks])):
+        if not z or z.get("unsure") or not filled(z.get("value")):
+            continue
+        v, ok = checked(str(z["value"]).strip(), None)
+        if not ok:
+            continue
+        if (z.get("crossed") or "").strip():
+            c["crossed"] = z["crossed"].strip()
+        if same_value(v, c["value"]):
+            c["uncertain"], c["candidates"] = False, []
+        else:
+            c["candidates"] = [c["value"], *(x for x in c.get("candidates") or [] if not same_value(x, v))]
+            c["value"] = c["written"] = v
+
+
 EARLY_ROWS = 4  # 표의 앞쪽 몇 줄이 들어오면 구조 제안(AI)을 먼저 시작하나. 구조 제안은 칸마다 값 예 4개까지만 본다
 
 
@@ -818,6 +844,9 @@ def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
         for c, b in zip(cells, ocr.place_all([(c["written"], box(c.get("box")), c["label"].strip()) for c in cells], found)):
             c["box"] = [round(v) for v in b] if b else None
 
+    if not name.lower().endswith(".pdf"):
+        zoom_unsure(t, model, photo, [c for row in sheet["rows"] for c in row["cells"]])
+
     def keep(c, rec):
         """rec: 이 종이의 몇 번째 기록(종이 전체에 한 번 적힌 칸은 None). 애매한 칸은 AI가 본 다른 후보도 둔다."""
         label, value = c["label"].strip(), c["value"].strip()
@@ -828,7 +857,8 @@ def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
         spans[label].append({"page": c["page"], "quote": f"{label}: {c.get('written') or value}", "value": value,
                              **({"written": c["written"]} if c.get("written") and c["written"] != value else {}), **({"box": b} if b else {}),
                              **({"rec": rec} if rec is not None else {}), **({"unsure": True} if unsure else {}),
-                             **({"cand": cand} if cand else {})})
+                             **({"cand": cand} if cand else {}),
+                             **({"crossed": c["crossed"].strip()} if (c.get("crossed") or "").strip() else {})})  # 줄 그어 지우고 고쳐 쓴 값
 
     for c in sheet["doc_fields"]:
         if filled(c["value"]):

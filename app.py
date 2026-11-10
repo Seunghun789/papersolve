@@ -736,15 +736,20 @@ def rec_ids(t, sid):
     return RUN[("recs", sid)]
 
 
-def candidates(t, q):
-    """읽기 애매한 칸에서 AI가 본 다른 후보 값(읽을 때 함께 적은 것)."""
+def span_of(t, q):
+    """카드가 묻는 칸이 원본에 적힌 자리(spans 의 한 항목). 못 찾으면 빈 사전."""
     P = q["payload"]
     ids = rec_ids(t, q["source_input_id"])
     i = ids.index(P["record_id"]) if P["record_id"] in ids else None
     for s in spans_of(t.id, q["source_input_id"]).get(P["label"]) or []:
         if ("rec" in s and s["rec"] == i) or ("rec" not in s and engine.same_value(s.get("value"), P["value"])):
-            return [c for c in s.get("cand") or [] if not engine.same_value(c, P["value"])]
-    return []
+            return s
+    return {}
+
+
+def candidates(t, q):
+    """읽기 애매한 칸에서 AI가 본 다른 후보 값(읽을 때 함께 적은 것)."""
+    return [c for c in span_of(t, q).get("cand") or [] if not engine.same_value(c, q["payload"]["value"])]
 
 
 def long_value(v):
@@ -787,6 +792,8 @@ def value_card(t, q):
         row.button("아니요", key=f"ne{q['id']}", on_click=lambda: st.session_state.update(editing=None, edit_part=None))
         row.button("저장", key=f"s{q['id']}", type="primary", shortcut=key_of("yes"), on_click=save_fix, args=(t, q))
         return
+    if crossed := span_of(t, q).get("crossed"):
+        st.caption(f"종이에서 '{crossed}'에 줄을 긋고 '{P['value']}'(으)로 고쳐 적은 것으로 읽었어요.")
     cand = candidates(t, q)
     frag = unsure_part(P["value"], cand)
     if frag:  # 긴 값에서 AI가 헷갈린 곳: 후보는 그 부분만 바꾼다

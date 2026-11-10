@@ -105,9 +105,9 @@ LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}
 
 # 답은 짧게 받는다: 표의 열 이름과 열의 가로 범위는 한 번만, 줄마다 값만 열 순서대로. 뜻(normal)과 헷갈림(unsure)은 그런 칸만 notes 에.
 # 칸마다 이름·뜻·상자를 되풀이하면 출력 토큰이 다섯 배쯤 늘어 그만큼 늦게 읽는다. spread 가 칸마다 하나씩 편 모양으로 바꾼다.
-NOTE = obj(label=S, normal=nullable(S), unsure=B, candidates=array(S))
+NOTE = obj(label=S, normal=nullable(S), unsure=B, candidates=array(S), crossed=nullable(S))
 EXTRACT = obj(title=S, occurred_at=nullable(S),
-              doc_fields=array(obj(label=S, value=S, normal=nullable(S), unsure=B, candidates=array(S), page=I, box=array(I))),
+              doc_fields=array(obj(label=S, value=S, normal=nullable(S), unsure=B, candidates=array(S), crossed=nullable(S), page=I, box=array(I))),
               columns=array(obj(label=S, x=array(I))),
               rows=array(obj(page=I, y=array(I), values=array(nullable(S)), notes=array(NOTE))))
 EXTRACT_PROMPT = (
@@ -124,8 +124,10 @@ EXTRACT_PROMPT = (
     "- label 은 종이에 인쇄되거나 적힌 칸 이름 그대로. 표에서는 열 이름을 쓰고 행 이름을 붙이지 마세요.\n"
     "- 값은 적힌 그대로. 숫자는 단위 글자(kg, ℃, 개 등) 없이 숫자만 적고, ±10%·이상·이하·~처럼 값의 뜻을 바꾸는 표시는 그대로 두세요. "
     "인쇄된 값(기준, 최소 재고 등)도 칸이면 넣으세요. "
-    "값이 없다는 표시(-, 빈칸, 칸을 가로지르는 사선·X, 줄을 그어 지운 칸)는 values 에서 null, doc_fields 에서는 그 칸을 빼세요. "
+    "값이 없다는 표시(-, 빈칸, 칸을 가로지르는 사선·X, 줄을 그어 지우고 새로 적지 않은 칸)는 values 에서 null, doc_fields 에서는 그 칸을 빼세요. "
     "빈 칸에 이웃 칸의 값을 옮겨 적지 마세요. 없는 값을 지어내지 마세요.\n"
+    "- 고쳐 쓴 칸: 적힌 값에 줄을 긋거나 덧칠해 지우고 그 위·옆·아래에 새 값을 적었으면, 새로 적은 값이 그 칸의 값이에요. "
+    "지운 값은 crossed 에 적으세요. 고쳐 쓰지 않은 칸은 crossed 가 null. 지운 값을 candidates 에 넣지 마세요.\n"
     "- 표에서 세로로 합쳐진 칸(한 값이 여러 줄에 걸쳐 한 번만 적힌 칸, 예: 기종 'A2K'가 1~5번 줄에 걸쳐 있음)은 빈 칸이 아니에요. "
     "걸친 줄마다 그 값을 적으세요. null 은 정말 비었거나 -·사선으로 비운 칸에만 써요.\n"
     "- normal: 날짜가 YYYY-MM-DD 가 아닌 모양으로 적혔거나('2026년 12월 14일'·'12/14(월) 오후 3시'·'26.12.14') "
@@ -133,7 +135,7 @@ EXTRACT_PROMPT = (
     "해가 안 적혔으면 occurred_at 의 해), 숫자는 쉼표·단위 없는 숫자(139500000). 적힌 것만 바꿔 쓰고 계산하거나 지어내지 마세요.\n"
     "- unsure: 글씨가 흐리거나 헷갈리면 true, candidates 에 그 글씨가 달리 읽힐 수 있는 값 1~3개(value 와 다른 것, 그럴 법한 순서로). "
     "또렷하면 false 와 빈 목록. 글씨 모양으로만 고르고 계산하거나 지어내지 마세요.\n"
-    "- 표의 칸에 normal 이나 unsure 가 있으면 그 줄의 notes 에 칸 이름(label)과 함께 적으세요. 둘 다 없는 칸은 notes 에 넣지 않아요.\n"
+    "- 표의 칸에 normal·unsure·crossed 가 있으면 그 줄의 notes 에 칸 이름(label)과 함께 적으세요. 셋 다 없는 칸은 notes 에 넣지 않아요.\n"
     "- x, y, box 는 그 쪽의 왼쪽 위가 0, 0, 오른쪽 아래가 1000, 1000 인 비율 좌표."
 )
 
@@ -145,7 +147,7 @@ def spread(sheet):
     def cell(label, value, note, page, box):
         note = note or {}
         return {"label": label, "value": value, "normal": note.get("normal") or "", "uncertain": bool(note.get("unsure")),
-                "candidates": note.get("candidates") or [], "page": page or 1, "box": box}
+                "candidates": note.get("candidates") or [], "crossed": note.get("crossed") or "", "page": page or 1, "box": box}
 
     def span(v):
         return v if isinstance(v, list) and len(v) == 2 else None
@@ -270,6 +272,38 @@ def extract(t, model, name, photo, on_rows=None):
 
     sheet = ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}", effort="off", on_text=on_text if on_rows else None)
     return spread(sheet)
+
+
+ZOOM = obj(value=nullable(S), crossed=nullable(S), unsure=B)
+
+
+def crop(photo, box, grow=(0.8, 0.9)):
+    """사진에서 상자(쪽의 0~1000 비율) 둘레를 넉넉히 잘라 키운 JPEG. 고쳐 쓴 값은 칸 위·아래에 적히기도 해서 세로로 더 넓힌다."""
+    from PIL import Image, ImageDraw, ImageOps
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(photo))).convert("RGB")
+    W, H = img.size
+    x0, y0, x1, y1 = box
+    dx, dy = (x1 - x0) * grow[0], (y1 - y0) * grow[1]
+    L, T = max(0, round((x0 - dx) * W / 1000)), max(0, round((y0 - dy) * H / 1000))
+    part = img.crop((L, T, min(W, round((x1 + dx) * W / 1000)), min(H, round((y1 + dy) * H / 1000))))
+    ImageDraw.Draw(part).rectangle((round(x0 * W / 1000) - L, round(y0 * H / 1000) - T, round(x1 * W / 1000) - L,
+                                    round(y1 * H / 1000) - T), outline=(220, 30, 30), width=max(2, part.width // 200))  # 읽을 칸
+    if part.width < 600:
+        part = part.resize((600, round(part.height * 600 / part.width)))
+    out = io.BytesIO()
+    part.save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
+def reread_cell(t, model, label, value, photo, box):
+    """읽기 애매한 칸 하나를 크게 잘라 다시 읽는다(생각 없이). 가운데 칸에 마지막으로 적힌 값과, 줄 그어 지운 값."""
+    part = {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                        "data": base64.standard_b64encode(crop(photo, box)).decode()}}
+    ask = (f"표의 한 칸을 크게 자른 사진이에요. 빨간 상자 칸('{label}')에 적힌 값을 읽어 주세요. 상자 밖 다른 줄·다른 칸의 값은 읽지 마세요. 앞서 한 장 전체를 보고는 '{value}'(으)로 읽었어요.\n"
+           "- value: 그 칸의 값. 적힌 값에 줄을 긋거나 덧칠해 지우고 위·옆·아래에 새로 적었으면 새로 적은 값(고쳐 적은 글씨는 상자 위아래로 조금 삐져나올 수 있어요). 비었으면 null.\n"
+           "- crossed: 줄 그어 지운 값. 없으면 null.\n"
+           "- unsure: 그래도 헷갈리면 true. 이웃 칸의 값을 옮기거나 지어내지 마세요. 숫자는 단위 없이 적힌 그대로.")
+    return ask_json(t, model, [part, {"type": "text", "text": ask}], ZOOM, f"[칸 다시 읽기 {label}] {ask}", effort="off")
 
 
 # ---- B 스키마 추천 ----
