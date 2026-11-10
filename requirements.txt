@@ -18,3 +18,5 @@ pillow==13.0.0
 pypdfium2==5.14.0
 # 사진 속 글줄의 정확한 위치를 찾는 OCR 모델(PP-OCRv5 검출·한국어 인식 ONNX)을 CPU에서 돌린다. 모델 파일은 `python -m core.ocr` 로 받는다 — core/ocr.py
 onnxruntime==1.31.1
+# 사진 속 표의 가로·세로 선을 찾아 표 칸의 자리를 정한다(Apache 2.0, 화면 없는 서버용) — core/grid.py
+opencv-python-headless==5.0.0.93

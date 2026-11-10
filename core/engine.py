@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import db, llm, ocr
+from . import db, grid, llm, ocr
 
 DATA = db.ROOT / "data"
 try:  # 올린 파일 폴더. 코드 폴더에 쓸 수 없는 서버(Streamlit Cloud)에서는 임시 폴더에 둔다
@@ -760,6 +760,48 @@ def auto_settle(t, sid=None):
         a.patch("source_inputs", {"auto": True}, id=f"eq.{sid}")
 
 
+def place_grid(sheet, found, g):
+    """표 칸 상자를 표 선 격자(core/grid.py)에서 가져온다. 사진에 한 번만 나오는 글(인쇄된 항목 이름 등)이 OCR 로 또렷하게 잡힌 칸을
+    기준으로 그 줄의 세로 자리와 그 열이 몇째 칸인지 정하고, 기준이 없는 줄은 앞뒤 줄 사이로, 기준이 없는 열(손글씨 칸 등)은
+    읽은 열 순서대로 이어 센다. 격자에서 칸을 찾지 못한 칸은 OCR 상자 그대로 둔다."""
+    from collections import Counter
+    key = lambda v: re.sub(r"[\s,.·]", "", str(v or "")).lower()
+    med = lambda xs: sorted(xs)[len(xs) // 2]
+    ocr_n = Counter(key(l["text"]) for l in found)
+    vals = Counter(key(c["value"]) for r in sheet["rows"] for c in r["cells"])
+    at = {key(l["text"]): l["box"] for l in found}
+    ys, cols = {}, {}
+    for i, r in enumerate(sheet["rows"]):
+        for c in r["cells"]:
+            k = key(c["value"])
+            if len(k) < 2 or ocr_n.get(k) != 1 or vals[k] != 1 or g.straddles(at[k]):
+                continue
+            _, C, (x, y) = g.where(at[k])
+            ys.setdefault(i, []).append(y)
+            cols.setdefault(c["label"], []).append(C)
+    if len(ys) < 2 or not cols:
+        return
+    Y = {i: med(v) for i, v in ys.items()}
+    known = sorted(Y)
+    def y_of(i):
+        lo, hi = [k for k in known if k < i], [k for k in known if k > i]
+        a, b = (lo[-1], hi[0]) if lo and hi else ((known[-2], known[-1]) if lo else (known[0], known[1]))
+        return Y[a] + (Y[b] - Y[a]) * (i - a) / (b - a)
+    order = [l for l in sheet.get("columns") or [] if l]
+    Cn = {l: med(v) for l, v in cols.items()}
+    def col(l):
+        if l in Cn:
+            return Cn[l]
+        k = min((x for x in Cn if x in order), key=lambda x: abs(order.index(x) - order.index(l)), default=None) if l in order else None
+        return Cn[k] + order.index(l) - order.index(k) if k else None
+    for i, r in enumerate(sheet["rows"]):
+        y = Y.get(i) if i in Y else y_of(i)
+        for c in r["cells"]:
+            C = col(c["label"])
+            if C is not None and (b := g.cell_at(y, C)):
+                c["box"] = b
+
+
 def zoom_unsure(t, model, photo, cells):
     """읽기 애매한 표 칸은 그 둘레를 크게 잘라 AI에게 한 번 더 읽힌다(동시에). 두 판단이 같으면 또렷한 값으로 두고,
     다르면 다시 읽은 값을 값으로, 처음 값을 후보로 두어 사람에게 묻는다. 다시 읽기가 실패하거나 헷갈리면 처음 그대로."""
@@ -796,6 +838,7 @@ def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
     from concurrent.futures import ThreadPoolExecutor
     pool = ThreadPoolExecutor(4)
     seen = pool.submit(ocr.lines, photo) if not name.lower().endswith(".pdf") else None
+    table = pool.submit(grid.lines, photo) if seen else None  # 표 선(칸 자리). OCR 과 함께 돌아 기다림을 늘리지 않는다
     saved = pool.submit(save_source, copy_of(t), "사진", name, photo)
     known = pool.submit(load, copy_of(t))
     early = {}
@@ -843,6 +886,11 @@ def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
         cells = [c for c in [*sheet["doc_fields"], *(c for row in sheet["rows"] for c in row["cells"])] if filled(c["written"])]
         for c, b in zip(cells, ocr.place_all([(c["written"], box(c.get("box")), c["label"].strip()) for c in cells], found)):
             c["box"] = [round(v) for v in b] if b else None
+        try:
+            if g := table.result():
+                place_grid(sheet, found, g)
+        except Exception as e:  # 표 선을 못 찾아도 OCR 상자로 계속한다
+            print(f"표 선 찾기 실패: {type(e).__name__}: {e}", flush=True)
 
     if not name.lower().endswith(".pdf"):
         zoom_unsure(t, model, photo, [c for row in sheet["rows"] for c in row["cells"]])
