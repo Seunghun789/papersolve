@@ -1,4 +1,4 @@
-# 진행 현황 — papersolve
+# 진행 현황 — passo
 
 ## 지금 단계
 
@@ -9,7 +9,7 @@
 - `PRD.md`, `idea/`(topic·scope·ipo·user·flow), `tasks.md`, `build-decisions.md`, `db/schema.sql`
 - 코드: `app.py`(화면 11개), `core/db.py`, `core/llm.py`, `core/ocr.py`, `core/engine.py`, `eval/grade.py`(정답지 채점)
 - Supabase: 표 14개 + `ai_logs`. 이전 표는 `legacy` 스키마에 보관
-- 더미 데이터: 제조 설비 점검(`dummy/papersolve-sample-records.csv`, `dummy/photos/`), 생산 검사·유통 재고·공인중개사 메모(`dummy/samples/*/records.csv`, `photos/`), 더미 계정 내보내기(`dummy/db/`)
+- 더미 데이터: 제조 설비 점검(`dummy/passo-sample-records.csv`, `dummy/photos/`), 생산 검사·유통 재고·공인중개사 메모(`dummy/samples/*/records.csv`, `photos/`), 더미 계정 내보내기(`dummy/db/`)
 - 더미 계정 4개는 앱에서 고를 수 없고 주소로만 연다: `?a=1` 유통 재고, `?a=2` 중개 메모, `?a=3` 생산 검사, `?a=4` 제조 점검
 
 ## 실행

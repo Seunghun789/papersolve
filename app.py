@@ -4041,7 +4041,7 @@ def landing():
     if st.session_state.get("landing") in ("login", "signup"):
         st.html(LOGIN)
         with st.container(key="ps_top_login"):  # 로고 자리를 랜딩 머리줄과 같게(높이 71px 가운데)
-            st.button("paper**solve**", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
+            st.button("passo", key="back", type="tertiary", on_click=lambda: st.session_state.update(landing=None))
         left, right = st.columns(2, gap="xlarge", vertical_alignment="center")  # 오른쪽 네 카드를 왼쪽 글·입력 칸의 세로 가운데에
         with left:
             st.markdown('<div class="ps-hero"><h1>손으로 적은 기록을 찍으면<br>표 · 챙길 일 · 답이 돼요</h1>'
@@ -4072,7 +4072,7 @@ def landing():
     top = st.container(key="ps_top")  # 스크롤해도 위에 붙어 있는 머리줄
     with top:
         logo, cases, docs, about, _, login = st.columns([190, 116, 92, 92, 583, 151], gap=None, vertical_alignment="center")  # 1224px 중 로고 190 · 메뉴 셋 · 버튼 151
-        logo.button("paper**solve**", key="logo", type="tertiary")
+        logo.button("passo", key="logo", type="tertiary")
         with cases.popover("활용 사례", type="tertiary"):
             for cid, name, desc in CASES:
                 st.button(name, key=f"case_{cid}", help=desc, on_click=see_case, args=(cid,), width="stretch")
@@ -4384,7 +4384,7 @@ def join(inv, uid):
 
 def invite_page(token, uid):
     """초대 링크로 연 화면: 어느 조직의 어느 워크스페이스에 어떤 역할로 들어가는지 보이고 [참여하기]."""
-    st.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
+    st.markdown('<div class="ps-logo">passo</div>', unsafe_allow_html=True)
     inv = db.get("invites", token=f"eq.{token}", expires_at=f"gt.{datetime.datetime.now(datetime.timezone.utc).isoformat()}")
     if not inv:
         st.warning("초대한 사람에게 새 링크를 받아 주세요.", title="초대 링크가 만료됐거나 없어요")
@@ -4828,7 +4828,7 @@ waiting = len(engine.pending(tenant, engine.CHECK)) if tenant else 0
 if "page" not in st.session_state:  # 기록이 있으면 홈부터, 없으면 올리기부터
     st.session_state.page = "홈" if K["types"] else "올리기"
 with st.sidebar:
-    st.markdown('<div class="ps-logo">paper<b>solve</b></div>', unsafe_allow_html=True)
+    st.markdown('<div class="ps-logo">passo</div>', unsafe_allow_html=True)
     if uid:  # 로고 아래 워크스페이스 고르기: 이름 칸과 [+], 펼치면 검색·조직별 목록·생성·조직 관리
         spaces = my_spaces(uid)
         here = next((x for x in spaces if x["id"] == tid), None)

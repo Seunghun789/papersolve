@@ -21,7 +21,7 @@ from core import db, engine, llm
 
 ROOT = Path(__file__).resolve().parent.parent
 SETS = [  # 사진 폴더, 정답 CSV, 사진과 줄을 잇는 칸, 종이에 없는 칸
-    {"name": "설비 점검", "photos": "dummy/photos", "csv": "dummy/papersolve-sample-records.csv",
+    {"name": "설비 점검", "photos": "dummy/photos", "csv": "dummy/passo-sample-records.csv",
      "key": "원본 사진", "skip": ["압력", "습도(%)", "원본 사진"]},
     {"name": "생산 검사", "photos": "dummy/samples/production-inspection/photos",
      "csv": "dummy/samples/production-inspection/records.csv", "key": "원본 사진", "skip": ["원본 사진"]},
