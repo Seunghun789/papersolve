@@ -1,4 +1,4 @@
-"""papersolve 웹 프로토타입. 화면만 담고, 규칙은 core/engine.py, Claude 호출은 core/llm.py 에 있다."""
+"""passo 웹 프로토타입. 화면만 담고, 규칙은 core/engine.py, Claude 호출은 core/llm.py 에 있다."""
 import base64
 import copy
 import datetime
@@ -20,7 +20,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from core import db, engine, llm
 
-st.set_page_config(page_title="papersolve", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="passo", layout="wide", initial_sidebar_state="expanded")
 # 색은 역할 이름으로 여기에만 둔다. 버튼 채움색은 .streamlit/config.toml 의 primaryColor 와 같은 값이다.
 COLOR = {
     "accent_bg": "#F0FDFA", "accent_text": "#115E59",          # 고른 메뉴
@@ -523,7 +523,7 @@ export default function (component) {
   }
 }
 """
-OVERLAY = st.components.v2.component("papersolve_overlay", html='<div class="wrap"><div class="ov"></div></div>', css="""
+OVERLAY = st.components.v2.component("passo_overlay", html='<div class="wrap"><div class="ov"></div></div>', css="""
 .wrap { text-align: center; }
 .ov { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
 .ov img { display: block; max-width: 100%; height: auto; }
@@ -2490,7 +2490,7 @@ export default function (component) {
   }
 }
 """
-KG = st.components.v2.component("papersolve_kg", html="""
+KG = st.components.v2.component("passo_kg", html="""
 <div class="wrap">
   <div id="kg"></div>
   <div id="card" class="card" hidden></div>
@@ -3029,7 +3029,7 @@ export default function (component) {
   }
 }
 """
-CAL = st.components.v2.component("papersolve_calendar", html='<div class="cal"></div>', css="""
+CAL = st.components.v2.component("passo_calendar", html='<div class="cal"></div>', css="""
 .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid #E4E4E7; border-left: 1px solid #F0F0F2;
   font: 13px/1.4 var(--st-font, sans-serif); color: #1F1F1F; }
 .hd { padding: 6px 8px; font-size: 12px; color: #71717A; border-bottom: 1px solid #E4E4E7; border-right: 1px solid #F0F0F2; }
