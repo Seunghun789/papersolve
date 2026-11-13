@@ -8,7 +8,8 @@ export async function apiResponse(path: string, init: RequestInit = {}) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) redirect('/login');
   const r = await fetch(process.env.PASSO_API_URL! + path, {
-    ...init, cache:'no-store', redirect:'error', signal: AbortSignal.timeout(20000),
+    // Render Free can take about a minute to wake after becoming idle.
+    ...init, cache:'no-store', redirect:'error', signal: AbortSignal.timeout(90000),
     headers:{'Content-Type':'application/json',...init.headers,'Authorization':`Bearer ${session.access_token}`},
   });
   if (r.status === 401) redirect('/login?error=session');

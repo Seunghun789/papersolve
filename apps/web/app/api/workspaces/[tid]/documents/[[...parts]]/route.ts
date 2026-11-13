@@ -1,5 +1,6 @@
 import { apiResponse } from '../../../../../../lib/api';
 export const dynamic='force-dynamic';
+export const maxDuration=300;
 type Context={params:Promise<{tid:string,parts?:string[]}>};
 async function forward(request:Request,context:Context) {
  const {tid,parts=[]}=await context.params;

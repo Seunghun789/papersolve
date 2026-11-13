@@ -3,6 +3,7 @@ import { configured } from '../lib/supabase';
 import { editCell, logout } from './actions';
 import Documents from './documents';
 export const dynamic='force-dynamic';
+export const maxDuration=300;
 type Workspace = {id:number,title:string,role:string};
 type Cell = {raw:unknown,value:unknown,status:string};
 type Row = {id:number,type_name:string,occurred_at:string,data:Record<string,Cell|string|number|null>};

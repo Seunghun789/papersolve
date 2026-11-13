@@ -17,3 +17,7 @@ RUN pip install --no-cache-dir -r backend/worker-requirements.txt
 RUN python -m core.ocr && chown -R app:app /app/models
 USER app
 CMD ["python", "-m", "backend.worker"]
+
+# The default cloud build must exclude the heavyweight OCR worker dependencies.
+# Local Compose selects the worker stage explicitly.
+FROM api AS default
