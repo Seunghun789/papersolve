@@ -73,7 +73,7 @@ def main():
     page.locator('.table-cell').first.click();page.locator('.evidence-image img').wait_for();page.locator('.evidence-image img').evaluate('(img)=>img.decode()')
     page.screenshot(path=str(out/'new-evidence.png'),full_page=True)
     check('existing record cell opens real source image',page.locator('.evidence-image img').count()==1)
-    page.goto(a.web+'/?workspace=105&view=upload');page.get_by_role('tab',name='올린 종이 4',exact=True).click();page.locator('.paper-row').first.wait_for();page.locator('.thumb img').evaluate_all('(imgs)=>Promise.all(imgs.map(i=>i.decode()))');page.screenshot(path=str(out/'new-papers.png'),full_page=True)
+    page.goto(a.web+'/?workspace=105&view=upload');page.get_by_role('tab',name='올린 종이 4',exact=True).click();page.locator('.paper-row').first.wait_for();page.locator('.paper-group[open] .thumb img').evaluate_all('(imgs)=>Promise.all(imgs.map(i=>i.decode()))');page.screenshot(path=str(out/'new-papers.png'),full_page=True)
     page.goto(a.web+'/?workspace=100&view=review');page.locator('.review-card').wait_for();page.wait_for_timeout(1000);page.get_by_role('button',name='모아 보기',exact=True).click()
     for _ in range(4):
      target=page.locator('.review-list button').filter(has_text='애매한 값').first
@@ -117,8 +117,8 @@ def main():
    check('no browser JavaScript exceptions',not errors,errors=errors)
    browser.close()
   report['status']='passed'
- except Exception as e:
-  report['status']='failed';report['error']=str(e);raise
+ except BaseException as e:
+  report['status']='interrupted' if isinstance(e,KeyboardInterrupt) else 'failed';report['error']=str(e) or type(e).__name__;raise
  finally:
   if proc:proc.terminate();proc.wait(timeout=20)
   failures=[]
