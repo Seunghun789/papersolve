@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import db, grid, llm, ocr
+from .record_cells import cells_for, edit_data, extracted_data
 
 DATA = db.ROOT / "data"
 try:  # 올린 파일 폴더. 코드 폴더에 쓸 수 없는 서버(Streamlit Cloud)에서는 임시 폴더에 둔다
@@ -313,7 +314,8 @@ def entity(K, T):
 def resolve(K, T, data):
     """읽은 이름 → 칸으로 풀어 한 줄로. '@'로 시작하는 칸은 대상 정보로 옮겨 간 칸이라 대상에서 붙인다."""
     row = {}
-    for label, v in data.items():
+    for label, cell in cells_for(data).items():
+        v = cell.value
         p = K["alias"].get((T, label))
         if p and not p.startswith("@") and row.get(p) is None and filled(v):
             row[p] = v
@@ -874,7 +876,7 @@ def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
 
     for c in [*sheet["doc_fields"], *(c for row in sheet["rows"] for c in row["cells"])]:
         # AI가 읽은 뜻(날짜 · 숫자)을 적힌 글과 코드가 맞춰 본다. 맞으면 그 값을, 아니면 적힌 글을 넣고 읽기 애매한 칸으로 묻는다
-        c["written"] = c["value"].strip()
+        c["written"] = c.get("source_raw", c["value"])
         c["value"], ok = checked(c["value"], c.get("normal"))
         if not ok:
             c["uncertain"] = True
@@ -909,18 +911,17 @@ def ingest_photo(t, model, name, photo, say=lambda step, **info: None):
                              **({"crossed": c["crossed"].strip()} if (c.get("crossed") or "").strip() else {})})  # 줄 그어 지우고 고쳐 쓴 값
 
     for c in sheet["doc_fields"]:
-        if filled(c["value"]):
-            keep(c, None)
+        keep(c, None)
     day = (to_date(sheet["occurred_at"]) or date.today()).isoformat()
-    doc = {c["label"].strip(): c["value"].strip() for c in sheet["doc_fields"] if filled(c["value"])}
+    doc = {c["label"].strip(): c["value"] for c in sheet["doc_fields"]}
     doc_unsure = [c["label"].strip() for c in sheet["doc_fields"] if c["uncertain"] and filled(c["value"])]
     rows, unsure = [], []
     for row in sheet["rows"]:
-        cells = [c for c in row["cells"] if filled(c["value"])]
-        if cells:
+        cells = row["cells"]
+        if cells or sheet.get("columns"):
             for c in cells:
                 keep(c, len(rows))
-            rows.append({**doc, **{c["label"].strip(): c["value"].strip() for c in cells}})
+            rows.append(extracted_data([*sheet["doc_fields"], *cells], sheet.get("columns", [])))
             unsure.append(doc_unsure + [c["label"].strip() for c in cells if c["uncertain"]])
     if not rows:
         delete_source(t, sid)
@@ -975,9 +976,9 @@ def _framed(raw):
 def read_tables(name, content):
     """CSV·엑셀 원본을 표 목록 [(이름, 표)]로. 값은 모두 글자 그대로. 엑셀은 값이 있는 모든 시트."""
     if not name.lower().endswith(".xlsx"):
-        return [(Path(name).stem, pd.read_csv(io.BytesIO(content), dtype=str).fillna(""))]
+        return [(Path(name).stem, pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False).fillna(""))]
     out = []
-    for sheet, raw in pd.read_excel(io.BytesIO(content), sheet_name=None, header=None, dtype=str).items():
+    for sheet, raw in pd.read_excel(io.BytesIO(content), sheet_name=None, header=None, dtype=str, keep_default_na=False).items():
         df = _framed(raw)
         if len(df):
             out.append((str(sheet), df))
@@ -1010,7 +1011,7 @@ def ingest_table(t, model, name, content, say=lambda step, **info: None):
         dates = [c for c in df if c not in photo_cols and infer_dtype(df[c]) == "date"]
         rows, days, photos = [], [], []
         for _, r in df.iterrows():
-            rows.append({c: r[c].strip() for c in df if c not in photo_cols and filled(r[c])})
+            rows.append({c: r[c] for c in df if c not in photo_cols})
             days.append(((to_date(r[dates[0]]) if dates else None) or date.today()).isoformat())
             photo = r[photo_cols[0]] if photo_cols else ""
             photos.append(photo if photo and (DATA / photo).exists() else None)
@@ -1211,7 +1212,7 @@ def schema_plan(t, model, K, title, rows, labels=None):
         return {"type_name": known[0], "props": [], "links": []}, {}
     if not known and (again := split_before(t, K, labels)):
         return again, {}
-    columns = "\n".join(f"- {l}: 예 {list(dict.fromkeys(r[l] for r in rows if l in r))[:4]}" for l in labels)
+    columns = "\n".join(f"- {l}: 예 {list(dict.fromkeys(str(r[l]) for r in rows if l in r))[:4]}" for l in labels)
     try:
         waiting = [q["payload"]["type"] for q in pending(t, ["종류"])]
         return llm.propose_schema(t, model, title, columns, schema_text(K, values=True), waiting, space_text(t)), {}
@@ -1249,7 +1250,7 @@ def stage(t, model, sid, title, rows, unsure, days, photos, paper=False, doc_uns
         props.append({"label": l, "name": name, "dtype": dtypes[l], "unit": g.get("unit"), "is_entity": is_entity,
                       "ref_class": ref if dtypes[l] in ("text", "choice") else None, "similar_to": g.get("similar_to")})
     links = [l for l in plan["links"] if l["from"] in names and l["to"] in names and l["from"] != l["to"]]
-    samples = {l: list(dict.fromkeys(r[l] for r in rows if l in r))[:4] for l in labels}
+    samples = {l: list(dict.fromkeys(str(r[l]) for r in rows if l in r))[:4] for l in labels}
 
     if T in K["types"]:
         existing = set(own(K, T))
@@ -1471,13 +1472,13 @@ def answer_same(t, q, same):
 
 def answer_value(t, q, value=None, empty=False):
     """value 가 없거나 읽은 값과 같으면 [네, 맞아요]. 종이 전체에 한 번 적힌 칸(record_ids)은 그 종이의 기록 모두를 고친다.
-    empty: [해당 없음]. 빈칸·사선처럼 적힌 것이 없는 칸이라 기록에서 그 칸의 값을 뺀다."""
+    empty: [해당 없음]. 명시적으로 빈칸으로 고치며 누락과 구분한다."""
     P = q["payload"]
     if empty:
         for rid in P.get("record_ids") or [P["record_id"]]:
             rec = (t.get("records", select="data,uncertain", id=f"eq.{rid}") or [None])[0]
             if rec is not None:
-                t.patch("records", {"data": {k: v for k, v in rec["data"].items() if k != P["label"]},
+                t.patch("records", {"data": edit_data(rec["data"], {P["label"]: ""}),
                                     "uncertain": [u for u in rec["uncertain"] if u != P["label"]]}, id=f"eq.{rid}")
         return done(t, q, "고침", value="")
     if value is not None and str(value).strip() == str(P["value"] or "").strip():
@@ -1488,7 +1489,7 @@ def answer_value(t, q, value=None, empty=False):
             continue
         body = {"uncertain": [u for u in rec["uncertain"] if u != P["label"]]}
         if value is not None:
-            body["data"] = {**rec["data"], P["label"]: value}
+            body["data"] = edit_data(rec["data"], {P["label"]: value})
         t.patch("records", body, id=f"eq.{rid}")
     done(t, q, "고침" if value is not None else "승인", value=value if value is not None else P["value"])
 
@@ -1579,7 +1580,7 @@ def paper_cells(t, K, sid, spans, autos=()):
             note = next((over[r["id"]][label] for r in mine if label in over[r["id"]]), None)
             value = mine[0]["data"].get(label, s["value"]) if mine else s["value"]
             note = note or (q and q["payload"].get("over"))  # 맡긴 종이에서 기준을 넘어 묻는 값은 빨강
-            out.append({"key": f"{label}#{i}", "label": label, "value": value, "span": s, "qid": q["id"] if q else None,
+            out.append({"key": f"{label}#{i}", "label": label, "value": value, "cell_status": cells_for(mine[0]["data"], [label])[label].status if mine else None, "span": s, "qid": q["id"] if q else None,
                         "state": "넘음" if note else "애매" if q else "또렷", "note": note, "rec": mine[0]["id"] if mine else None})
     return out
 
@@ -1596,7 +1597,7 @@ def answer_read(t, q, fixes=None):
     for rid, vals in fixes.items():
         rec = (t.get("records", select="data,uncertain", id=f"eq.{rid}") or [None])[0]
         if rec:
-            t.patch("records", {"data": {**rec["data"], **vals}, "uncertain": [u for u in rec["uncertain"] if u not in vals]},
+            t.patch("records", {"data": edit_data(rec["data"], vals), "uncertain": [u for u in rec["uncertain"] if u not in vals]},
                     id=f"eq.{rid}")
     for u in pending(t, ["애매한 값"]):
         P = u["payload"]
@@ -2554,8 +2555,8 @@ def cols_text(K):
 def write_record(t, model, T, day, values):
     """직접 적은 기록 1개를 바로 확정한다. 확정한 칸 이름으로 적으니 칸은 묻지 않고,
     처음 보는 대상과 대상 정보와 다른 값만 카드로 묻는다."""
-    data = {k: v if isinstance(v, (int, float)) else str(v).strip() for k, v in values.items() if filled(v)}
-    if not data:
+    data = dict(values)
+    if not any(filled(v) for v in data.values()):
         raise ValueError("적은 칸이 없어요.")
     K = load(t)
     src = t.post("source_inputs", {"channel": "직접 입력", "name": f"{T} · 직접 입력"})
@@ -2597,6 +2598,10 @@ def match(df, conds, today=None):
             else:
                 hit = {">": left > right, "<": left < right, ">=": left >= right, "<=": left <= right,
                        "=": left == right, "!=": left != right}[op]
+        if op in ("=", "!=", ">", "<", ">=", "<="):
+            hit = pd.Series(hit, index=df.index) & col.notna()
+            if c.get("value_prop"):
+                hit &= df[c["value_prop"]].notna()
         mask &= pd.Series(hit, index=df.index).fillna(False).astype(bool)
     return df[mask]
 
@@ -3308,6 +3313,11 @@ def run_tool(K, name, inp):
             raise ValueError(f"'{group}' 칸이 없어요. 칸: {prop_names(K, T)}")
         result = {str(k): calc(v) for k, v in df.groupby(group)} if group else calc(df)
         out = {"결과": result, "센 줄 수": len(df), **hint}
+        if fn != "count":
+            out["확인된 수량 칸"] = int(df[prop].notna().sum())
+            out["미확정 칸"] = int(df[prop].isna().sum())
+            if group:
+                out["그룹별 미확정 칸"] = {str(k): int(v[prop].isna().sum()) for k, v in df.groupby(group)}
         if group and (left := (df[group].isna() | df[group].map(lambda v: not filled(v))).sum()):
             out["분류 안 된 줄"] = int(left)  # 화면에 "분류 안 된 기록 N줄은 세지 않았어요"
         return out, [f"{tag}{i}" for i in df[key].head(20)]

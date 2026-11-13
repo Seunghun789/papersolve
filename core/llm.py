@@ -105,9 +105,9 @@ LINK = obj(**{"from": S, "to": S, "kind": {"type": "string", "enum": LINK_KINDS}
 
 # 답은 짧게 받는다: 표의 열 이름과 열의 가로 범위는 한 번만, 줄마다 값만 열 순서대로. 뜻(normal)과 헷갈림(unsure)은 그런 칸만 notes 에.
 # 칸마다 이름·뜻·상자를 되풀이하면 출력 토큰이 다섯 배쯤 늘어 그만큼 늦게 읽는다. spread 가 칸마다 하나씩 편 모양으로 바꾼다.
-NOTE = obj(label=S, normal=nullable(S), unsure=B, candidates=array(S), crossed=nullable(S))
+NOTE = obj(label=S, normal=nullable(S), unsure=B, unreadable=B, candidates=array(S), crossed=nullable(S))
 EXTRACT = obj(title=S, occurred_at=nullable(S),
-              doc_fields=array(obj(label=S, value=S, normal=nullable(S), unsure=B, candidates=array(S), crossed=nullable(S), page=I, box=array(I))),
+              doc_fields=array(obj(label=S, value=nullable(S), normal=nullable(S), unsure=B, unreadable=B, candidates=array(S), crossed=nullable(S), page=I, box=array(I))),
               columns=array(obj(label=S, x=array(I))),
               rows=array(obj(page=I, y=array(I), values=array(nullable(S)), notes=array(NOTE))))
 EXTRACT_PROMPT = (
@@ -124,18 +124,19 @@ EXTRACT_PROMPT = (
     "- label 은 종이에 인쇄되거나 적힌 칸 이름 그대로. 표에서는 열 이름을 쓰고 행 이름을 붙이지 마세요.\n"
     "- 값은 적힌 그대로. 숫자는 단위 글자(kg, ℃, 개 등) 없이 숫자만 적고, ±10%·이상·이하·~처럼 값의 뜻을 바꾸는 표시는 그대로 두세요. "
     "인쇄된 값(기준, 최소 재고 등)도 칸이면 넣으세요. "
-    "값이 없다는 표시(-, 빈칸, 칸을 가로지르는 사선·X, 줄을 그어 지우고 새로 적지 않은 칸)는 values 에서 null, doc_fields 에서는 그 칸을 빼세요. "
+    "하이픈은 문자열 -, 눈으로 확인한 빈칸은 빈 문자열, 수량 0은 문자열 0으로 각각 보존하세요. 사선·X 등 다른 표시는 적힌 그대로 보존하세요. 확인할 수 없는 값은 null이며 빈칸으로 추측하지 마세요. doc_fields도 같은 정책을 사용하고 관찰한 칸을 생략하지 마세요. "
     "빈 칸에 이웃 칸의 값을 옮겨 적지 마세요. 없는 값을 지어내지 마세요.\n"
     "- 고쳐 쓴 칸: 적힌 값에 줄을 긋거나 덧칠해 지우고 그 위·옆·아래에 새 값을 적었으면, 새로 적은 값이 그 칸의 값이에요. "
     "지운 값은 crossed 에 적으세요. 고쳐 쓰지 않은 칸은 crossed 가 null. 지운 값을 candidates 에 넣지 마세요.\n"
     "- 표에서 세로로 합쳐진 칸(한 값이 여러 줄에 걸쳐 한 번만 적힌 칸, 예: 기종 'A2K'가 1~5번 줄에 걸쳐 있음)은 빈 칸이 아니에요. "
-    "걸친 줄마다 그 값을 적으세요. null 은 정말 비었거나 -·사선으로 비운 칸에만 써요.\n"
+    "걸친 줄마다 그 값을 적으세요. null은 값을 확인할 수 없을 때만 써요.\n"
     "- normal: 날짜가 YYYY-MM-DD 가 아닌 모양으로 적혔거나('2026년 12월 14일'·'12/14(월) 오후 3시'·'26.12.14') "
     "숫자가 억·만·천으로 적혔을 때('1억 3,950만원')만 그 뜻을 적고, 그 밖에는 null. 날짜는 YYYY-MM-DD(시각도 적혀 있으면 YYYY-MM-DD HH:MM, "
     "해가 안 적혔으면 occurred_at 의 해), 숫자는 쉼표·단위 없는 숫자(139500000). 적힌 것만 바꿔 쓰고 계산하거나 지어내지 마세요.\n"
+    "- unreadable: 글씨가 있으나 판독할 수 없으면 true와 unsure=true를 적고 value는 null로 두세요. 그 외에는 false.\n"
     "- unsure: 글씨가 흐리거나 헷갈리면 true, candidates 에 그 글씨가 달리 읽힐 수 있는 값 1~3개(value 와 다른 것, 그럴 법한 순서로). "
     "또렷하면 false 와 빈 목록. 글씨 모양으로만 고르고 계산하거나 지어내지 마세요.\n"
-    "- 표의 칸에 normal·unsure·crossed 가 있으면 그 줄의 notes 에 칸 이름(label)과 함께 적으세요. 셋 다 없는 칸은 notes 에 넣지 않아요.\n"
+    "- 표의 칸에 normal·unsure·unreadable·crossed 가 있으면 그 줄의 notes 에 칸 이름(label)과 함께 적으세요. 모두 없는 칸은 notes 에 넣지 않아요.\n"
     "- x, y, box 는 그 쪽의 왼쪽 위가 0, 0, 오른쪽 아래가 1000, 1000 인 비율 좌표."
 )
 
@@ -146,13 +147,14 @@ def spread(sheet):
     표가 아닌 종이는 doc_fields 를 기록 한 줄로 둔다(예전처럼 메모 한 장은 기록 하나)."""
     def cell(label, value, note, page, box):
         note = note or {}
-        return {"label": label, "value": value, "normal": note.get("normal") or "", "uncertain": bool(note.get("unsure")),
+        return {"label": label, "value": "" if value is None else str(value), "source_raw": value,
+                "unreadable": bool(note.get("unreadable")), "normal": note.get("normal") or "", "uncertain": bool(note.get("unsure")),
                 "candidates": note.get("candidates") or [], "crossed": note.get("crossed") or "", "page": page or 1, "box": box}
 
     def span(v):
         return v if isinstance(v, list) and len(v) == 2 else None
 
-    doc = [cell(f["label"], f["value"], f, f.get("page"), f.get("box")) for f in sheet.get("doc_fields") or [] if str(f.get("value") or "").strip()]
+    doc = [cell(f["label"], f["value"], f, f.get("page"), f.get("box")) for f in sheet.get("doc_fields") or []]
     cols, rows = sheet.get("columns") or [], []
     for r in sheet.get("rows") or []:
         if len(r["values"]) != len(cols):  # 열과 값의 개수가 다르면 앞에서부터 맞춘다. 서버 로그에 남긴다
@@ -160,10 +162,9 @@ def spread(sheet):
         notes, y = {n["label"]: n for n in r.get("notes") or []}, span(r.get("y"))
         cells = []
         for c, v in zip(cols, r["values"]):
-            if v is not None and str(v).strip():
-                x = span(c.get("x"))
-                cells.append(cell(c["label"], v, notes.get(c["label"]), r.get("page"), [x[0], y[0], x[1], y[1]] if x and y else None))
-        if cells:
+            x = span(c.get("x"))
+            cells.append(cell(c["label"], v, notes.get(c["label"]), r.get("page"), [x[0], y[0], x[1], y[1]] if x and y else None))
+        if cells or cols:
             rows.append({"cells": cells})
     if not cols:  # 표가 아닌 종이: 적힌 칸 모두가 기록 한 줄
         rows, doc = ([{"cells": doc}] if doc else []), []

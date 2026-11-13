@@ -19,6 +19,7 @@ import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from core import db, engine, llm
+from core.record_cells import encode_record, decode_record, status_rows, LABELS
 
 st.set_page_config(page_title="passo", layout="wide", initial_sidebar_state="expanded")
 # 색은 역할 이름으로 여기에만 둔다. 버튼 채움색은 .streamlit/config.toml 의 primaryColor 와 같은 값이다.
@@ -81,6 +82,9 @@ section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-n
 section[data-testid="stSidebar"] [data-testid="stColumn"]:has(.st-key-new_space_plus) {flex: 0 0 40px !important; min-width: 40px; width: 40px;}
 section[data-testid="stSidebar"] [data-testid="stColumn"]:has([data-testid="stPopover"]) {flex: 1 1 0 !important; width: auto; min-width: 0;}  /* 줄어들 수 있어야 [+]가 사이드바 밖으로 밀리지 않는다 */
 section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {margin-top: 6px; gap: 0;}
+/* 좁은 화면에서도 바로가기 칸이 한 줄 안에서 같은 너비로 줄어들게 한다. */
+section[data-testid="stSidebar"] [data-testid="stColumn"]:has([class*="st-key-step"]) {flex: 1 1 0 !important; min-width: 0 !important; width: 0 !important;}
+
 section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 10px; min-height: 40px;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; height: 30px; padding: 0 12px;
   border-radius: 8px; width: 100%;}
@@ -558,8 +562,27 @@ def enabled(t):
     return RUN["autos"]
 
 
+def show_cell_states(records, labels=(), numeric_labels=()):
+    rows = status_rows(records, labels)
+    unresolved = [r for r in rows if r["상태"] != "값"]
+    if unresolved:
+        st.caption(f"미확정 {len(unresolved)}칸 · '-'·빈칸·누락은 0으로 계산하지 않아요.")
+    # Totals are per field; unrelated units must never be added together.
+    with st.expander("셀 상태·원문 확인"):
+        for label in numeric_labels:
+            field_rows = [r for r in rows if r["칸"] == label]
+            nums = [engine.to_number(r["계산 값"]) for r in field_rows if r["상태"] == "값"]
+            nums = [n for n in nums if n is not None]
+            if nums:
+                st.caption(f"{label}: 확인된 수량 합계 {sum(nums):g} · 미확정 {sum(r['상태'] != '값' for r in field_rows)}칸")
+        st.dataframe(pd.DataFrame([{**r, "원문": None if r["원문"] is None else str(r["원문"]),
+                                   "계산 값": None if r["계산 값"] is None else str(r["계산 값"])} for r in rows]), hide_index=True)
+
+
 def cell_text(c):
     v = fmtv(c["value"])
+    if c.get("cell_status") and c["cell_status"] != "value":
+        v += " · " + LABELS[c["cell_status"]]
     return v + (" · 애매해요" if c["state"] == "애매" else " · 기준 넘음" if c["state"] == "넘음" else "")
 
 
@@ -852,6 +875,7 @@ def read_card(t, K, q):
     st.write(f"**이 종이에서 읽은 '{P['type']}' 기록 {len(recs)}줄이 맞나요?**")
     pos = {p["name"]: i for i, p in enumerate(K["props"].get(P["type"], []))}  # 확정한 칸 순서(DB의 JSON 은 순서를 지키지 않는다)
     labels = sorted(dict.fromkeys(l for r in recs for l in r["data"]), key=lambda l: pos.get(K["alias"].get((P["type"], l)), len(pos)))
+    show_cell_states(recs, labels, [l for l in labels if K["alias"].get((P["type"], l)) in engine.own(K, P["type"], "number")])
     orig = [(r["id"], r["data"]) for r in recs]
     df = pd.DataFrame([{l: "" if r["data"].get(l) is None else str(r["data"][l]) for l in labels} for r in recs])
     wait = [u for u in engine.pending(t, ["애매한 값"]) if u["source_input_id"] == sid]
@@ -1574,6 +1598,9 @@ def home(t, K):
         for T, tab in zip(K["types"], st.tabs(K["types"])):
             with tab:
                 df = engine.frame(K, T)
+                show_cell_states([r for r in K["records"] if r["type_name"] == T],
+                                 [l for (typ, l), prop in K["alias"].items() if typ == T and prop],
+                                 [l for (typ, l), prop in K["alias"].items() if typ == T and prop in engine.own(K, T, "number")])
                 nums = engine.prop_names(K, T, "number")
                 a_, b_, _, _ = engine.period_range(period())
                 seen = df[(df["날짜"] >= a_.isoformat()) & (df["날짜"] <= b_.isoformat())]
@@ -2244,7 +2271,7 @@ FN_KO = {"count": "줄 수", "sum": "합계", "avg": "평균", "min": "가장 �
 def understood(calls):
     """AI가 부른 조회 도구의 입력을 쉬운 말로: '기록 종류 설비 점검 · 진동 > 7 · 진동 가장 큰 값 · 설비별'."""
     out = []
-    for name, inp, *_ in calls:
+    for name, inp, *results in calls:
         if name == "saved":
             if inp.get("name"):
                 out.append(f"켜 둔 자동화·올린 지표: {inp['name']}")
@@ -2255,6 +2282,9 @@ def understood(calls):
         parts += [cond_text(c) for c in inp.get("where") or []]
         if name == "aggregate":
             parts.append(f"{inp.get('prop') or ''} {FN_KO.get(inp.get('fn'), '')}".strip())
+            result = results[0] if results and isinstance(results[0], dict) else {}
+            if "미확정 칸" in result:
+                parts.append(f"확인된 수량 {result['확인된 수량 칸']}칸 · 미확정 {result['미확정 칸']}칸")
             if inp.get("group_by"):
                 parts.append(f"{inp['group_by']}별")
         if (line := " · ".join(parts)) not in out:
@@ -2871,6 +2901,11 @@ def widget(K, spec, key, remove=None, t=None):
                 st.caption(f"{period()}에는 그릴 기록이 없어요.")
         else:
             st.metric(spec["title"], fmt(value), label_visibility="collapsed")
+            if spec["kind"] == "kpi" and spec.get("fn") != "count":
+                a, b, _, _ = engine.period_range(period())
+                selected = engine.match(engine.frame(engine.in_period(K, a, b), spec["type"]), spec.get("conditions"), b)
+                series = selected[spec["prop"]]
+                st.caption(f"확인된 수량 {int(series.notna().sum())}칸 · 미확정 {int(series.isna().sum())}칸")
             st.caption(f"{period()} · {engine.PERIODS[period()][0]} {fmt(prev)}")
             cond = " 그리고 ".join(cond_text(c) for c in spec.get("conditions") or [])
             st.caption(f"{spec['type']}{' · ' + cond if cond else ''}")
@@ -3971,13 +4006,15 @@ class Demo(db.Tenant):
             rows.sort(key=lambda r: (r.get(col) is None, r.get(col) if r.get(col) is not None else 0), reverse=how == "desc")
         rows = rows[:int(limit)] if limit else rows
         cols = select.split(",") if select and select != "*" else None
-        return copy.deepcopy([{c: r.get(c) for c in cols} if cols else r for r in rows])
+        result = copy.deepcopy([{c: r.get(c) for c in cols} if cols else r for r in rows])
+        return [decode_record(r) for r in result] if table == "records" else result
 
     def post(self, table, body, on_conflict=None, **params):
         self.waiting = None
         rows, out = self.tables.setdefault(table, []), []
         keys = [k for k in (on_conflict or "").split(",") if k and k != "tenant_id"]
         for r in (body if isinstance(body, list) else [body]):
+            r = encode_record(r) if table == "records" else r
             same = next((x for x in rows if keys and all(x.get(k) == r.get(k) for k in keys)), None)
             if same:
                 same.update(r)
@@ -3987,13 +4024,15 @@ class Demo(db.Tenant):
                    "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), **r}
             rows.append(new)
             out.append(copy.deepcopy(new))
+        if table == "records":
+            out = [decode_record(r) for r in out]
         return out if isinstance(body, list) else out[0]
 
     def patch(self, table, body, **params):
         self.waiting = None
         for r in self.tables.setdefault(table, []):
             if all(match(r, k, c) for k, c in params.items()):
-                r.update(copy.deepcopy(body))
+                r.update(copy.deepcopy(encode_record(body) if table == "records" else body))
 
     def drop_file(self, path):
         return False  # 활용 사례는 원본 파일을 지우지 않는다

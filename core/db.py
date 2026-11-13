@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
+from .record_cells import encode_record, decode_record
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -43,9 +44,14 @@ def together(fns):
 
 def call(method, table, params=None, body=None, prefer=None):
     headers = {**HEADERS, **({"Prefer": prefer} if prefer else {})}
+    if table == "records" and body is not None:
+        body = [encode_record(r) for r in body] if isinstance(body, list) else encode_record(body)
     res = session().request(method, API + table, headers=headers, params=params, json=body, timeout=20)
     res.raise_for_status()
-    return res.json() if res.content else None
+    result = res.json() if res.content else None
+    if table == "records" and result is not None:
+        result = [decode_record(r) for r in result] if isinstance(result, list) else decode_record(result)
+    return result
 
 
 def get(table, **params):
