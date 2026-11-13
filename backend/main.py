@@ -100,7 +100,13 @@ def health():
 
 @app.get('/v1/workspaces')
 async def workspaces(token=Depends(session), g=Depends(gateway)):
-    return await g.rpc(token, 'passo_workspaces')
+    spaces = await g.rpc(token, 'passo_workspaces')
+    if spaces:
+        titles = (await g.request(token, 'GET', '/rest/v1/tenants', params={
+            'select':'id,title', 'id':'in.('+','.join(str(w['id']) for w in spaces)+')'})).json()
+        display = {w['id']:w.get('title') or '내 워크스페이스' for w in titles}
+        for w in spaces: w['title'] = display.get(w['id'], '내 워크스페이스')
+    return spaces
 
 
 @app.get('/v1/workspaces/{tid}/records')

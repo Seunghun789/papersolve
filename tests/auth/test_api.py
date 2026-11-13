@@ -29,6 +29,7 @@ def client(monkeypatch):
             import json
             b=json.loads(req.content)
             return httpx.Response(200,json=[{'id':1,'data':b['changes']}] if b['rid']==1 else [])
+        if path=='/rest/v1/tenants': return httpx.Response(200,json=[{'id':1,'title':None}])
         if path=='/rest/v1/records':
             assert req.url.params['tenant_id']=='eq.1'
             assert req.url.params['order']=='id.asc'
@@ -131,3 +132,8 @@ def test_file_adapter_cannot_run_before_authorization(client,monkeypatch):
     assert c.get('/v1/workspaces/2/originals/uuid/a.png',headers=AUTH).status_code==403
     state['active']=False
     assert c.get('/v1/workspaces/1/originals/uuid/a.png',headers=AUTH).status_code==401
+
+
+def test_workspace_internal_name_is_not_displayed(client):
+    c,_,_=client
+    assert c.get('/v1/workspaces',headers=AUTH).json()[0]['title']=='내 워크스페이스'

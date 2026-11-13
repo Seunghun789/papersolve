@@ -139,7 +139,7 @@ def main():
    check('records automatically confirmed without manual step',all(r['status']=='확정' for r in d['records']))
    page.goto(a.web+f'/?workspace={tid}&view=records')
    page.locator('.table-cell').first.click();page.locator('.evidence-image img').wait_for()
-   page.wait_for_function("document.querySelector('.evidence-image img')?.naturalWidth > 0")
+   page.locator('.evidence-image img').evaluate('(img)=>img.decode()')
    check('UI opens source evidence image',page.locator('.evidence-image img').count()==1)
    page.screenshot(path=str(a.output/'evidence.png'),full_page=True)
    ok(c.post(base+'/'+jid+'/confirm',headers=apiheaders));final=ok(c.get(base+'/'+jid,headers=apiheaders))

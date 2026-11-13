@@ -66,14 +66,20 @@ def main():
     for view in ['home','upload','review','records']:
      page.goto(a.web+f'/?workspace=105&view={view}');page.locator('.workspace-main h1').wait_for();page.evaluate('document.fonts.ready');page.wait_for_timeout(1200)
      if view=='records':page.locator('tbody tr').first.wait_for()
+     if view=='review':page.locator('.finished').wait_for()
      page.screenshot(path=str(out/f'new-{view}.png'),full_page=True)
      if view=='home':
-      page.get_by_text('쌓인 기록 · 표와 추이',exact=True).click();page.locator('tbody tr').first.wait_for();page.screenshot(path=str(out/'new-home-records.png'),full_page=True)
-    page.locator('.table-cell').first.click();page.locator('.evidence-image img').wait_for();page.wait_for_function("document.querySelector('.evidence-image img')?.naturalWidth>0")
+      page.locator('.home-records > summary').click();page.locator('tbody tr').first.wait_for();page.screenshot(path=str(out/'new-home-records.png'),full_page=True)
+    page.locator('.table-cell').first.click();page.locator('.evidence-image img').wait_for();page.locator('.evidence-image img').evaluate('(img)=>img.decode()')
     page.screenshot(path=str(out/'new-evidence.png'),full_page=True)
     check('existing record cell opens real source image',page.locator('.evidence-image img').count()==1)
-    page.goto(a.web+'/?workspace=105&view=upload');page.get_by_role('tab',name='올린 종이 4',exact=True).click();page.locator('.paper-row').first.wait_for();page.wait_for_timeout(1500);page.screenshot(path=str(out/'new-papers.png'),full_page=True)
-    page.goto(a.web+'/?workspace=100&view=review');page.locator('.review-card').wait_for();page.wait_for_timeout(1000);page.screenshot(path=str(out/'new-review-populated.png'),full_page=True)
+    page.goto(a.web+'/?workspace=105&view=upload');page.get_by_role('tab',name='올린 종이 4',exact=True).click();page.locator('.paper-row').first.wait_for();page.locator('.thumb img').evaluate_all('(imgs)=>Promise.all(imgs.map(i=>i.decode()))');page.screenshot(path=str(out/'new-papers.png'),full_page=True)
+    page.goto(a.web+'/?workspace=100&view=review');page.locator('.review-card').wait_for();page.wait_for_timeout(1000);page.get_by_role('button',name='모아 보기',exact=True).click()
+    for _ in range(4):
+     target=page.locator('.review-list button').filter(has_text='애매한 값').first
+     if target.count():break
+     page.get_by_role('button',name='다음 확인 항목 더 보기').click();page.wait_for_timeout(2000)
+    target.click();page.locator('.evidence-image img').wait_for();page.locator('.evidence-image img').evaluate('(img)=>img.decode()');page.get_by_role('button',name='한 장씩',exact=True).click();page.screenshot(path=str(out/'new-review-populated.png'),full_page=True)
     check('existing review queue contains real legacy proposals',page.locator('.review-card').count()==1)
     page.set_viewport_size({'width':390,'height':844});page.goto(a.web+'/?workspace=105&view=records');page.locator('tbody tr').first.wait_for();page.screenshot(path=str(out/'new-mobile.png'),full_page=True)
     check('mobile document has no horizontal page overflow',page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
@@ -107,7 +113,7 @@ def main():
     check('review UI atomically changes real row',str(final['data']['수량']['value'])=='12')
     page.goto(a.web+f'/?workspace={tid}&view=records');page.locator('.table-cell').first.click();page.get_by_label('값 수정',exact=True).fill('-');page.get_by_role('button',name='저장',exact=True).click();page.get_by_text('저장했어요. 원본은 그대로 보관됩니다.',exact=True).wait_for()
     final=ok(sb('GET','/rest/v1/records',params={'id':f"eq.{r['id']}",'select':'data'}))[0];check('record editor preserves explicit dash',final['data']['수량']['status']=='explicit_dash' and final['data']['수량']['value'] is None)
-    page.screenshot(path=str(out/'manual-edit.png'),full_page=True)
+    page.get_by_role('button',name='저장',exact=True).wait_for();page.screenshot(path=str(out/'manual-edit.png'),full_page=True)
    check('no browser JavaScript exceptions',not errors,errors=errors)
    browser.close()
   report['status']='passed'
