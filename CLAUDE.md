@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 이 폴더
 
-papersolve(손으로 적은 종이 → AI가 판단해 반영 → 위험한 값만 사람에게 확인 → 묻기·대시보드·자동화)의 기획 문서와 웹 프로토타입이 있다.
+passo(손으로 적은 종이 → AI가 판단해 반영 → 위험한 값만 사람에게 확인 → 묻기·대시보드·자동화)의 기획 문서와 웹 프로토타입이 있다.
 
 - 실행: `.venv/bin/python -m streamlit run app.py` (`.env`에 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`)
 - 사진 위치를 찾는 OCR 모델은 서버가 처음 사진을 읽을 때 `models/ocr/`(git 제외)에 받는다. 받지 못하면 서버 로그에 남기고, 위치는 Claude가 어림한 상자로 그려진다.
