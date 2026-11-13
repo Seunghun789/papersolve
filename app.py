@@ -81,6 +81,9 @@ section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-n
 section[data-testid="stSidebar"] [data-testid="stColumn"]:has(.st-key-new_space_plus) {flex: 0 0 40px !important; min-width: 40px; width: 40px;}
 section[data-testid="stSidebar"] [data-testid="stColumn"]:has([data-testid="stPopover"]) {flex: 1 1 0 !important; width: auto; min-width: 0;}  /* 줄어들 수 있어야 [+]가 사이드바 밖으로 밀리지 않는다 */
 section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([class*="st-key-step"]) {margin-top: 6px; gap: 0;}
+/* 좁은 화면에서도 바로가기 칸이 한 줄 안에서 같은 너비로 줄어들게 한다. */
+section[data-testid="stSidebar"] [data-testid="stColumn"]:has([class*="st-key-step"]) {flex: 1 1 0 !important; min-width: 0 !important; width: 0 !important;}
+
 section[data-testid="stSidebar"] .st-key-new_space_plus button {border-radius: 10px; min-height: 40px;}
 section[data-testid="stSidebar"] [class*="st-key-nav"] button {justify-content: flex-start; min-height: 0; height: 30px; padding: 0 12px;
   border-radius: 8px; width: 100%;}
