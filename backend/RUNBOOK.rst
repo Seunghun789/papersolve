@@ -3,10 +3,10 @@ passo 인증·조직 격리 기반 (2026-11-13)
 
 적용 상태
 ---------
-현재 Supabase 프로젝트 dubxkjwglefkaidhktkc에 migration 001~004 적용.
+현재 Supabase 프로젝트 dubxkjwglefkaidhktkc에 migration 001~006 적용.
 001은 Browser URL 길이 제한 때문에 5개 명시적 트랜잭션으로 나누어 적용했다.
 002는 기존 함수 정의의 오류 코드 40001만 PT409로 치환했다.
-재설치 시 schema.sql 이후 001, 002, 003, 004 순서로 실행한다.
+재설치 시 schema.sql 이후 001~006을 번호 순서로 실행한다.
 001은 재실행용이 아니며 기존 정책이 있으면 의도적으로 실패한다.
 적용 증거와 검증 결과는 artifacts/auth-policy-20261113/review.html에 있다.
 
@@ -33,13 +33,20 @@ Secret key는 광범위한 서버 권한이므로 프런트/로그에 내보내�
 
 계정·권한 이관
 ---------------
-실제 고객의 기존 계정을 자동 생성하거나 이메일만으로 연결하지 않았다.
-Supabase Auth 계정의 본인 확인 후, 기존 public.users의 동일 사용자임을
-확인하고 관리 경로에서 auth_identity_links(auth_user_id,legacy_user_id)에
-명시적으로 연결한다. 두 ID 모두 UNIQUE이며 로그인만으로 멤버십은 생기지 않는다.
+Google로 계속하기는 Supabase OAuth와 PKCE를 사용한다. 웹 서버의
+PASSO_SITE_URL은 배포 주소로 고정하고 Supabase 허용 URL에는 해당 주소의
+/auth/callback을 등록한다. Google 클라이언트에는 Supabase의
+/auth/v1/callback 주소를 등록한다. 새 웹에는 Google client secret을 넣지 않고
+Supabase의 Google 제공자 설정에 등록한다.
+콜백에서 passo_link_google_identity()가 살아 있는 OAuth 세션을 확인하고
+auth.identities의 Google provider_id를 기존 public.users의 Google sub와
+비교한다. 이메일이나 사용자가 수정할 수 있는 메타데이터로 연결하지 않는다.
+일치할 때 auth_identity_links에 연결하며, 이미 다른 계정에 연결된 ID는
+덮어쓰지 않는다. 두 ID 모두 UNIQUE이며 로그인만으로 멤버십은 생기지 않는다.
 기존 memberships 또는 org_members의 주인 권한을 그대로 사용한다.
 기존 is_master 플래그는 새 API의 조직 권한을 우회하지 않는다.
-Google OAuth, 회원가입·초대·비밀번호 재설정 화면은 후속 이관 작업이다.
+기존 이메일 계정의 PBKDF2 비밀번호 이관, 회원가입·초대·비밀번호 재설정은
+후속 작업이다. 기존 Google 사용자는 Google 버튼으로 로그인한다.
 
 주인/확인하는 사람은 셀 수정, 올리는 사람은 업로드, 보는 사람은 읽기만 가능하다.
 조직 주인은 그 조직 워크스페이스를 읽고 수정할 수 있다.
@@ -80,8 +87,8 @@ eval/evaluate_policy_remaining.py는 기존 requirements.txt의 OCR/모델 의�
 아직 남은 범위
 --------------
 기존 Streamlit은 기존 인증과 서버 권한 DB 경로를 사용한다. 새 권한 경계로
-서비스 전체가 전환됐다고 보지 않는다. 실제 사용자 계정 연결과 배포 전환 필요.
-API/웹은 로컬 실행 중이며 외부 운영 서버에 배포하지 않았다.
+서비스 전체가 전환됐다고 보지 않는다. 기존 이메일 계정 연결은 남아 있다.
+개발 웹은 Vercel Hobby, API는 Render Free, 워커는 로컬 Mac Docker에서 실행한다.
 문서 업로드→PostgreSQL 작업 큐→독립 OCR/AI 워커→확인 후 확정→원본 근거 UI를
 추가했다. 재현·배포 절차와 한계는 backend/DOCUMENTS.rst를 참고한다.
 LangGraph와 자동확정은 이번 경로에 넣지 않았다. 모바일 UX, 레이트리밋,

@@ -21,6 +21,7 @@ try {
  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create schema storage;
  create table auth.users(id uuid primary key,banned_until timestamptz);
  create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id),not_after timestamptz);
+ create table auth.identities(user_id uuid references auth.users(id),provider text,provider_id text,identity_data jsonb);
  create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
  create function auth.uid() returns uuid language sql stable as $$select (auth.jwt()->>'sub')::uuid$$;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
@@ -39,6 +40,7 @@ try {
  await db.exec(await readFile('db/migrations/003_rls_membership_set.sql','utf8'));
  await db.exec(await readFile('db/migrations/004_originals_server_download.sql','utf8'));
  await db.exec(await readFile('db/migrations/005_document_pipeline.sql','utf8'));
+ await db.exec(await readFile('db/migrations/006_google_identity_link.sql','utf8'));
  check('migrations apply to original schema',true);
  for(let n=1;n<=5;n++) {
   await db.query('insert into auth.users(id) values($1)',[uid(n)]);
@@ -129,6 +131,35 @@ try {
  check('revoked session denies files',(await as(1,'select * from storage.objects')).length===0);
  await db.query('delete from public.auth_identity_links where auth_user_id=$1',[uid(2)]);
  check('unlinked auth account denied',(await as(2,'select * from public.records')).length===0);
+ // A matching email or user-editable metadata must never grant a legacy identity.
+ await db.query("insert into public.users(provider,sub,email) values('google','google-subject','same@example.test') returning id");
+ const legacyGoogle=(await db.query("select id from public.users where sub='google-subject'")).rows[0].id;
+ await db.query("insert into auth.identities values($1,'google','different-subject','{\"email\":\"same@example.test\",\"sub\":\"google-subject\"}')",[uid(2)]);
+ const oauth={amr:[{method:'oauth'}]};
+ const link=(n=2,overrides=oauth,role='authenticated')=>as(n,'select public.passo_link_google_identity() as linked',[],role,overrides);
+ check('same email and spoofed subject metadata do not link',(await link())[0].linked===false);
+ await denied('anonymous cannot invoke linking',()=>link(2,oauth,'anon'));
+ await denied('password session cannot claim Google identity',()=>link(2,{amr:[{method:'password'}]}));
+ await denied('expired token cannot link',()=>link(2,{...oauth,exp:1}));
+ await denied('another users session cannot link',()=>link(2,{...oauth,session_id:sessionId(3)}));
+ await db.query("update auth.identities set provider_id='google-subject' where user_id=$1",[uid(2)]);
+ await db.query("update auth.users set banned_until=now()+interval '1 hour' where id=$1",[uid(2)]);
+ await denied('banned Google user cannot link',()=>link());
+ await db.query('update auth.users set banned_until=null where id=$1',[uid(2)]);
+ await db.query("update auth.sessions set not_after=now()-interval '1 second' where id=$1",[sessionId(2)]);
+ await denied('expired session cannot link',()=>link());
+ await db.query('update auth.sessions set not_after=null where id=$1',[sessionId(2)]);
+ const membershipBefore=JSON.stringify((await db.query('select * from public.memberships order by tenant_id,user_id')).rows);
+ check('verified immutable Google subject links',(await link())[0].linked===true);
+ check('repeat callback is idempotent',(await link())[0].linked===true);
+ check('link points to exact legacy ID',(await db.query('select legacy_user_id from public.auth_identity_links where auth_user_id=$1',[uid(2)])).rows[0].legacy_user_id===legacyGoogle);
+ check('linking creates no workspace access',(await as(2,'select * from public.passo_workspaces()')).length===0);
+ check('membership rows are unchanged',JSON.stringify((await db.query('select * from public.memberships order by tenant_id,user_id')).rows)===membershipBefore);
+ await db.query("insert into auth.identities values($1,'google','google-subject','{}')",[uid(3)]);
+ check('conflicting link never replaces existing identity',(await link(3))[0].linked===false);
+ check('other legacy mapping preserved',(await db.query('select legacy_user_id from public.auth_identity_links where auth_user_id=$1',[uid(3)])).rows[0].legacy_user_id===3);
+ await db.query('delete from auth.sessions where id=$1',[sessionId(2)]);
+ await denied('revoked OAuth session cannot link',()=>link());
  console.log(JSON.stringify({status:'passed',count:checks.length}));
 } catch(e) {
  console.error(e.message);process.exitCode=1;

@@ -4,6 +4,18 @@ import { revalidatePath } from 'next/cache';
 import { supabase, configured } from '../lib/supabase';
 import { api } from '../lib/api';
 
+export async function googleLogin() {
+  if (!configured() || !process.env.PASSO_SITE_URL) redirect('/login?error=config');
+  const sb = await supabase();
+  const { data, error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: new URL('/auth/callback', process.env.PASSO_SITE_URL).href,
+      queryParams: { prompt: 'select_account' } },
+  });
+  if (error || !data.url) redirect('/login?error=oauth');
+  redirect(data.url);
+}
+
 export async function login(form: FormData) {
   if (!configured()) redirect('/login?error=config');
   const email = String(form.get('email') || '').trim();

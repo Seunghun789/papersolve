@@ -141,7 +141,9 @@ def main():
   check('B sees only B records',[x['id'] for x in ok(get('records',B,select='id'))]==[rb['id']])
   check('A cannot target B record',ok(get('records',A,id=f"eq.{rb['id']}"))==[])
   check('A cannot target B source',ok(get('source_inputs',A,id=f"eq.{sb['id']}"))==[])
-  check('A cannot target B job',ok(get('passo_jobs',A,id=f"eq.{jb['id']}"))==[])
+  check('job private columns denied',get('passo_jobs',A).status_code==403)
+  check('A cannot target B job',ok(get('passo_jobs',A,select='id,status',id=f"eq.{jb['id']}"))==[])
+  check('password session cannot invoke Google linking',rpc('passo_link_google_identity',{},A).status_code==403)
   check('checkpoints inaccessible to end user',get('passo_checkpoints',A).status_code in (401,403))
   for table in ['users','memberships','org_members','auth_identity_links','ai_logs','invites']:
    check('private table denied: '+table,get(table,A).status_code in (401,403))
