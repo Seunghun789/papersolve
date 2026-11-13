@@ -1,4 +1,4 @@
--- papersolve DB 스키마 (메인 PRD v3.1 §7.4의 프로토타입 부분집합).
+-- passo DB 스키마 (메인 PRD v3.1 §7.4의 프로토타입 부분집합).
 -- 사업장마다 표를 만들지 않는다. 표는 모든 계정이 같고, 계정별 차이는 정의 표의 행과 records.data(JSONB)로 담는다.
 -- 워크스페이스는 tenant_id 로 나눈다. 로그인한 사람의 접근은 앱이 memberships 로 확인한다. 서버가 .env 의 SUPABASE_SECRET_KEY 로 접근하므로 RLS 는 켜 두고 규칙은 만들지 않는다.
 -- 새 DB 에서는 SQL Editor 에서 이 파일을 통째로 한 번 실행한다.

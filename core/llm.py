@@ -498,7 +498,7 @@ def build_chat(t, model, kind, history, request, types, cols, links_text, stats)
     spec, rules, what = (view_schema(types), VIEW_RULES, "대시보드에 올릴 보기(그래프·달력·표)") if kind == "지표" else \
         (auto_schema(types), AUTO_RULES, "홈의 '먼저 볼 것' 규칙")
     system = (
-        f"당신은 papersolve 에서 사용자가 말로 청한 {what}를 만드는 도우미입니다. 손으로 적은 기록이 표로 쌓여 있습니다.\n"
+        f"당신은 passo 에서 사용자가 말로 청한 {what}를 만드는 도우미입니다. 손으로 적은 기록이 표로 쌓여 있습니다.\n"
         f"기록 종류와 칸(값의 종류):\n{cols}\n사용자가 확정한 관계:\n{links_text or '(없음)'}\n기록 요약(서비스가 센 값):\n{stats}\n"
         "규칙:\n" + rules + "\n"
         "- 만들 수 있으면 spec 을 채운다. 앞서 만든 것을 고쳐 달라면 고친 spec 전체를 다시 쓴다.\n"
@@ -560,7 +560,7 @@ TOOLS = [
 def answer(t, model, question, run_tool, max_turns=6):
     """질문 → Claude 가 조회 도구만 불러 근거를 찾고 답한다. (답, 근거 기록 id들)을 돌려준다."""
     system = (
-        "당신은 papersolve 의 기록 도우미입니다. 사용자가 손으로 적은 기록이 표로 쌓여 있습니다.\n"
+        "당신은 passo 의 기록 도우미입니다. 사용자가 손으로 적은 기록이 표로 쌓여 있습니다.\n"
         "- 먼저 schema 로 어떤 기록 종류·대상 분류·칸이 있는지 보고, find_records·aggregate 로 찾아 그 결과로만 답하세요. "
         "켜 둔 자동화나 올린 지표를 묻는 질문이면 saved 를 쓰세요.\n"
         "- 건수·합계·평균 같은 숫자는 도구 결과만 쓰고 직접 계산하지 마세요.\n"

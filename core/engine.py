@@ -24,7 +24,7 @@ DATA = db.ROOT / "data"
 try:  # 올린 파일 폴더. 코드 폴더에 쓸 수 없는 서버(Streamlit Cloud)에서는 임시 폴더에 둔다
     (DATA / "uploads").mkdir(parents=True, exist_ok=True)
 except OSError:
-    DATA = Path(tempfile.gettempdir()) / "papersolve"
+    DATA = Path(tempfile.gettempdir()) / "passo"
     (DATA / "uploads").mkdir(parents=True, exist_ok=True)
 ENTRY = ["종류", "칸", "같은 칸", "애매한 값", "읽은 값"]       # 답하기 전에는 기록이 확정되지 않는 제안
 ENTITY = ["대상 분류", "대상", "같은 대상", "대상 속성", "속성 값", "상위 분류", "관계 속성"]
