@@ -1,0 +1,32 @@
+export async function workspaceCases({db,as,denied,check,uid}) {
+ await db.exec(`insert into object_types(tenant_id,name,kind) values(1,'manual','기록');
+ insert into property_defs(tenant_id,type_name,name,dtype) values(1,'manual','quantity','number'),(1,'manual','memo','text');`);
+ const body={quantity:'-',memo:'manual test'};
+ const write=(n=1,key=uid(950),data=body,tid=1)=>as(n,'select (public.passo_write_record($1,$2,$3,$4,$5)).*',[tid,key,'manual','2026-11-13',data]);
+ await denied('viewer cannot manually write',()=>write(3));
+ await denied('foreign workspace manual write denied',()=>write(2));
+ const r=(await write())[0];
+ check('manual write confirms one row with dash preserved',r.status==='확정'&&r.data.quantity.status==='explicit_dash'&&r.data.quantity.value===null);
+ check('manual retry idempotent',(await write())[0].id===r.id);
+ await denied('manual retry different payload conflicts',()=>write(1,uid(950),{...body,quantity:1}));
+ await denied('undeclared manual field denied',()=>write(1,uid(951),{evil:1}));
+ await denied('object manual cell denied',()=>write(1,uid(951),{quantity:{value:1}}));
+ const uploader=(await write(5,uid(952),{quantity:0}))[0];
+ check('uploader direct record preserves numeric zero',uploader.data.quantity.value===0);
+ const payload={type:'manual',label:'quantity',value:'-',record_id:r.id};
+ await db.query('update records set uncertain=$1 where id=$2',[['quantity'],r.id]);
+ const q=(await db.query("insert into proposals(tenant_id,kind,payload,source_input_id) values(1,'애매한 값',$1,$2) returning *",[payload,r.source_input_id])).rows[0];
+ const answer=(n=1,expected={[r.id]:r.data},value=0)=>as(n,'select * from public.passo_answer_review(1,$1,$2,$3,$4,$5)',[q.id,payload,expected,'edit',value]);
+ await denied('viewer review answer denied',()=>answer(3));
+ await denied('foreign review answer denied',()=>answer(2));
+ await denied('stale record answer conflicts',()=>answer(1,{[r.id]:{bad:true}}));
+ await answer();
+ const edited=(await db.query('select * from records where id=$1',[r.id])).rows[0];
+ check('review answer atomically edits cell and clears uncertainty',edited.data.quantity.value===0&&edited.uncertain.length===0);
+ check('review decision records actor',(await db.query('select decided_by,status from proposals where id=$1',[q.id])).rows[0].decided_by===1);
+ await denied('duplicate review answer conflicts',()=>answer());
+ const foreign=(await db.query("insert into proposals(tenant_id,kind,payload,source_input_id) values(1,'애매한 값',$1,$2) returning id",[{...payload,record_id:2},r.source_input_id])).rows[0];
+ await denied('review cannot smuggle foreign record',()=>as(1,'select public.passo_answer_review(1,$1,$2,$3,$4,$5)',[foreign.id,{...payload,record_id:2},{2:{quantity:99}},'edit',0]));
+ await db.query('delete from source_inputs where id in ($1,$2)',[r.source_input_id,uploader.source_input_id]);
+ await db.exec("delete from property_defs where type_name='manual'; delete from object_types where name='manual';");
+}

@@ -30,6 +30,9 @@ export async function pipelineCases({db,as,denied,check,uid}) {
  try {await finish(second.lease_token,{...payload,records:[payload.records[0],{...payload.records[0],occurred_at:'invalid'}]});throw Error('expected rollback');}catch(e){if(e.code!=='22007')throw e;}
  check('partial record insert rolls back',(await db.query('select id from records where source_input_id=$1',[j.source_input_id])).rows.length===0);
  check('records and evidence committed atomically',await finish(second.lease_token));
+ check('worker immediately publishes confirmed records',(await db.query('select status from records where source_input_id=$1',[j.source_input_id])).rows.every(r=>r.status==='확정'));
+ check('worker job succeeds without manual confirmation',(await db.query('select status from passo_jobs where id=$1',[j.id])).rows[0].status==='succeeded');
+ check('explicit dash is preserved without an ambiguity card',(await db.query('select id from proposals where source_input_id=$1',[j.source_input_id])).rows.length===0);
  check('duplicate worker completion has no effect',!await finish(second.lease_token));
  check('exactly one row stored',(await db.query('select id from records where source_input_id=$1',[j.source_input_id])).rows.length===1);
  await denied('uploader cannot confirm',()=>as(5,'select public.passo_confirm_document(1,$1)',[j.id]));

@@ -58,7 +58,7 @@ class Worker:
             payload = make_payload(state['extraction']['sheet'],state['ocr'])
             if lost.is_set() or not self.rpc('passo_worker_finish',{**args,'payload':payload}):
                 raise RuntimeError('lease_lost')
-            print(json.dumps({'job':job['id'],'status':'awaiting_review','records':len(payload['records'])}),flush=True)
+            print(json.dumps({'job':job['id'],'status':'published','records':len(payload['records'])}),flush=True)
         except Exception as exc:
             # No model output, document content, credentials or transport exceptions in logs.
             print(json.dumps({'job':job['id'],'error_type':type(exc).__name__}),flush=True)

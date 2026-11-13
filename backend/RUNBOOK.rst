@@ -3,10 +3,10 @@ passo 인증·조직 격리 기반 (2026-11-13)
 
 적용 상태
 ---------
-현재 Supabase 프로젝트 dubxkjwglefkaidhktkc에 migration 001~006 적용.
+현재 Supabase 프로젝트 dubxkjwglefkaidhktkc에 migration 001~007 적용.
 001은 Browser URL 길이 제한 때문에 5개 명시적 트랜잭션으로 나누어 적용했다.
 002는 기존 함수 정의의 오류 코드 40001만 PT409로 치환했다.
-재설치 시 schema.sql 이후 001~006을 번호 순서로 실행한다.
+재설치 시 schema.sql 이후 001~007을 번호 순서로 실행한다.
 001은 재실행용이 아니며 기존 정책이 있으면 의도적으로 실패한다.
 적용 증거와 검증 결과는 artifacts/auth-policy-20261113/review.html에 있다.
 
@@ -57,7 +57,7 @@ auth.identities의 Google provider_id를 기존 public.users의 Google sub와
 새 private bucket passo-originals만 사용한다. 경로는 tenant_id/UUID/filename.
 직접 SELECT/서명 URL 발급은 사용자에게 금지한다. 서버가 세션과 권한을 검사한
 뒤 GET /v1/workspaces/{tid}/originals/{uuid}/{filename}으로 바이트를 전달한다.
-응답은 private,no-store와 attachment다. 기존 uploads bucket은 이관하지 않았다.
+응답은 private,no-store다. 007 업무 API는 기존 uploads 원본도 tenant/source ID 경로를 검증한 뒤 서버에서 읽는다. 기존 파일은 이동하지 않는다.
 클라이언트 JWT로 직접 파일을 읽으면 Storage CDN이 로그아웃 뒤에도 응답할 수
 있어 migration004에서 서버 전용 다운로드로 변경했다. 이미 사용자가 다운로드한
 바이트를 회수할 수는 없다. 사용자 업로드 경로는 RLS로 제한하고 덮어쓰기는 금지한다.
@@ -73,7 +73,7 @@ auth.identities의 Google provider_id를 기존 public.users의 Google sub와
   # 실 Supabase 임시 사용자/데이터 생성 후 정리: .env의 기존 키 사용
   .venv-auth/bin/python eval/verify_auth_live.py --live --web-url http://localhost:3001 --output artifacts/new-live-report.json
 
-PGlite 65건은 로컬 PostgreSQL 테스트이며 실 Supabase 증거와 구별한다.
+PGlite SQL 테스트는 로컬 PostgreSQL 테스트이며 실 Supabase 증거와 구별한다.
 로컬 SQL 결과는 artifacts/auth-rls/rls.json에 저장한다.
 PASSO_RLS_REPORT 환경 변수로 새 결과 경로를 지정할 수 있다.
 artifacts/ 실행 결과와 dummy/samples/ 원본 평가 자료는 Git에 포함하지 않는다.
@@ -89,9 +89,29 @@ eval/evaluate_policy_remaining.py는 기존 requirements.txt의 OCR/모델 의�
 기존 Streamlit은 기존 인증과 서버 권한 DB 경로를 사용한다. 새 권한 경계로
 서비스 전체가 전환됐다고 보지 않는다. 기존 이메일 계정 연결은 남아 있다.
 개발 웹은 Vercel Hobby, API는 Render Free, 워커는 로컬 Mac Docker에서 실행한다.
-문서 업로드→PostgreSQL 작업 큐→독립 OCR/AI 워커→확인 후 확정→원본 근거 UI를
+문서 업로드→PostgreSQL 작업 큐→독립 OCR/AI 워커→자동 반영→예외 확인→원본 근거 UI를
 추가했다. 재현·배포 절차와 한계는 backend/DOCUMENTS.rst를 참고한다.
-LangGraph와 자동확정은 이번 경로에 넣지 않았다. 모바일 UX, 레이트리밋,
+LangGraph는 이번 경로에 넣지 않았다. 모바일 기본 탐색을 추가했고 레이트리밋,
 운영 부하·CWV 검증은 남아 있다.
 미기재 상태 54/54와 집계/필터 32/32 통과, 모델 박스 중심은 6/54만 일치했다.
 좌표 보정·실사진 판독 불가 정답·사람 검수·독립 블라인드·추가 필드 정밀도는 미완료다.
+
+업무 화면 이관 (007)
+-------------------
+홈·올리기·확인·기록은 사용자 JWT와 실제 업무 API에 연결한다.
+007은 신규 추출 기록을 원자적으로 확정하고 애매한 칸별 확인 제안을 만든다.
+기존 전체 데이터 재작성은 하지 않으며, 이전 awaiting_review 작업은 수동 확정 경로를 유지한다.
+직접 입력은 UUID 중복 방지, 확인/셀 수정은 이전 값 비교(CAS)로 덮어쓰기를 방지한다.
+기존 별칭은 표시 이름으로 사용한다. 기존 엔티티 추론/신뢰도별 자동 결정 정책,
+구조 변경 제안, AI 주간 요약, 자동화 알림과 기록 차트는 아직 전체 이관되지 않았다.
+
+::
+
+  PASSO_RLS_REPORT=artifacts/ui-migration/rls.json node tests/auth/rls.mjs
+  node tests/auth/origin.mjs
+  .venv-auth/bin/python -m pytest tests/auth tests/documents -q
+  # 실 DB 임시 계정/워크스페이스 생성과 정리; 기존 데이터 전체 해시 비교
+  .venv-auth/bin/python eval/verify_workspace_live.py --web https://passo-dev.vercel.app --api https://passo-dev-api.onrender.com --writes --legacy --output artifacts/ui-migration/cloud-final
+
+화면 비교는 원본 app.py에 읽기 전용 임시 세션을 주입한다. DB 쓰기와 규칙 호출은 차단한다.
+동시 실환경 쓰기 테스트는 전체 데이터 해시 검사와 충돌하므로 순서대로 실행한다.

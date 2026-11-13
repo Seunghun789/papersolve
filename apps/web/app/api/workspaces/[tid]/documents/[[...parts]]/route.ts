@@ -1,3 +1,4 @@
+import { sameOrigin } from '../../../../../../lib/origin';
 import { apiResponse } from '../../../../../../lib/api';
 export const dynamic='force-dynamic';
 export const maxDuration=300;
@@ -7,7 +8,7 @@ async function forward(request:Request,context:Context) {
  if(!/^[1-9]\d*$/.test(tid) || parts.length>2 || (parts[0]&&!/^[0-9a-f-]{36}$/.test(parts[0])) || (parts[1]&&!['original','confirm'].includes(parts[1]))) return new Response(null,{status:404});
  const url=new URL(request.url);
  const post=request.method==='POST';
- if(post && request.headers.get('origin')!==url.origin) return new Response(null,{status:403});
+ if(post && !sameOrigin(request)) return new Response(null,{status:403});
  if(post && parts.length && parts[1]!=='confirm') return new Response(null,{status:405});
  if(!post && parts[1]==='confirm') return new Response(null,{status:405});
  let body:Uint8Array|undefined;
@@ -20,7 +21,7 @@ async function forward(request:Request,context:Context) {
  const query=new URLSearchParams();for(const k of ['filename','page']){const v=url.searchParams.get(k);if(v)query.set(k,v);}
  const response=await apiResponse(`/v1/workspaces/${tid}/documents${parts.length?'/'+parts.join('/'):''}?${query}`,{
   method:request.method,body:body as BodyInit|undefined,headers:{'Content-Type':request.headers.get('content-type')||'application/json','Idempotency-Key':request.headers.get('idempotency-key')||''}
- });
+ },true);
  return new Response(response.body,{status:response.status,headers:{'Content-Type':response.headers.get('content-type')||'application/json','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff',...(parts[1]==='original'?{'Content-Security-Policy':"default-src 'none'; sandbox"}:{})}});
 }
 export const GET=forward;

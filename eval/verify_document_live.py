@@ -95,10 +95,10 @@ def main():
   with sync_playwright() as pw:
    browser=pw.chromium.launch();page=browser.new_page(viewport={'width':1440,'height':1050})
    page.goto(a.web+'/login');page.locator('input[name=email]').fill(accounts[0]['email']);page.locator('input[name=password]').fill(accounts[0]['password'])
-   page.get_by_role('button',name='이메일로 로그인').click();page.get_by_role('heading',name='문서 처리',exact=True).wait_for(timeout=30000)
+   page.get_by_role('button',name='이메일로 로그인').click();page.locator('.workspace-main h1').wait_for(timeout=60000);page.goto(a.web+f'/?workspace={tid}&view=upload')
    page.get_by_label('문서 파일').set_input_files(str(fixture))
    with page.expect_response(lambda r:'/api/workspaces/' in r.url and r.request.method=='POST',timeout=45000) as response:
-    page.get_by_role('button',name='문서 올리기',exact=True).click()
+    page.get_by_role('button',name='읽기 시작',exact=True).click()
    r=response.value;check('browser upload reaches real API',r.status==202,status=r.status)
    j=ok(c.get(base,headers=apiheaders))[0];jid=j['id'];report['job']=jid;save()
    key=r.request.headers['idempotency-key']
@@ -122,7 +122,7 @@ def main():
    def ready():
     d=ok(c.get(base+'/'+jid,headers=apiheaders))
     if d['job']['status']=='failed':raise RuntimeError('worker failed')
-    return d if d['job']['status']=='awaiting_review' else None
+    return d if d['job']['status']=='succeeded' else None
    d=wait_for(ready,360)
    check('OCR and real model publish reviewable rows',len(d['records'])==6,rows=len(d['records']))
    if a.crash:check('expired job recovered by new worker',d['job']['attempts']==2,attempts=d['job']['attempts'])
@@ -136,19 +136,18 @@ def main():
    check('retrieved original bytes match upload',original.status_code==200 and hashlib.sha256(original.content).hexdigest()==report['fixture']['sha256'])
    check('foreign original download denied',c.get(base+'/'+jid+'/original',headers={'Authorization':accounts[1]['Authorization']}).status_code==403)
    check('viewer confirmation denied',c.post(base+'/'+jid+'/confirm',headers={'Authorization':accounts[2]['Authorization']}).status_code==403)
-   page.get_by_role('button',name='내용 확인 후 확정',exact=True).wait_for(timeout=30000)
-   page.locator('.evidence-cell').first.click();page.locator('.evidence-image img').wait_for()
+   check('records automatically confirmed without manual step',all(r['status']=='확정' for r in d['records']))
+   page.goto(a.web+f'/?workspace={tid}&view=records')
+   page.locator('.table-cell').first.click();page.locator('.evidence-image img').wait_for()
    page.wait_for_function("document.querySelector('.evidence-image img')?.naturalWidth > 0")
    check('UI opens source evidence image',page.locator('.evidence-image img').count()==1)
    page.screenshot(path=str(a.output/'evidence.png'),full_page=True)
-   page.get_by_role('button',name='내용 확인 후 확정',exact=True).click()
-   wait_for(lambda:ok(c.get(base+'/'+jid,headers=apiheaders))['job']['status']=='succeeded',30)
    ok(c.post(base+'/'+jid+'/confirm',headers=apiheaders));final=ok(c.get(base+'/'+jid,headers=apiheaders))
-   check('confirmation retry creates no duplicate records',len(final['records'])==6 and all(r['status']=='확정' for r in final['records']))
+   check('legacy confirmation retry creates no duplicate records',len(final['records'])==6 and all(r['status']=='확정' for r in final['records']))
    checkpoint=ok(sb('GET','/rest/v1/passo_checkpoints',params={'job_id':f'eq.{jid}','order':'revision.desc','limit':1,'select':'state'}))[0]['state']
    report['usage']=checkpoint['extraction']['usage'];report['ocr_lines']=sum(len(x) for x in checkpoint['ocr'].values())
    (a.output/'result.json').write_text(json.dumps(final,ensure_ascii=False,indent=2));save()
-   page.get_by_role('button',name='로그아웃',exact=True).click();page.wait_for_url('**/login')
+   page.locator('.account summary').click();page.get_by_role('button',name='로그아웃',exact=True).click();page.wait_for_url('**/login')
    ok(c.post(url+'/auth/v1/logout?scope=local',headers={'apikey':pub,**apiheaders}))
    check('revoked session cannot fetch original',c.get(base+'/'+jid+'/original',headers=apiheaders).status_code==401)
    browser.close()

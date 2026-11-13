@@ -48,13 +48,13 @@ class Gateway:
         if not await self.rpc(token, 'passo_access', {'tid':tid, 'operation':operation}):
             raise HTTPException(403, '워크스페이스 접근 권한이 없습니다.')
 
-    async def original_bytes(self, path):
+    async def original_bytes(self, path, bucket='passo-originals'):
         # Called only AFTER session + tenant + object authorization. Never used for DB queries.
         key = os.environ.get('SUPABASE_STORAGE_SECRET_KEY', '')
         if not key.startswith('sb_secret_'):
             raise HTTPException(503, '원본 저장소 설정이 필요합니다.')
         try:
-            r = await self.client.get(self.url + '/storage/v1/object/authenticated/passo-originals/' + quote(path, safe='/'),
+            r = await self.client.get(self.url + '/storage/v1/object/authenticated/' + bucket + '/' + quote(path, safe='/'),
                 headers={'apikey':key, 'Authorization':'Bearer ' + key})
         except httpx.RequestError:
             raise HTTPException(503, '원본 저장소에 연결할 수 없습니다.') from None
@@ -105,10 +105,12 @@ async def workspaces(token=Depends(session), g=Depends(gateway)):
 
 @app.get('/v1/workspaces/{tid}/records')
 async def records(tid: int, after: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
+                  type_name: str | None = Query(None,max_length=200), status: str | None = Query(None,pattern='^(확정|대기|거절)$'),
                   token=Depends(session), g=Depends(gateway)):
     await g.authorize(token, tid)
     rows = (await g.request(token, 'GET', '/rest/v1/records', params={
-        'tenant_id':f'eq.{tid}', 'id':f'gt.{after}', 'select':'id,type_name,occurred_at,data,status,source_input_id',
+        'tenant_id':f'eq.{tid}', 'id':f'gt.{after}', 'select':'id,type_name,occurred_at,data,status,source_input_id,source_row,uncertain',
+        **({'type_name':'eq.'+type_name} if type_name else {}), **({'status':'eq.'+status} if status else {}),
         'order':'id.asc', 'limit':limit+1})).json()
     return {'items':rows[:limit], 'next':rows[limit-1]['id'] if len(rows)>limit else None}
 
@@ -157,3 +159,5 @@ async def original(tid: int, object_id: str, filename: str, token=Depends(sessio
 # Document routes use the same live session and tenant boundary as records.
 from backend.documents import install_routes
 install_routes(app, session, gateway)
+from backend.workspace import install_routes as install_workspace_routes
+install_workspace_routes(app, session, gateway)
