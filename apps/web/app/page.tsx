@@ -1,6 +1,7 @@
 import { api } from '../lib/api';
 import { configured } from '../lib/supabase';
 import { editCell, logout } from './actions';
+import Documents from './documents';
 export const dynamic='force-dynamic';
 type Workspace = {id:number,title:string,role:string};
 type Cell = {raw:unknown,value:unknown,status:string};
@@ -16,7 +17,7 @@ export default async function Home({searchParams}:{searchParams:Promise<{workspa
  return <main><div className="toolbar"><h1>내 기록</h1><form action={logout}><button className="secondary">로그아웃</button></form></div>
  <nav>{workspaces.map(w=><a key={w.id} aria-current={selected?.id===w.id?'page':undefined} href={`/?workspace=${w.id}`}>{w.title} <small>{w.role}</small></a>)}</nav>
  {!selected && <aside>{workspaces.length ? '이 워크스페이스에 접근할 수 없습니다.' : '아직 연결된 워크스페이스가 없습니다.'}</aside>}
- {selected && <><h2>{selected.title}</h2><p>기록을 누르면 적힌 값과 칸의 상태를 확인할 수 있어요.</p>
+ {selected && <><h2>{selected.title}</h2><Documents key={selected.id} tid={selected.id} role={selected.role}/><p>기록을 누르면 적힌 값과 칸의 상태를 확인할 수 있어요.</p>
  {!result.items.length && <aside>아직 기록이 없습니다.</aside>}
  {result.items.map(r=><details className="record" key={r.id}><summary>{r.type_name}<span>{r.occurred_at} · 기록 {r.id}</span></summary><div className="cells">
  {Object.entries(r.data).map(([label,v])=>{const cell=v && typeof v==='object'?v:null;const raw=cell?cell.raw:v;

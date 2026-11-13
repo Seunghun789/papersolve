@@ -38,6 +38,7 @@ try {
  await db.exec(await readFile('db/migrations/002_conflict_http_status.sql','utf8'));
  await db.exec(await readFile('db/migrations/003_rls_membership_set.sql','utf8'));
  await db.exec(await readFile('db/migrations/004_originals_server_download.sql','utf8'));
+ await db.exec(await readFile('db/migrations/005_document_pipeline.sql','utf8'));
  check('migrations apply to original schema',true);
  for(let n=1;n<=5;n++) {
   await db.query('insert into auth.users(id) values($1)',[uid(n)]);
@@ -104,6 +105,7 @@ try {
  for(const path of ['../2/a','1/../a','01/a/b','999999999999999999999999999999999999/00000000-0000-4000-8000-000000000000/a.png']) {
   check('malformed path denied '+path,(await as(1,"select public.passo_object_access($1,'read') as allowed",[path]))[0].allowed===false);
  }
+ await (await import('../documents/pipeline-cases.mjs')).pipelineCases({db,as,denied,check,uid});
  await db.exec("update public.memberships set role='확인하는 사람' where user_id=3");
  check('role promotion visible on same token',(await as(3,"select public.passo_access(1,'review') as allowed"))[0].allowed===true);
  await db.exec("update public.memberships set role='보는 사람' where user_id=3");

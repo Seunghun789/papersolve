@@ -74,6 +74,7 @@ def isolated_llm():
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
+    module.db = db  # Expose the denied stub for evaluator diagnostics; production reader imports DB lazily.
     module.log = denied  # caller must explicitly install a local sink
     return module
 

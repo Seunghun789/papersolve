@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: passo-dev-api
+    branch: clone/goal-47aaee80-8328-4554-b140-1ed1e65408c9
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    dockerCommand: sh -c 'uvicorn backend.main:app --host 0.0.0.0 --port $PORT'
+    plan: starter
+    region: singapore
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_SECRET_KEY
+        sync: false
+  - type: worker
+    name: passo-dev-worker
+    branch: clone/goal-47aaee80-8328-4554-b140-1ed1e65408c9
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m backend.worker
+    plan: standard
+    region: singapore
+    autoDeployTrigger: off
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_WORKER_SECRET_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

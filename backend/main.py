@@ -5,7 +5,7 @@ from typing import Annotated
 from urllib.parse import quote
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
 
 
@@ -19,13 +19,14 @@ class Gateway:
         if not self.url or not self.key or self.key.startswith('sb_secret_'):
             raise HTTPException(503, '인증 서비스 설정이 필요합니다.')
         try:
+            extra_headers = kwargs.pop('headers', {})
             r = await self.client.request(method, self.url + path,
-                headers={'apikey': self.key, 'Authorization': 'Bearer ' + token}, **kwargs)
+                headers={**extra_headers, 'apikey': self.key, 'Authorization': 'Bearer ' + token}, **kwargs)
         except httpx.RequestError:
             raise HTTPException(503, '인증 서비스에 연결할 수 없습니다.') from None
         if not r.is_success:
             code = r.json().get('code') if r.headers.get('content-type', '').startswith('application/json') else ''
-            status = 409 if code in ('PT409', '40001') else (r.status_code if r.status_code in (401,403,404) else 503)
+            status = 409 if code in ('PT409', '40001') else (422 if code == '22023' else (r.status_code if r.status_code in (401,403,404) else 503))
             raise HTTPException(status, '요청을 처리할 수 없습니다.')
         return r
 
@@ -136,7 +137,7 @@ async def job(tid: int, job_id: str, token=Depends(session), g=Depends(gateway))
         raise HTTPException(422, '잘못된 작업 번호입니다.') from None
     await g.authorize(token, tid)
     rows = (await g.request(token,'GET','/rest/v1/passo_jobs',params={
-        'tenant_id':f'eq.{tid}', 'id':f'eq.{job_id}', 'select':'id,status,created_at', 'limit':1})).json()
+        'tenant_id':f'eq.{tid}', 'id':f'eq.{job_id}', 'select':'id,status,created_at,updated_at,attempts,error_code,source_input_id', 'limit':1})).json()
     if not rows:
         raise HTTPException(404, '작업을 찾을 수 없습니다.')
     return rows[0]
@@ -151,3 +152,8 @@ async def original(tid: int, object_id: str, filename: str, token=Depends(sessio
     content = await g.original_bytes(path)
     return Response(content, media_type='application/octet-stream',
                     headers={'Content-Disposition':'attachment'})
+
+
+# Document routes use the same live session and tenant boundary as records.
+from backend.documents import install_routes
+install_routes(app, session, gateway)

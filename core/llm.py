@@ -9,9 +9,6 @@ from datetime import date
 import anthropic
 import requests
 
-from . import db
-
-KEY = db.env.get("ANTHROPIC_API_KEY", "").strip()
 MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"]
 DEFAULT = "claude-sonnet-5-5"  # 모든 AI 호출의 기본. 올리기·[다시 읽기]·묻기에서는 다른 모델로 바꿀 수 있다
 # 모델 → (입력, 출력) 100만 토큰당 달러. 공식 가격표 기준, 바뀌면 여기만 고친다.
@@ -24,6 +21,8 @@ SCOPES = ["latest", "recent7", "all"]
 
 
 def client():
+    from . import db
+    KEY = db.env.get("ANTHROPIC_API_KEY", "").strip()
     if not KEY:
         raise RuntimeError("ANTHROPIC_API_KEY 가 비어 있어요.")
     return anthropic.Anthropic(api_key=KEY)
@@ -31,6 +30,7 @@ def client():
 
 def log(t, model, prompt, answer, usage_in, usage_out, started=None):
     """AI 호출 1번을 ai_logs 에 남긴다. started(time.monotonic)를 주면 걸린 시간도 남긴다. 남기지 못해도 하던 일은 계속한다."""
+    from . import db
     cost = (usage_in * PRICE[model][0] + usage_out * PRICE[model][1]) / 1_000_000
     took = {"duration_ms": round((time.monotonic() - started) * 1000)} if started else {}
     try:
@@ -56,13 +56,13 @@ def thinking(model, effort):
     return {}, {"effort": "low"}
 
 
-def ask_json(t, model, content, schema, log_prompt, system=None, history=(), effort=None, on_text=None):
+def ask_json(t, model, content, schema, log_prompt, system=None, history=(), effort=None, on_text=None, api_client=None, log_sink=None):
     """스키마대로 JSON 을 받는다. 화면에 글로 보여 주지 않고 서비스가 쓴다. history 는 앞선 대화.
     effort: 생각 깊이(thinking 참고). on_text: 답이 흘러 들어오는 대로 받은 글 조각을 넘길 함수(읽는 중 진행 표시)."""
     started = time.monotonic()
     think, config = thinking(model, effort)
     # 표가 큰 종이는 답이 길어 16000 토큰을 넘는다. 긴 답은 스트리밍으로만 받을 수 있다
-    with client().messages.stream(
+    with (api_client or client()).messages.stream(
         model=model, max_tokens=64000, messages=[*history, {"role": "user", "content": content}],
         output_config={"format": {"type": "json_schema", "schema": schema}, **config}, **think,
         **({"system": system} if system else {}),
@@ -76,7 +76,7 @@ def ask_json(t, model, content, schema, log_prompt, system=None, history=(), eff
     if reply.stop_reason != "end_turn":
         raise RuntimeError(f"답을 마치지 못했어요({reply.stop_reason}).")
     answer = next(b.text for b in reply.content if b.type == "text")
-    log(t, model, log_prompt, answer, reply.usage.input_tokens, reply.usage.output_tokens, started)
+    (log_sink or log)(t, model, log_prompt, answer, reply.usage.input_tokens, reply.usage.output_tokens, started)
     return json.loads(answer)
 
 
@@ -254,7 +254,7 @@ class Rows:
             return None
 
 
-def extract(t, model, name, photo, on_rows=None):
+def extract(t, model, name, photo, on_rows=None, *, api_client=None, log_sink=None):
     """사진이나 PDF 1개를 읽는다. PDF 는 쪽마다 Claude 가 직접 읽는다. 생각 없이 바로 옮겨 적게 한다(thinking 참고).
     on_rows: 표의 줄을 하나 다 받을 때마다 그때까지 읽은 표(spread 모양)를 넘길 함수. 읽는 중 진행 표시와,
     앞쪽 줄로 구조 제안을 먼저 시작하는 데 쓴다(engine.ingest_photo)."""
@@ -271,7 +271,7 @@ def extract(t, model, name, photo, on_rows=None):
         if rows.feed(chunk) and (part_ := rows.sheet()):
             on_rows(part_)
 
-    sheet = ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}", effort="off", on_text=on_text if on_rows else None)
+    sheet = ask_json(t, model, content, EXTRACT, f"[사진 {name}] {EXTRACT_PROMPT}", effort="off", on_text=on_text if on_rows else None, api_client=api_client, log_sink=log_sink)
     return spread(sheet)
 
 

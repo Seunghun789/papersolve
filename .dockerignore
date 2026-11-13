@@ -1,0 +1,9 @@
+*
+!backend/
+!backend/**
+!core/
+!core/**
+**/__pycache__
+**/*.pyc
+**/.env*
+**/RUNBOOK.rst
