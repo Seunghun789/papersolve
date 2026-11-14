@@ -58,6 +58,12 @@ class ReviewAnswer(BaseModel):
     value: str | int | float | None = None
 
 
+class StructureAnswer(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    expected_revision: str = Field(pattern='^[0-9a-f]{32}$')
+    answer: str = Field(pattern='^(accept|reject|split)$')
+
+
 def install_routes(app, session, gateway):
     @app.get('/v1/workspaces/{tid}/overview')
     async def overview(tid: int, period: str = Query('이번 주',pattern='^(오늘|이번 주|이번 달|올해)$'), token=Depends(session), g=Depends(gateway)):
@@ -118,6 +124,16 @@ def install_routes(app, session, gateway):
     async def answer(tid: int, qid: int, body: ReviewAnswer, token=Depends(session), g=Depends(gateway)):
         await g.authorize(token,tid,'review')
         return await g.rpc(token,'passo_answer_review',{'tid':tid,'qid':qid,**body.model_dump()})
+
+    @app.get('/v1/workspaces/{tid}/reviews/{qid}/structure')
+    async def structure_preview(tid: int, qid: int, token=Depends(session), g=Depends(gateway)):
+        await g.authorize(token,tid)
+        return await g.rpc(token,'passo_structure_preview',{'tid':tid,'qid':qid})
+
+    @app.post('/v1/workspaces/{tid}/reviews/{qid}/structure')
+    async def structure_answer(tid: int, qid: int, body: StructureAnswer, token=Depends(session), g=Depends(gateway)):
+        await g.authorize(token,tid,'review')
+        return await g.rpc(token,'passo_answer_structure',{'tid':tid,'qid':qid,**body.model_dump()})
 
     @app.post('/v1/workspaces/{tid}/manual-records',status_code=201)
     async def manual(tid: int, body: ManualRecord, token=Depends(session), g=Depends(gateway)):

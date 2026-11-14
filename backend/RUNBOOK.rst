@@ -3,12 +3,37 @@ passo 인증·조직 격리 기반 (2026-11-13)
 
 적용 상태
 ---------
-현재 Supabase 프로젝트 dubxkjwglefkaidhktkc에 migration 001~007 적용.
+현재 Supabase 프로젝트 dubxkjwglefkaidhktkc에 migration 001~008 적용.
 001은 Browser URL 길이 제한 때문에 5개 명시적 트랜잭션으로 나누어 적용했다.
 002는 기존 함수 정의의 오류 코드 40001만 PT409로 치환했다.
-재설치 시 schema.sql 이후 001~007을 번호 순서로 실행한다.
+재설치 시 schema.sql 이후 001~008을 번호 순서로 실행한다.
 001은 재실행용이 아니며 기존 정책이 있으면 의도적으로 실패한다.
 적용 증거와 검증 결과는 artifacts/auth-policy-20261113/review.html에 있다.
+
+구조 확인 화면 이관 (008)
+------------------------
+008_structure_reviews.sql은 2026-11-14 실 Supabase에 적용했다.
+Browser URL 길이 제한 때문에 함수별 7개 트랜잭션으로 나누고 각각 권한을 회수했다.
+새 환경에는 008을 적용한 뒤 API, 웹 순서로 배포한다.
+GET/POST /v1/workspaces/{tid}/reviews/{qid}/structure는 종류·칸·같은 칸을 처리한다.
+미리보기의 revision은 제안·칸 정의·이름 연결·원본 기록·남은 구조 질문을 묶는다.
+수정 요청은 현재 권한, DB 잠금 뒤 revision, 제안 대기 상태를 다시 확인한다.
+중복 승인이나 달라진 검토 내용은 409로 응답하고 다시 읽도록 안내한다.
+종류는 승인/거절/칸별 확인, 칸은 추가/제외, 같은 칸은 연결/별도 칸으로 처리한다.
+원본 data·셀 상태·uncertain은 변경하지 않는다. 대기 기록은 같은 원본의
+종류·칸·같은 칸·읽은 값 질문이 모두 끝난 뒤 등록된 기록 종류에 따라 확정/거절한다.
+기존의 다른 dtype·단위·별칭을 새 칸 승인으로 덮어쓰지 않는다.
+대상 분류와 관계 제안은 별도 대기 카드로 남기며, 대상 분류 답하기 및
+기존의 불필요한 칸 정의 자동 삭제는 아직 이관하지 않았다.
+모델의 구조 제안 생성·자동 판단 정책·되돌리기·CSV는 이번 변경에 포함되지 않는다.
+
+검증: tests/documents/structure-cases.mjs는 실제 PostgreSQL 엔진(PGlite)에서
+권한·충돌·원자성·원문 보존을 검사한다. eval/verify_structure_live.py는 실제
+Supabase에 임시 Auth 계정과 워크스페이스를 만들고 API·브라우저를 검증한다.
+실행 후 생성한 ID만 삭제하고 기존 업무 데이터 6개 테이블의 전후 해시를 대조한다.
+모델 API를 호출하지 않는다. 재현 예::
+
+  .venv-auth/bin/python eval/verify_structure_live.py --api http://127.0.0.1:8003 --web http://localhost:3003 --output artifacts/structure-migration-live
 
 실행
 ----

@@ -51,3 +51,51 @@ def test_review_denied_before_rpc():
     install_routes(app, lambda: 'caller', lambda: Gateway())
     with TestClient(app) as client:
         assert client.post('/v1/workspaces/7/reviews/10', json={'expected_payload': {}, 'answer': 'accept'}).status_code == 403
+
+
+@pytest.mark.parametrize('path,operation', [('GET', 'read'), ('POST', 'review')])
+def test_structure_authorization_before_rpc(path, operation):
+    class Gateway:
+        async def authorize(self, token, tid, action='read'):
+            assert (token, tid, action) == ('caller', 7, operation)
+            raise HTTPException(403)
+        async def rpc(self, *args):
+            pytest.fail('Denied structure requests must not reach RPC')
+    app = FastAPI()
+    install_routes(app, lambda: 'caller', lambda: Gateway())
+    with TestClient(app) as client:
+        assert client.request(path, '/v1/workspaces/7/reviews/10/structure',
+                              json={'expected_revision': 'a'*32, 'answer': 'accept'}).status_code == 403
+
+
+@pytest.mark.parametrize('body', [
+    {'expected_revision': 'a'*32, 'answer': 'edit'},
+    {'expected_revision': '', 'answer': 'accept'},
+    {'expected_revision': 'a'*32, 'answer': 'accept', 'tenant_id': 9},
+    {'expected_revision': 1, 'answer': 'accept'},
+])
+def test_structure_rejects_invalid_input(body):
+    class Gateway:
+        async def authorize(self, *args):
+            pass
+        async def rpc(self, *args):
+            pytest.fail('Invalid structure request must not reach RPC')
+    app = FastAPI()
+    install_routes(app, lambda: 'caller', lambda: Gateway())
+    with TestClient(app) as client:
+        assert client.post('/v1/workspaces/7/reviews/10/structure', json=body).status_code == 422
+
+
+def test_structure_uses_caller_token_and_revision():
+    class Gateway:
+        async def authorize(self, token, tid, action):
+            assert (token, tid, action) == ('caller', 7, 'review')
+        async def rpc(self, token, name, body):
+            assert token == 'caller' and name == 'passo_answer_structure'
+            assert body == {'tid': 7, 'qid': 10, 'expected_revision': 'a'*32, 'answer': 'split'}
+            return {'status': '고침'}
+    app = FastAPI()
+    install_routes(app, lambda: 'caller', lambda: Gateway())
+    with TestClient(app) as client:
+        assert client.post('/v1/workspaces/7/reviews/10/structure', json={
+            'expected_revision': 'a'*32, 'answer': 'split'}).json() == {'status': '고침'}
