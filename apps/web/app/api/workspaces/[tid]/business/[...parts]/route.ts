@@ -6,9 +6,9 @@ type Context={params:Promise<{tid:string,parts:string[]}>};
 async function forward(request:Request,context:Context) {
  const {tid,parts}=await context.params;
  const path=parts.join('/'),method=request.method,url=new URL(request.url);
- const allowed=method==='GET' ? /^(overview|records|reviews|reviews\/[1-9]\d*\/structure|sources\/[1-9]\d*(\/original)?)$/.test(path)
+ const allowed=method==='GET' ? /^(overview|audit|records|reviews|reviews\/[1-9]\d*\/structure|sources\/[1-9]\d*(\/(original|review|policy))?)$/.test(path)
   : method==='PATCH' ? /^records\/[1-9]\d*\/cells$/.test(path)
-  : method==='POST' && /^(manual-records|reviews\/[1-9]\d*(\/structure)?)$/.test(path);
+  : method==='POST' && /^(manual-records|audit\/[1-9]\d*\/undo|sources\/[1-9]\d*\/(reopen|policy)|reviews\/[1-9]\d*(\/(structure|read))?)$/.test(path);
  if(!/^[1-9]\d*$/.test(tid)||!allowed) return Response.json({detail:'없는 요청입니다.'},{status:404});
  if(method!=='GET'&&!sameOrigin(request)) return new Response(null,{status:403});
  let body:string|undefined;

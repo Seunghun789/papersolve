@@ -64,7 +64,53 @@ class StructureAnswer(BaseModel):
     answer: str = Field(pattern='^(accept|reject|split)$')
 
 
+class Revision(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    expected_revision: str = Field(pattern='^[0-9a-f]{32}$')
+
+
+class ReadAnswer(Revision):
+    answer: str = Field(pattern='^(accept|reject)$')
+
+
 def install_routes(app, session, gateway):
+    @app.get('/v1/workspaces/{tid}/audit')
+    async def audit(tid: int, after: int=Query(0,ge=0), token=Depends(session), g=Depends(gateway)):
+        await g.authorize(token,tid)
+        items=(await g.request(token,'GET','/rest/v1/passo_audit',params={'tenant_id':f'eq.{tid}',
+            'select':'*','id':f'lt.{after}' if after else 'gt.0','order':'id.desc','limit':51})).json()
+        return {'items':items[:50],'next':items[49]['id'] if len(items)>50 else None}
+
+    @app.post('/v1/workspaces/{tid}/audit/{aid}/undo')
+    async def undo(tid: int, aid: int, token=Depends(session), g=Depends(gateway)):
+        await g.authorize(token,tid,'review')
+        return await g.rpc(token,'passo_undo',{'tid':tid,'aid':aid})
+
+    @app.get('/v1/workspaces/{tid}/sources/{sid}/review')
+    async def source_preview(tid: int,sid: int,token=Depends(session),g=Depends(gateway)):
+        await g.authorize(token,tid)
+        return await g.rpc(token,'passo_source_preview',{'tid':tid,'sid':sid})
+
+    @app.post('/v1/workspaces/{tid}/sources/{sid}/reopen')
+    async def reopen(tid: int,sid: int,body: Revision,token=Depends(session),g=Depends(gateway)):
+        await g.authorize(token,tid,'review')
+        return await g.rpc(token,'passo_reopen_source',{'tid':tid,'sid':sid,**body.model_dump()})
+
+    @app.get('/v1/workspaces/{tid}/sources/{sid}/policy')
+    async def policy(tid: int,sid: int,token=Depends(session),g=Depends(gateway)):
+        await g.authorize(token,tid)
+        return await g.rpc(token,'passo_policy_preview',{'tid':tid,'sid':sid})
+
+    @app.post('/v1/workspaces/{tid}/sources/{sid}/policy')
+    async def apply_policy(tid: int,sid: int,body: Revision,token=Depends(session),g=Depends(gateway)):
+        await g.authorize(token,tid,'review')
+        return await g.rpc(token,'passo_apply_policy',{'tid':tid,'sid':sid,**body.model_dump()})
+
+    @app.post('/v1/workspaces/{tid}/reviews/{qid}/read')
+    async def answer_read(tid: int,qid: int,body: ReadAnswer,token=Depends(session),g=Depends(gateway)):
+        await g.authorize(token,tid,'review')
+        return await g.rpc(token,'passo_answer_read',{'tid':tid,'qid':qid,**body.model_dump()})
+
     @app.get('/v1/workspaces/{tid}/overview')
     async def overview(tid: int, period: str = Query('이번 주',pattern='^(오늘|이번 주|이번 달|올해)$'), token=Depends(session), g=Depends(gateway)):
         await g.authorize(token,tid)

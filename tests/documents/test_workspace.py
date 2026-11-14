@@ -99,3 +99,27 @@ def test_structure_uses_caller_token_and_revision():
     with TestClient(app) as client:
         assert client.post('/v1/workspaces/7/reviews/10/structure', json={
             'expected_revision': 'a'*32, 'answer': 'split'}).json() == {'status': '고침'}
+
+
+@pytest.mark.parametrize('method,path,body,operation', [
+    ('GET','audit',None,'read'),
+    ('POST','audit/2/undo',{},'review'),
+    ('GET','sources/2/review',None,'read'),
+    ('GET','sources/2/policy',None,'read'),
+    ('POST','sources/2/policy',{'expected_revision':'a'*32},'review'),
+    ('POST','sources/2/reopen',{'expected_revision':'a'*32},'review'),
+    ('POST','reviews/2/read',{'expected_revision':'a'*32,'answer':'accept'},'review'),
+])
+def test_policy_and_undo_authorize_before_storage(method,path,body,operation):
+    class Gateway:
+        async def authorize(self,token,tid,action='read'):
+            assert (token,tid,action)==('caller',7,operation)
+            raise HTTPException(403)
+        async def rpc(self,*args,**kwargs):
+            pytest.fail('Denied policy call reached DB')
+        async def request(self,*args,**kwargs):
+            pytest.fail('Denied audit read reached DB')
+    app=FastAPI()
+    install_routes(app,lambda:'caller',lambda:Gateway())
+    with TestClient(app) as client:
+        assert client.request(method,'/v1/workspaces/7/'+path,json=body).status_code==403
